@@ -1,0 +1,97 @@
+{{define "content"}}
+<div class="space-y-8">
+    <!-- Page Header -->
+    <div>
+        <h1 class="text-3xl font-bold text-gray-900">{{.Title}}</h1>
+        <p class="mt-2 text-gray-600">{{.Description}}</p>
+    </div>
+
+    <!-- Add Item Form -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-xl font-semibold">Add New Item</h2>
+        </div>
+        <div class="card-body">
+            <form 
+                hx-post="/hx/example/item"
+                hx-target="#items-table"
+                hx-swap="innerHTML"
+                class="space-y-4"
+            >
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="name" class="form-label">Name</label>
+                        <input 
+                            type="text" 
+                            id="name" 
+                            name="name" 
+                            class="form-input"
+                            placeholder="Enter item name"
+                            required
+                        >
+                    </div>
+                    <div>
+                        <label for="description" class="form-label">Description</label>
+                        <input 
+                            type="text" 
+                            id="description" 
+                            name="description" 
+                            class="form-input"
+                            placeholder="Enter description"
+                        >
+                    </div>
+                </div>
+                <div>
+                    <button type="submit" class="btn btn-primary">
+                        Add Item
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Items Table -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-xl font-semibold">Items</h2>
+            <p class="text-sm text-gray-500">
+                This table is loaded via HTMX and updates dynamically.
+            </p>
+        </div>
+        <div class="card-body">
+            <!-- 
+                The table content is loaded via HTMX on page load.
+                hx-trigger="load" makes an initial request to fetch the data.
+                The response replaces the inner content of this div.
+            -->
+            <div 
+                id="items-table"
+                hx-get="/hx/example/table"
+                hx-trigger="load"
+                hx-swap="innerHTML"
+            >
+                <!-- Loading state -->
+                <div class="flex items-center justify-center py-8">
+                    <div class="loading-spinner"></div>
+                    <span class="ml-2 text-gray-500">Loading...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- HTMX Patterns Documentation -->
+    <div class="card bg-blue-50 border-blue-200">
+        <div class="card-body">
+            <h3 class="text-lg font-semibold text-blue-900 mb-2">HTMX Patterns Used</h3>
+            <ul class="list-disc list-inside text-blue-800 space-y-1">
+                <li><code class="bg-blue-100 px-1 rounded">hx-get</code> - Fetch table data on page load</li>
+                <li><code class="bg-blue-100 px-1 rounded">hx-post</code> - Submit form to create items</li>
+                <li><code class="bg-blue-100 px-1 rounded">hx-delete</code> - Delete items (see table partial)</li>
+                <li><code class="bg-blue-100 px-1 rounded">hx-trigger="load"</code> - Initial data fetch</li>
+                <li><code class="bg-blue-100 px-1 rounded">hx-target</code> - Specify where to put response</li>
+                <li><code class="bg-blue-100 px-1 rounded">hx-swap="innerHTML"</code> - Replace inner content</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{{end}}

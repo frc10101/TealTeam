@@ -1,0 +1,52 @@
+{{define "example_table"}}
+<!--
+    This is an HTMX PARTIAL template.
+    
+    IMPORTANT:
+    - This template returns HTML FRAGMENTS only
+    - No <html>, <head>, or layout markup
+    - This content is swapped directly into the DOM
+    - It can be requested by any HTMX attribute (hx-get, hx-post, etc.)
+-->
+
+{{if .Items}}
+<div class="overflow-x-auto">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Description</th>
+                <th>Created</th>
+                <th class="text-right">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Items}}
+            <tr>
+                <td class="font-mono text-sm">{{.ID}}</td>
+                <td class="font-medium">{{.Name}}</td>
+                <td class="text-gray-600">{{.Description}}</td>
+                <td class="text-gray-500 text-sm">{{.CreatedAt.Format "Jan 02, 2006"}}</td>
+                <td class="text-right">
+                    <button 
+                        hx-delete="/hx/example/item/{{.ID}}"
+                        hx-target="#items-table"
+                        hx-swap="innerHTML"
+                        hx-confirm="Are you sure you want to delete this item?"
+                        class="btn btn-danger btn-sm"
+                    >
+                        Delete
+                    </button>
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{else}}
+<div class="text-center py-8">
+    <p class="text-gray-500">No items found. Add one using the form above.</p>
+</div>
+{{end}}
+{{end}}

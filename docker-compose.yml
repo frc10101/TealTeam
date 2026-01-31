@@ -1,0 +1,42 @@
+# Docker Compose for local development
+# Provides PostgreSQL database
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: yourapp_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: yourdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Optionally run migrations on startup:
+      # - ./migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d yourdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Optional: Adminer for database management
+  adminer:
+    image: adminer
+    container_name: yourapp_adminer
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:
+
+# Usage:
+# Start: docker-compose up -d
+# Stop: docker-compose down
+# View logs: docker-compose logs -f db
+# Reset DB: docker-compose down -v && docker-compose up -d

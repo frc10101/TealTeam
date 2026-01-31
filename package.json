@@ -1,0 +1,14 @@
+{
+  "name": "your-app",
+  "version": "1.0.0",
+  "description": "Go + HTMX + Tailwind CSS web application template",
+  "private": true,
+  "scripts": {
+    "css:build": "npx tailwindcss -i ./web/tailwind/input.css -o ./web/static/css/site.css --minify",
+    "css:watch": "npx tailwindcss -i ./web/tailwind/input.css -o ./web/static/css/site.css --watch",
+    "dev": "npm run css:watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.0"
+  }
+}
