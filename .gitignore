@@ -4,7 +4,11 @@ vendor/
 
 # Build outputs
 /web/static/css/site.css
-/web/static/js/site.min.js
+/web/static/js/site.js
+/web/static/js/site.js.map
+/web/static/js/*.js
+/web/static/js/*.js.map
+/web/static/js/*.d.ts
 
 # Environment files
 .env
@@ -21,6 +25,14 @@ vendor/
 # OS files
 .DS_Store
 Thumbs.db
+
+# TypeScript
+tsconfig.tsbuildinfo
+tsconfig.json.backup
+
+# Build outputs
+bin/
+dist/
 
 # Go
 *.exe
@@ -39,6 +51,12 @@ logs/
 # Temporary files
 tmp/
 temp/
+
+# Render deploy logs
+render-build.log
+
+# VSCode settings (if not shared)
+.history/
 
 # Database
 *.db
