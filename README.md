@@ -40,7 +40,7 @@ A minimal, server-rendered web application template using **Go**, **HTMX**, and 
 │   │   └── partials/         # HTMX fragment templates
 │   ├── static/
 │   │   ├── css/site.css      # Generated Tailwind CSS
-│   │   └── js/site.js        # Minimal client-side JS
+│   │   └── js/site.ts        # Minimal client-side TypeScript
 │   └── tailwind/
 │       └── input.css         # Tailwind source with @apply components
 ├── docker-compose.yml        # PostgreSQL for local dev
