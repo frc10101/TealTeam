@@ -1,6 +1,8 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -10,25 +12,65 @@ import (
 	"github.com/frc10101/TealTeam/internal/middleware"
 )
 
+// Database configuration for different environments
+var dbConfigs = map[string]string{
+	"test": "postgres://user:password@localhost:5432/yourdb?sslmode=disable",
+	"prod": "", // Set via RENDER_DATABASE_URL or DATABASE_URL environment variable
+}
+
 func main() {
+	// Parse command line flags
+	env := flag.String("env", "test", "Environment to use: 'test' (local Docker) or 'prod' (Render)")
+	flag.Parse()
+
+	// Validate environment
+	if *env != "test" && *env != "prod" {
+		log.Fatalf("Invalid environment '%s'. Use 'test' or 'prod'", *env)
+	}
+
 	// Load configuration
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
 
-	// Initialize database (optional - comment out if not using)
+	// Set database URL based on environment
+	var databaseURL string
+	switch *env {
+	case "test":
+		databaseURL = dbConfigs["test"]
+		log.Println("🧪 Running in TEST mode (local Docker database)")
+	case "prod":
+		// Check for Render's database URL first, then fall back to DATABASE_URL
+		databaseURL = os.Getenv("RENDER_DATABASE_URL")
+		if databaseURL == "" {
+			databaseURL = os.Getenv("DATABASE_URL")
+		}
+		if databaseURL == "" {
+			log.Fatal("❌ Production mode requires RENDER_DATABASE_URL or DATABASE_URL environment variable")
+		}
+		log.Println("🚀 Running in PRODUCTION mode (Render database)")
+	}
+
+	// Set DATABASE_URL for db.Connect() to use
+	os.Setenv("DATABASE_URL", databaseURL)
+
+	// Initialize database
 	database, err := db.Connect()
 	if err != nil {
 		log.Printf("Warning: Database connection failed: %v", err)
 		log.Println("Running without database support")
 		database = nil
+	} else {
+		log.Println("✅ Database connected successfully")
 	}
 	defer func() {
 		if database != nil {
 			database.Close()
 		}
 	}()
+
+	fmt.Printf("\n📋 Environment: %s\n", *env)
 
 	// Initialize handlers
 	h := handlers.New(database)
