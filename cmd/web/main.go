@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/yourusername/yourproject/internal/db"
-	"github.com/yourusername/yourproject/internal/handlers"
-	"github.com/yourusername/yourproject/internal/middleware"
+	"github.com/frc10101/TealTeam/internal/db"
+	"github.com/frc10101/TealTeam/internal/handlers"
+	"github.com/frc10101/TealTeam/internal/middleware"
 )
 
 func main() {

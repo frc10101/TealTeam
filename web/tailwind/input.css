@@ -25,15 +25,15 @@
   }
 
   .btn-primary {
-    @apply bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500;
+    @apply bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500 dark:bg-blue-700 dark:hover:bg-blue-600;
   }
 
   .btn-secondary {
-    @apply bg-gray-200 text-gray-900 hover:bg-gray-300 focus:ring-gray-500;
+    @apply bg-gray-200 text-gray-900 hover:bg-gray-300 focus:ring-gray-500 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600;
   }
 
   .btn-danger {
-    @apply bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
+    @apply bg-red-600 text-white hover:bg-red-700 focus:ring-red-500 dark:bg-red-700 dark:hover:bg-red-600;
   }
 
   .btn-sm {
@@ -46,11 +46,11 @@
 
   /* Cards */
   .card {
-    @apply bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden;
+    @apply bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden dark:bg-gray-800 dark:border-gray-700;
   }
 
   .card-header {
-    @apply px-6 py-4 border-b border-gray-200 bg-gray-50;
+    @apply px-6 py-4 border-b border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-700;
   }
 
   .card-body {
@@ -58,50 +58,50 @@
   }
 
   .card-footer {
-    @apply px-6 py-4 border-t border-gray-200 bg-gray-50;
+    @apply px-6 py-4 border-t border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-700;
   }
 
   /* Forms */
   .form-label {
-    @apply block text-sm font-medium text-gray-700 mb-1;
+    @apply block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300;
   }
 
   .form-input {
-    @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm px-3 py-2 border;
+    @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm px-3 py-2 border dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100 dark:placeholder-gray-500;
   }
 
   .form-select {
-    @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm px-3 py-2 border;
+    @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm px-3 py-2 border dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100;
   }
 
   .form-checkbox {
-    @apply rounded border-gray-300 text-blue-600 focus:ring-blue-500;
+    @apply rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-600;
   }
 
   .form-error {
-    @apply mt-1 text-sm text-red-600;
+    @apply mt-1 text-sm text-red-600 dark:text-red-400;
   }
 
   /* Navigation */
   .nav-link {
-    @apply px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors;
+    @apply px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors dark:text-gray-300 dark:hover:text-gray-100 dark:hover:bg-gray-800;
   }
 
   .nav-link-active {
-    @apply px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-md;
+    @apply px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-md dark:text-blue-400 dark:bg-blue-950;
   }
 
   /* Tables */
   .data-table {
-    @apply min-w-full divide-y divide-gray-200;
+    @apply min-w-full divide-y divide-gray-200 dark:divide-gray-700;
   }
 
   .data-table thead {
-    @apply bg-gray-50;
+    @apply bg-gray-50 dark:bg-gray-800;
   }
 
   .data-table th {
-    @apply px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider;
+    @apply px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400;
   }
 
   .data-table td {
@@ -109,7 +109,7 @@
   }
 
   .data-table tbody tr {
-    @apply hover:bg-gray-50 transition-colors;
+    @apply hover:bg-gray-50 transition-colors dark:hover:bg-gray-700;
   }
 
   /* Alerts */
@@ -118,24 +118,24 @@
   }
 
   .alert-success {
-    @apply bg-green-50 border-green-200 text-green-800;
+    @apply bg-green-50 border-green-200 text-green-800 dark:bg-green-950 dark:border-green-900 dark:text-green-200;
   }
 
   .alert-error {
-    @apply bg-red-50 border-red-200 text-red-800;
+    @apply bg-red-50 border-red-200 text-red-800 dark:bg-red-950 dark:border-red-900 dark:text-red-200;
   }
 
   .alert-warning {
-    @apply bg-yellow-50 border-yellow-200 text-yellow-800;
+    @apply bg-yellow-50 border-yellow-200 text-yellow-800 dark:bg-yellow-950 dark:border-yellow-900 dark:text-yellow-200;
   }
 
   .alert-info {
-    @apply bg-blue-50 border-blue-200 text-blue-800;
+    @apply bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-950 dark:border-blue-900 dark:text-blue-200;
   }
 
   /* Loading Spinner */
   .loading-spinner {
-    @apply w-5 h-5 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin;
+    @apply w-5 h-5 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin dark:border-gray-600 dark:border-t-blue-400;
   }
 
   /* Badge */
@@ -144,19 +144,19 @@
   }
 
   .badge-gray {
-    @apply bg-gray-100 text-gray-800;
+    @apply bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200;
   }
 
   .badge-green {
-    @apply bg-green-100 text-green-800;
+    @apply bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200;
   }
 
   .badge-red {
-    @apply bg-red-100 text-red-800;
+    @apply bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200;
   }
 
   .badge-blue {
-    @apply bg-blue-100 text-blue-800;
+    @apply bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200;
   }
 }
 

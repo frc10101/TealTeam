@@ -30,6 +30,29 @@ document.body.addEventListener('htmx:beforeRequest', function(event: Event) {
   console.debug('HTMX Request:', htmxEvent.detail.pathInfo.requestPath);
 });
 
+// Update table selection indicator when a table is clicked
+document.body.addEventListener('htmx:afterSettle', function(event: Event) {
+  const htmxEvent = event as HtmxResponseErrorEvent;
+  
+  // Get the URL to find which table was selected
+  const url = new URL(window.location.href);
+  const selectedTable = url.searchParams.get('table');
+  
+  if (selectedTable) {
+    // Remove active state from all table links
+    const allTableLinks = document.querySelectorAll('[hx-get*="/hx/development/db/table/"]');
+    allTableLinks.forEach(link => {
+      link.classList.remove('bg-blue-50', 'border-l-4', 'border-blue-500', 'pl-3');
+    });
+    
+    // Add active state to the selected table
+    const selectedLink = document.querySelector(`[hx-push-url*="table=${selectedTable}"]`);
+    if (selectedLink) {
+      selectedLink.classList.add('bg-blue-50', 'border-l-4', 'border-blue-500', 'pl-3');
+    }
+  }
+});
+
 // Handle HTMX errors
 document.body.addEventListener('htmx:responseError', function(event: Event) {
   const htmxEvent = event as HtmxResponseErrorEvent;
