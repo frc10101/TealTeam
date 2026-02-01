@@ -17,8 +17,8 @@ COPY web/templates ./web/templates
 COPY tailwind.config.js ./
 COPY tsconfig.json ./
 
-# Create output directory for CSS
-RUN mkdir -p ./web/static/css
+# Create output directories and clean old build artifacts
+RUN mkdir -p ./web/static/css && rm -f ./web/static/js/site.js ./web/static/css/site.css
 
 # Build Tailwind CSS and TypeScript (npm run build = both)
 RUN npm run build

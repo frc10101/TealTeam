@@ -62,7 +62,7 @@ A minimal, server-rendered web application template using **Go**, **HTMX**, and 
 
 ```bash
 # Clone the template
-git clone https://github.com/yourusername/yourproject.git
+git clone https://github.com/frc10101/TealTeam.git
 cd yourproject
 
 # Install Tailwind dependencies

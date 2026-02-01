@@ -42,13 +42,13 @@ document.body.addEventListener('htmx:afterSettle', function(event: Event) {
     // Remove active state from all table links
     const allTableLinks = document.querySelectorAll('[hx-get*="/hx/development/db/table/"]');
     allTableLinks.forEach(link => {
-      link.classList.remove('bg-blue-50', 'border-l-4', 'border-blue-500', 'pl-3');
+      link.classList.remove('bg-gray-700', 'border-l-4', 'border-teal-500', 'pl-3');
     });
     
     // Add active state to the selected table
     const selectedLink = document.querySelector(`[hx-push-url*="table=${selectedTable}"]`);
     if (selectedLink) {
-      selectedLink.classList.add('bg-blue-50', 'border-l-4', 'border-blue-500', 'pl-3');
+      selectedLink.classList.add('bg-gray-700', 'border-l-4', 'border-teal-500', 'pl-3');
     }
   }
 });
