@@ -43,11 +43,13 @@ func main() {
 	// Full page routes (render with layout)
 	mux.HandleFunc("GET /", h.HandleIndex)
 	mux.HandleFunc("GET /example", h.HandleExamplePage)
+	mux.HandleFunc("GET /development/db", h.HandleDBViewer)
 
 	// HTMX fragment routes (return HTML fragments only)
 	mux.HandleFunc("GET /hx/example/table", h.HandleExampleTable)
 	mux.HandleFunc("POST /hx/example/item", h.HandleExampleItemCreate)
 	mux.HandleFunc("DELETE /hx/example/item/{id}", h.HandleExampleItemDelete)
+	mux.HandleFunc("GET /hx/development/db/table/{name}", h.HandleDBTableContent)
 
 	// TODO: Add more routes here
 	// Full pages: mux.HandleFunc("GET /yourpage", h.HandleYourPage)

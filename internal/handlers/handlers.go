@@ -19,14 +19,30 @@ type Handler struct {
 func New(db *sql.DB) *Handler {
 	templates := make(map[string]*template.Template)
 
+	// Template functions for pagination
+	funcMap := template.FuncMap{
+		"add": func(a, b int) int {
+			return a + b
+		},
+		"subtract": func(a, b int) int {
+			return a - b
+		},
+		"divide": func(a, b int) int {
+			if b == 0 {
+				return 0
+			}
+			return a / b
+		},
+	}
+
 	// Parse layout
 	layoutFile := filepath.Join("web", "templates", "layout.html")
 
 	// Parse each page template with the layout
-	pages := []string{"index", "example"}
+	pages := []string{"index", "example", "db_viewer"}
 	for _, page := range pages {
 		pageFile := filepath.Join("web", "templates", "pages", page+".html")
-		tmpl, err := template.ParseFiles(layoutFile, pageFile)
+		tmpl, err := template.New("").Funcs(funcMap).ParseFiles(layoutFile, pageFile)
 		if err != nil {
 			log.Fatalf("Failed to parse template %s: %v", page, err)
 		}
@@ -34,7 +50,7 @@ func New(db *sql.DB) *Handler {
 	}
 
 	// Parse partial templates for HTMX responses
-	partials, err := template.ParseGlob(filepath.Join("web", "templates", "partials", "*.html"))
+	partials, err := template.New("").Funcs(funcMap).ParseGlob(filepath.Join("web", "templates", "partials", "*.html"))
 	if err != nil {
 		log.Fatalf("Failed to parse partial templates: %v", err)
 	}

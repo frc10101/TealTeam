@@ -10,7 +10,7 @@ A minimal, server-rendered web application template using **Go**, **HTMX**, and 
 | **Templates** | Go html/template | Server-rendered HTML, built-in security |
 | **Interactivity** | HTMX | Dynamic UIs without writing JavaScript |
 | **Styling** | Tailwind CSS | Utility-first, compiled for production |
-| **Client JS** | Vanilla JS | Minimal, only for UI polish |
+| **Client TS** | TS | Minimal, only for UI polish |
 | **Database** | PostgreSQL | Optional, but template-ready |
 
 ### Why This Stack?
