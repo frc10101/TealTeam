@@ -1,6 +1,6 @@
 # Makefile for common development tasks
 
-.PHONY: help dev run build css css-watch db-up db-down db-reset migrate test clean
+.PHONY: help dev run build css css-watch db-up db-down db-reset migrate seed test clean
 
 # Default target
 help:
@@ -14,6 +14,7 @@ help:
 	@echo "  make db-down    - Stop PostgreSQL"
 	@echo "  make db-reset   - Reset database (delete all data)"
 	@echo "  make migrate    - Run database migrations"
+	@echo "  make seed       - Seed database with test data"
 	@echo "  make test       - Run tests"
 	@echo "  make clean      - Clean build artifacts"
 
@@ -56,9 +57,16 @@ db-reset:
 migrate:
 	@if [ -z "$(DATABASE_URL)" ]; then \
 		psql postgres://user:password@localhost:5432/yourdb?sslmode=disable -f migrations/0001_init.sql; \
+		psql postgres://user:password@localhost:5432/yourdb?sslmode=disable -f migrations/0002_competitions.sql; \
+		psql postgres://user:password@localhost:5432/yourdb?sslmode=disable -f migrations/0003_frc_matches.sql; \
 	else \
 		psql $(DATABASE_URL) -f migrations/0001_init.sql; \
+		psql $(DATABASE_URL) -f migrations/0002_competitions.sql; \
+		psql $(DATABASE_URL) -f migrations/0003_frc_matches.sql; \
 	fi
+
+seed:
+	go run ./scripts/seed.go
 
 # Testing
 test:

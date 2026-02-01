@@ -1,6 +1,6 @@
-# Go + HTMX + Tailwind CSS Web Application Template
+# TealTeam - FRC Scouting Application
 
-A minimal, server-rendered web application template using **Go**, **HTMX**, and **Tailwind CSS**. This is a starter kit for building dashboards, admin panels, internal tools, CRUD applications, and data-driven websites.
+An FRC (FIRST Robotics Competition) scouting application built with **Go**, **HTMX**, and **Tailwind CSS**. Designed for collecting match data, tracking team performance, and integrating with The Blue Alliance API.
 
 ## 🏗️ Stack
 
@@ -10,8 +10,9 @@ A minimal, server-rendered web application template using **Go**, **HTMX**, and 
 | **Templates** | Go html/template | Server-rendered HTML, built-in security |
 | **Interactivity** | HTMX | Dynamic UIs without writing JavaScript |
 | **Styling** | Tailwind CSS | Utility-first, compiled for production |
-| **Client JS** | Vanilla JS | Minimal, only for UI polish |
-| **Database** | PostgreSQL | Optional, but template-ready |
+| **Client TS** | TypeScript | Minimal, only for UI polish |
+| **Database** | PostgreSQL | Local Docker for dev, Render for production |
+| **Deployment** | Render | Production hosting with managed PostgreSQL |
 
 ### Why This Stack?
 
@@ -25,14 +26,19 @@ A minimal, server-rendered web application template using **Go**, **HTMX**, and 
 ```
 ├── cmd/
 │   └── web/
-│       └── main.go           # Application entry point
+│       └── main.go           # Application entry point (env flag handling)
 ├── internal/
 │   ├── handlers/             # HTTP handlers (pages + HTMX fragments)
 │   ├── db/                   # Database connection helpers
 │   ├── models/               # Plain Go structs (no ORM)
 │   └── middleware/           # Logging, recovery, etc.
 ├── migrations/
-│   └── 0001_init.sql         # Database schema
+│   ├── 0001_init.sql         # Base schema
+│   ├── 0002_*.sql            # Feature migrations
+│   └── 0004_scouting_data.sql # Scouting data tables
+├── scripts/
+│   ├── dev.sh                # Development scripts
+│   └── seed.go               # Database seeder with FRC test data
 ├── web/
 │   ├── templates/
 │   │   ├── layout.html       # Main layout wrapper
@@ -43,12 +49,15 @@ A minimal, server-rendered web application template using **Go**, **HTMX**, and 
 │   │   └── js/site.ts        # Minimal client-side TypeScript
 │   └── tailwind/
 │       └── input.css         # Tailwind source with @apply components
-├── docker-compose.yml        # PostgreSQL for local dev
+├── docker-compose.yml        # Local dev services (PostgreSQL, Adminer)
 ├── package.json              # Tailwind CLI scripts
 ├── tailwind.config.js        # Tailwind configuration
 ├── Makefile                  # Common dev commands
+├── DataPoints.md             # FRC scouting data documentation
 └── README.md
 ```
+
+---
 
 ## 🚀 Quick Start
 
@@ -56,23 +65,32 @@ A minimal, server-rendered web application template using **Go**, **HTMX**, and 
 
 - Go 1.22+
 - Node.js 18+ (for Tailwind CLI)
-- PostgreSQL (optional, via Docker)
+- Docker (for local PostgreSQL)
 
 ### 1. Clone and Setup
 
 ```bash
-# Clone the template
-git clone https://github.com/yourusername/yourproject.git
-cd yourproject
+git clone https://github.com/frc10101/TealTeam.git
+cd TealTeam
 
 # Install Tailwind dependencies
 npm install
-
-# Copy environment file
-cp .env.example .env
 ```
 
-### 2. Build CSS
+### 2. Start Local Database
+
+```bash
+# Start PostgreSQL in Docker
+docker-compose up -d db
+
+# Run all migrations
+make migrate
+# Or manually:
+# psql postgres://user:password@localhost:5432/yourdb -f migrations/0001_init.sql
+# psql postgres://user:password@localhost:5432/yourdb -f migrations/0002_...
+```
+
+### 3. Build CSS
 
 ```bash
 # Build once
@@ -82,34 +100,172 @@ npm run css:build
 npm run css:watch
 ```
 
-### 3. Run the Server
+### 4. Run the Server
 
 ```bash
-# Run directly
+# Run with TEST database (local Docker) - DEFAULT
 go run ./cmd/web
 
-# Or with hot reload (install air first)
-go install github.com/cosmtrek/air@latest
-air
+# Or explicitly specify test environment
+go run ./cmd/web -env=test
+
+# Run with PRODUCTION database (Render)
+go run ./cmd/web -env=prod
 ```
 
-### 4. Open in Browser
+### 5. Open in Browser
 
 Visit [http://localhost:8080](http://localhost:8080)
 
-### Optional: Start PostgreSQL
+---
+
+## 🔧 Environment Selection
+
+The application supports two database environments via the `-env` flag:
+
+### Test Environment (Default)
+```bash
+go run ./cmd/web -env=test
+```
+- Uses local Docker PostgreSQL (`localhost:5432`)
+- Connection: `postgres://user:password@localhost:5432/yourdb`
+- For local development and testing
+- Requires `docker-compose up -d db`
+
+### Production Environment
+```bash
+go run ./cmd/web -env=prod
+```
+- Uses Render's managed PostgreSQL
+- Reads from `RENDER_DATABASE_URL` or `DATABASE_URL` environment variable
+- For connecting to production data locally or in deployment
+- **Requires** environment variable to be set:
+  ```bash
+  export DATABASE_URL="postgres://user:pass@host:5432/dbname?sslmode=require"
+  go run ./cmd/web -env=prod
+  ```
+
+### Environment Variable Priority
+1. `RENDER_DATABASE_URL` (Render's auto-injected variable)
+2. `DATABASE_URL` (fallback)
+
+---
+
+## 🏭 Build Process
+
+### Development Build
 
 ```bash
-# Start database
-docker-compose up -d
+# 1. Start database
+docker-compose up -d db
 
-# Run migrations
-psql postgres://user:password@localhost:5432/yourdb -f migrations/0001_init.sql
-
-# Or use make
-make db-up
+# 2. Run migrations
 make migrate
+
+# 3. Seed test data (optional)
+make seed
+
+# 4. Build CSS (in separate terminal)
+npm run css:watch
+
+# 5. Run server with hot reload
+make dev
+# Or without hot reload:
+make run
 ```
+
+### Production Build
+
+```bash
+# 1. Build CSS for production
+npm run css:build
+
+# 2. Build Go binary
+CGO_ENABLED=0 go build -o bin/server ./cmd/web
+
+# 3. Run with production database
+./bin/server -env=prod
+```
+
+### Docker Build
+
+```bash
+# Build and run everything in Docker
+docker-compose up --build
+
+# Or just build the image
+docker build -t tealteam .
+```
+
+---
+
+## 📁 Directory Structure
+
+```
+├── cmd/
+│   └── web/
+│       └── main.go           # Application entry point (env flag handling)
+├── internal/
+│   ├── handlers/             # HTTP handlers (pages + HTMX fragments)
+│   ├── db/                   # Database connection helpers
+│   ├── models/               # Plain Go structs (no ORM)
+│   └── middleware/           # Logging, recovery, etc.
+├── migrations/
+│   ├── 0001_init.sql         # Base schema
+│   ├── 0002_*.sql            # Feature migrations
+│   └── 0004_scouting_data.sql # Scouting data tables
+├── scripts/
+│   ├── dev.sh                # Development scripts
+│   └── seed.go               # Database seeder with FRC test data
+├── web/
+│   ├── templates/
+│   │   ├── layout.html       # Main layout wrapper
+│   │   ├── pages/            # Full page templates
+│   │   └── partials/         # HTMX fragment templates
+│   ├── static/
+│   │   ├── css/site.css      # Generated Tailwind CSS
+│   │   └── js/site.ts        # Minimal client-side TypeScript
+│   └── tailwind/
+│       └── input.css         # Tailwind source with @apply components
+├── docker-compose.yml        # Local dev services (PostgreSQL, Adminer)
+├── package.json              # Tailwind CLI scripts
+├── tailwind.config.js        # Tailwind configuration
+├── Makefile                  # Common dev commands
+├── DataPoints.md             # FRC scouting data documentation
+└── README.md
+```
+
+---
+
+## 🧪 Development Commands
+
+```bash
+# Using Make
+make dev        # Run with hot reload (test DB)
+make run        # Run directly (test DB)
+make build      # Build the application
+make css        # Build CSS once
+make css-watch  # Watch CSS changes
+make db-up      # Start PostgreSQL
+make db-down    # Stop PostgreSQL
+make db-reset   # Reset database
+make migrate    # Run migrations
+make seed       # Seed database with FRC test data
+make test       # Run tests
+
+# Using npm
+npm run css:build   # Build CSS
+npm run css:watch   # Watch CSS
+
+# Using Go directly
+go run ./cmd/web              # Run with test DB (default)
+go run ./cmd/web -env=test    # Run with test DB (explicit)
+go run ./cmd/web -env=prod    # Run with production DB
+go test ./...                 # Run tests
+go build -o bin/server ./cmd/web  # Build binary
+```
+
+---
 
 ## 📖 How It Works
 
@@ -301,30 +457,6 @@ Edit `web/tailwind/input.css`:
 
 Then rebuild: `npm run css:build`
 
-## 🧪 Development Commands
-
-```bash
-# Using Make
-make dev        # Run with hot reload
-make run        # Run directly
-make css        # Build CSS once
-make css-watch  # Watch CSS changes
-make db-up      # Start PostgreSQL
-make db-down    # Stop PostgreSQL
-make db-reset   # Reset database
-make migrate    # Run migrations
-make test       # Run tests
-
-# Using npm
-npm run css:build   # Build CSS
-npm run css:watch   # Watch CSS
-
-# Using Go directly
-go run ./cmd/web
-go test ./...
-go build -o bin/server ./cmd/web
-```
-
 ## 📝 Architectural Rules
 
 1. **Server-rendered HTML is the default**
@@ -344,6 +476,9 @@ npm run css:build
 
 # Build Go binary
 CGO_ENABLED=0 go build -o bin/server ./cmd/web
+
+# Run locally against production database
+./bin/server -env=prod
 ```
 
 ### Environment Variables
@@ -352,6 +487,20 @@ CGO_ENABLED=0 go build -o bin/server ./cmd/web
 |----------|-------------|---------|
 | `PORT` | Server port | `8080` |
 | `DATABASE_URL` | PostgreSQL connection string | - |
+| `RENDER_DATABASE_URL` | Render's auto-injected DB URL (takes priority) | - |
+
+### Command Line Flags
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-env` | Environment: `test` (local Docker) or `prod` (Render) | `test` |
+
+### Render Deployment
+
+1. Connect your GitHub repository to Render
+2. Set the build command: `npm run css:build && go build -o bin/server ./cmd/web`
+3. Set the start command: `./bin/server -env=prod`
+4. Add a PostgreSQL database in Render (auto-injects `RENDER_DATABASE_URL`)
 
 ### Docker (Optional)
 

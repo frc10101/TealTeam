@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/yourusername/yourproject/internal/models"
+	"github.com/frc10101/TealTeam/internal/models"
 )
 
 // Example in-memory data store (replace with DB queries in production)

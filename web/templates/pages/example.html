@@ -2,14 +2,14 @@
 <div class="space-y-8">
     <!-- Page Header -->
     <div>
-        <h1 class="text-3xl font-bold text-gray-900">{{.Title}}</h1>
-        <p class="mt-2 text-gray-600">{{.Description}}</p>
+        <h1 class="text-3xl font-bold text-gray-100">{{.Title}}</h1>
+        <p class="mt-2 text-gray-400">{{.Description}}</p>
     </div>
 
     <!-- Add Item Form -->
     <div class="card">
-        <div class="card-header">
-            <h2 class="text-xl font-semibold">Add New Item</h2>
+        <div class="card-header accent-teal">
+            <h2 class="text-xl font-semibold text-gray-100">Add New Item</h2>
         </div>
         <div class="card-body">
             <form 
@@ -52,9 +52,9 @@
 
     <!-- Items Table -->
     <div class="card">
-        <div class="card-header">
-            <h2 class="text-xl font-semibold">Items</h2>
-            <p class="text-sm text-gray-500">
+        <div class="card-header accent-yellow">
+            <h2 class="text-xl font-semibold text-gray-100">Items</h2>
+            <p class="text-sm text-gray-400">
                 This table is loaded via HTMX and updates dynamically.
             </p>
         </div>
@@ -73,7 +73,7 @@
                 <!-- Loading state -->
                 <div class="flex items-center justify-center py-8">
                     <div class="loading-spinner"></div>
-                    <span class="ml-2 text-gray-500">Loading...</span>
+                    <span class="ml-2 text-gray-400">Loading...</span>
                 </div>
             </div>
         </div>

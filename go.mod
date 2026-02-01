@@ -1,4 +1,4 @@
-module github.com/yourusername/yourproject
+module github.com/frc10101/TealTeam
 
 go 1.22
 

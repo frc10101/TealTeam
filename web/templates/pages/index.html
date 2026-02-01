@@ -2,10 +2,10 @@
 <div class="space-y-8">
     <!-- Hero Section -->
     <div class="text-center py-12">
-        <h1 class="text-4xl font-bold text-gray-900 mb-4">
+        <h1 class="text-4xl font-bold text-gray-100 mb-4">
             {{.Message}}
         </h1>
-        <p class="text-xl text-gray-600 max-w-2xl mx-auto">
+        <p class="text-xl text-gray-400 max-w-2xl mx-auto">
             A minimal, server-rendered web application template using Go, HTMX, and Tailwind CSS.
         </p>
     </div>
@@ -13,18 +13,20 @@
     <!-- Features Grid -->
     <div class="grid md:grid-cols-3 gap-6">
         <div class="card">
+            <div class="card-header accent-teal"></div>
             <div class="card-body">
-                <h3 class="text-lg font-semibold mb-2">🚀 Server-Rendered</h3>
-                <p class="text-gray-600">
+                <h3 class="text-lg font-semibold text-gray-100 mb-2">🚀 Server-Rendered</h3>
+                <p class="text-gray-400">
                     HTML is rendered on the server using Go templates. Fast, SEO-friendly, and simple.
                 </p>
             </div>
         </div>
         
         <div class="card">
+            <div class="card-header accent-red"></div>
             <div class="card-body">
-                <h3 class="text-lg font-semibold mb-2">⚡ HTMX Powered</h3>
-                <p class="text-gray-600">
+                <h3 class="text-lg font-semibold text-gray-100 mb-2">⚡ HTMX Powered</h3>
+                <p class="text-gray-400">
                     Dynamic interactions without writing JavaScript. HTMX handles all the heavy lifting.
                 </p>
             </div>
@@ -32,8 +34,9 @@
         
         <div class="card">
             <div class="card-body">
-                <h3 class="text-lg font-semibold mb-2">🎨 Tailwind CSS</h3>
-                <p class="text-gray-600">
+                <div class="card-header accent-yellow"></div>
+                <h3 class="text-lg font-semibold text-gray-100 mb-2">🎨 Tailwind CSS</h3>
+                <p class="text-gray-400">
                     Utility-first CSS framework for rapid UI development. Compiled for production.
                 </p>
             </div>
@@ -42,12 +45,12 @@
 
     <!-- Quick Start -->
     <div class="card">
-        <div class="card-header">
-            <h2 class="text-xl font-semibold">Quick Start</h2>
+        <div class="card-header accent-teal">
+            <h2 class="text-xl font-semibold text-gray-100">Quick Start</h2>
         </div>
         <div class="card-body">
             <div class="prose max-w-none">
-                <p class="mb-4">Get started by exploring the example page:</p>
+                <p class="mb-4 text-gray-400">Get started by exploring the example page:</p>
                 <a href="/example" class="btn btn-primary">
                     View Example Page →
                 </a>

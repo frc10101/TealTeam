@@ -1,6 +1,6 @@
 {{define "base"}}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -15,22 +15,22 @@
     <!-- Optional: HTMX extensions you might need -->
     <!-- <script src="https://unpkg.com/htmx.org/dist/ext/response-targets.js"></script> -->
 </head>
-<body class="bg-gray-50 text-gray-900 min-h-screen">
+<body class="bg-gray-950 text-gray-100 min-h-screen dark">
     <!-- Navigation -->
-    <nav class="bg-white shadow-sm border-b border-gray-200">
+    <nav class="bg-gray-900 border-b border-gray-800">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-16">
-                <div class="flex items-center">
-                    <a href="/" class="text-xl font-semibold text-gray-800">
-                        Your App
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center gap-8">
+                    <a href="/" class="text-xl font-semibold text-gray-100 hover:text-teal-300 transition-colors">
+                        Teal Team
                     </a>
-                    <div class="hidden sm:ml-8 sm:flex sm:space-x-4">
-                        <a href="/" class="nav-link">Home</a>
-                        <a href="/example" class="nav-link">Example</a>
-                        <!-- TODO: Add more navigation links -->
+                    <div class="hidden sm:flex sm:gap-6">
+                        <a href="/" class="text-gray-300 hover:text-teal-300 transition-colors text-sm font-medium">Home</a>
+                        <a href="/example" class="text-gray-300 hover:text-teal-300 transition-colors text-sm font-medium">Example</a>
+                        <a href="/development/db" class="text-gray-300 hover:text-teal-300 transition-colors text-sm font-medium">DB Viewer</a>
                     </div>
                 </div>
-                <div class="flex items-center space-x-4">
+                <div class="flex items-center gap-4">
                     <!-- TODO: Add user menu, notifications, etc. -->
                 </div>
             </div>
@@ -43,9 +43,9 @@
     </main>
 
     <!-- Footer -->
-    <footer class="bg-white border-t border-gray-200 mt-auto">
+    <footer class="bg-gray-900 border-t border-gray-800 mt-auto">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-            <p class="text-center text-gray-500 text-sm">
+            <p class="text-center text-gray-400 text-sm">
                 &copy; {{/* TODO: Add year */}} Your Company. All rights reserved.
             </p>
         </div>
