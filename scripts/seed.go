@@ -141,7 +141,7 @@ func seedDatabase(db *sql.DB) error {
 }
 
 func clearData(db *sql.DB) error {
-	tables := []string{"match_teams", "matches", "match_rounds", "competition_teams", "competitions", "teams"}
+	tables := []string{"zebra_data", "awards", "auto_paths", "team_event_stats", "match_teams", "matches", "match_rounds", "competition_teams", "competitions", "teams"}
 	for _, table := range tables {
 		_, err := db.Exec(fmt.Sprintf("DELETE FROM %s", table))
 		if err != nil {
@@ -150,6 +150,10 @@ func clearData(db *sql.DB) error {
 	}
 	return nil
 }
+
+// Competition TBA keys and event types
+var eventTypes = []string{"regional", "district", "championship"}
+var districtKeys = []string{"2026fit", "2026fim", "2026fma", "2026ne", "2026pnw"}
 
 func createCompetitions(db *sql.DB) ([]int, error) {
 	var ids []int
@@ -163,22 +167,42 @@ func createCompetitions(db *sql.DB) ([]int, error) {
 		startDate := time.Now().AddDate(0, i, 0)
 		endDate := startDate.AddDate(0, 0, 2)
 
+		// Generate TBA-style key
+		tbaKey := fmt.Sprintf("2026txho%d", i+1)
+		eventType := eventTypes[i%len(eventTypes)]
+		districtKey := districtKeys[i%len(districtKeys)]
+		week := i + 1
+
 		var id int
 		err := db.QueryRow(`
-			INSERT INTO competitions (name, location, start_date, end_date)
-			VALUES ($1, $2, $3, $4)
+			INSERT INTO competitions (name, location, start_date, end_date, tba_key, event_type, district_key, week)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 			RETURNING id
-		`, name, fmt.Sprintf("Venue %d", i+1), startDate, endDate).Scan(&id)
+		`, name, fmt.Sprintf("Venue %d", i+1), startDate, endDate, tbaKey, eventType, districtKey, week).Scan(&id)
 
 		if err != nil {
 			return nil, err
 		}
 		ids = append(ids, id)
-		log.Printf("  Created competition: %s (ID: %d)", name, id)
+		log.Printf("  Created competition: %s (ID: %d, TBA: %s)", name, id, tbaKey)
 	}
 
 	return ids, nil
 }
+
+// Team mottos for seed data
+var teamMottos = []string{
+	"Building the future, one robot at a time",
+	"Innovation through collaboration",
+	"Dream it. Build it. Win it.",
+	"Engineering excellence",
+	"Gracious professionalism in action",
+	"Coopertition makes us stronger",
+	"More than robots",
+	"STEM education for all",
+}
+
+var countries = []string{"USA", "USA", "USA", "USA", "Canada", "Mexico", "Israel", "Turkey"}
 
 func createTeams(db *sql.DB, count int) ([]int, error) {
 	var ids []int
@@ -187,16 +211,23 @@ func createTeams(db *sql.DB, count int) ([]int, error) {
 		// Generate realistic FRC team numbers (typically 1-9999)
 		teamNumber := 100 + i*100 + rand.Intn(99)
 		name := generateTeamName()
+		nickname := name // Use same as name for nickname
 		school := fmt.Sprintf("High School %d", i+1)
+		schoolName := fmt.Sprintf("%s Technical Academy", name)
 		city := fmt.Sprintf("City %d", i%10+1)
 		state := []string{"CA", "TX", "NY", "FL", "IL", "PA", "OH", "MI", "GA", "NC"}[i%10]
+		country := countries[i%len(countries)]
+		tbaKey := fmt.Sprintf("frc%d", teamNumber)
+		rookieYear := 2010 + rand.Intn(16) // 2010-2025
+		motto := teamMottos[i%len(teamMottos)]
+		website := fmt.Sprintf("https://team%d.org", teamNumber)
 
 		var id int
 		err := db.QueryRow(`
-			INSERT INTO teams (team_number, name, school, city, state)
-			VALUES ($1, $2, $3, $4, $5)
+			INSERT INTO teams (team_number, name, school, city, state, tba_key, nickname, school_name, country, rookie_year, motto, website)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 			RETURNING id
-		`, teamNumber, name, school, city, state).Scan(&id)
+		`, teamNumber, name, school, city, state, tbaKey, nickname, schoolName, country, rookieYear, motto, website).Scan(&id)
 
 		if err != nil {
 			return nil, err
@@ -204,7 +235,7 @@ func createTeams(db *sql.DB, count int) ([]int, error) {
 		ids = append(ids, id)
 	}
 
-	log.Printf("  Created %d teams", count)
+	log.Printf("  Created %d teams with TBA data", count)
 	return ids, nil
 }
 
@@ -226,6 +257,41 @@ func associateTeamsWithCompetition(db *sql.DB, compID int, teamIDs []int) error 
 			return err
 		}
 	}
+
+	// Create team_event_stats for each team at this competition
+	for _, teamID := range teamIDs {
+		opr := 20.0 + rand.Float64()*40.0     // OPR: 20-60
+		dpr := 5.0 + rand.Float64()*20.0      // DPR: 5-25
+		ccwm := opr - dpr                      // CCWM = OPR - DPR
+		autoOpr := 5.0 + rand.Float64()*15.0  // Auto OPR: 5-20
+		teleopOpr := 10.0 + rand.Float64()*25.0 // Teleop OPR: 10-35
+		endgameOpr := 2.0 + rand.Float64()*10.0 // Endgame OPR: 2-12
+
+		_, err := db.Exec(`
+			INSERT INTO team_event_stats (team_id, competition_id, opr, dpr, ccwm, auto_opr, teleop_opr, endgame_opr,
+				rank, matches_played, qual_average, wins, losses, ties, dq_count,
+				qual_points, elim_points, award_points, alliance_points, total_points)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+		`, teamID, compID, opr, dpr, ccwm, autoOpr, teleopOpr, endgameOpr,
+			rand.Intn(30)+1,              // rank: 1-30
+			roundsPerTeam,                // matches_played
+			30.0+rand.Float64()*30.0,     // qual_average: 30-60
+			rand.Intn(5),                 // wins
+			rand.Intn(5),                 // losses
+			rand.Intn(2),                 // ties
+			rand.Intn(2),                 // dq_count
+			rand.Intn(20)+5,              // qual_points
+			rand.Intn(30),                // elim_points
+			rand.Intn(10),                // award_points
+			rand.Intn(16),                // alliance_points
+			rand.Intn(60)+20)             // total_points
+
+		if err != nil {
+			log.Printf("Warning: Could not insert team_event_stats: %v", err)
+		}
+	}
+
+	log.Printf("   📊 Created team_event_stats for %d teams", len(teamIDs))
 	return nil
 }
 
@@ -737,59 +803,229 @@ func analyzeSchedule(matches []Match, teamIDs []int) ScheduleStats {
 	return stats
 }
 
+// Scouting data enums
+var startingPositions = []string{"left", "center", "right"}
+var towerLevels = []string{"none", "level1", "level2", "level3"}
+var defenseRatings = []string{"low", "mid", "high"}
+var throughputRatings = []string{"low", "mid", "high"}
+var scoringStrategies = []string{"passer", "stealer", "scorer"}
+var traversalTypes = []string{"trench", "bump"}
+
 func insertMatches(db *sql.DB, compID int, matches []Match) error {
 	for _, match := range matches {
-		// Insert match
+		// Generate 2026 game-specific score breakdown
+		redAutoTower := rand.Intn(15)
+		redEndgameTower := rand.Intn(20)
+		redHubAuto := rand.Intn(5)
+		redHubTeleop := rand.Intn(20)
+		redHubEndgame := rand.Intn(8)
+		redEnergized := rand.Float32() < 0.4
+		redSupercharged := rand.Float32() < 0.25
+		redTraversal := rand.Float32() < 0.3
+		redMinorFouls := rand.Intn(5)
+		redMajorFouls := rand.Intn(2)
+		redFoulPoints := redMinorFouls*2 + redMajorFouls*5
+		redRp := 0
+		if redEnergized {
+			redRp++
+		}
+		if redSupercharged {
+			redRp++
+		}
+		redAutoPoints := redAutoTower + redHubAuto*3
+		redTeleopPoints := redHubTeleop*2 + redHubEndgame*4 + redEndgameTower
+
+		blueAutoTower := rand.Intn(15)
+		blueEndgameTower := rand.Intn(20)
+		blueHubAuto := rand.Intn(5)
+		blueHubTeleop := rand.Intn(20)
+		blueHubEndgame := rand.Intn(8)
+		blueEnergized := rand.Float32() < 0.4
+		blueSupercharged := rand.Float32() < 0.25
+		blueTraversal := rand.Float32() < 0.3
+		blueMinorFouls := rand.Intn(5)
+		blueMajorFouls := rand.Intn(2)
+		blueFoulPoints := blueMinorFouls*2 + blueMajorFouls*5
+		blueRp := 0
+		if blueEnergized {
+			blueRp++
+		}
+		if blueSupercharged {
+			blueRp++
+		}
+		blueAutoPoints := blueAutoTower + blueHubAuto*3
+		blueTeleopPoints := blueHubTeleop*2 + blueHubEndgame*4 + blueEndgameTower
+
+		// Calculate total scores
+		redTotal := redAutoPoints + redTeleopPoints + redFoulPoints
+		blueTotal := blueAutoPoints + blueTeleopPoints + blueFoulPoints
+
+		winningAlliance := ""
+		if redTotal > blueTotal {
+			winningAlliance = "red"
+			redRp += 2
+		} else if blueTotal > redTotal {
+			winningAlliance = "blue"
+			blueRp += 2
+		} else {
+			redRp++
+			blueRp++
+		}
+
+		tbaKey := fmt.Sprintf("2026txho_qm%d", match.Number)
+		scheduledTime := time.Now().Add(time.Duration(match.Number) * time.Hour)
+
+		// Insert match with all new fields
 		var matchID int
 		err := db.QueryRow(`
-			INSERT INTO matches (competition_id, match_number, match_type, red_score, blue_score, played)
-			VALUES ($1, $2, $3, $4, $5, $6)
+			INSERT INTO matches (competition_id, match_number, match_type, red_score, blue_score, played,
+				tba_key, comp_level, set_number, scheduled_time, winning_alliance,
+				red_auto_tower_points, red_endgame_tower_points, red_hub_auto_count, red_hub_auto_points,
+				red_hub_teleop_count, red_hub_teleop_points, red_hub_endgame_count, red_hub_endgame_points,
+				red_hub_total_count, red_hub_total_points, red_energized_achieved, red_supercharged_achieved,
+				red_traversal_achieved, red_minor_foul_count, red_major_foul_count, red_foul_points,
+				red_rp, red_total_auto_points, red_total_teleop_points,
+				blue_auto_tower_points, blue_endgame_tower_points, blue_hub_auto_count, blue_hub_auto_points,
+				blue_hub_teleop_count, blue_hub_teleop_points, blue_hub_endgame_count, blue_hub_endgame_points,
+				blue_hub_total_count, blue_hub_total_points, blue_energized_achieved, blue_supercharged_achieved,
+				blue_traversal_achieved, blue_minor_foul_count, blue_major_foul_count, blue_foul_points,
+				blue_rp, blue_total_auto_points, blue_total_teleop_points)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+				$12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
+				$31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49)
 			RETURNING id
-		`, compID, match.Number, match.MatchType, match.RedScore, match.BlueScore, true).Scan(&matchID)
+		`, compID, match.Number, match.MatchType, redTotal, blueTotal, true,
+			tbaKey, "qm", 1, scheduledTime, winningAlliance,
+			redAutoTower, redEndgameTower, redHubAuto, redHubAuto*3,
+			redHubTeleop, redHubTeleop*2, redHubEndgame, redHubEndgame*4,
+			redHubAuto+redHubTeleop+redHubEndgame, redHubAuto*3+redHubTeleop*2+redHubEndgame*4,
+			redEnergized, redSupercharged, redTraversal, redMinorFouls, redMajorFouls, redFoulPoints,
+			redRp, redAutoPoints, redTeleopPoints,
+			blueAutoTower, blueEndgameTower, blueHubAuto, blueHubAuto*3,
+			blueHubTeleop, blueHubTeleop*2, blueHubEndgame, blueHubEndgame*4,
+			blueHubAuto+blueHubTeleop+blueHubEndgame, blueHubAuto*3+blueHubTeleop*2+blueHubEndgame*4,
+			blueEnergized, blueSupercharged, blueTraversal, blueMinorFouls, blueMajorFouls, blueFoulPoints,
+			blueRp, blueAutoPoints, blueTeleopPoints).Scan(&matchID)
 
 		if err != nil {
 			return fmt.Errorf("failed to insert match %d: %w", match.Number, err)
 		}
 
-		// Insert red alliance teams
+		// Insert red alliance teams with scouting data
 		for pos, teamID := range match.RedTeams {
 			if teamID == 0 {
 				continue
 			}
-			_, err := db.Exec(`
-				INSERT INTO match_teams (match_id, team_id, alliance_color, alliance_position,
-					auto_score, teleop_score, endgame_score, scouter_name)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-			`, matchID, teamID, "red", pos+1,
-				rand.Intn(30), rand.Intn(50), rand.Intn(25),
-				fmt.Sprintf("Scouter %d", rand.Intn(10)+1))
-
-			if err != nil {
+			if err := insertMatchTeam(db, matchID, teamID, "red", pos+1); err != nil {
 				return fmt.Errorf("failed to insert red team: %w", err)
 			}
 		}
 
-		// Insert blue alliance teams
+		// Insert blue alliance teams with scouting data
 		for pos, teamID := range match.BlueTeams {
 			if teamID == 0 {
 				continue
 			}
-			_, err := db.Exec(`
-				INSERT INTO match_teams (match_id, team_id, alliance_color, alliance_position,
-					auto_score, teleop_score, endgame_score, scouter_name)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-			`, matchID, teamID, "blue", pos+1,
-				rand.Intn(30), rand.Intn(50), rand.Intn(25),
-				fmt.Sprintf("Scouter %d", rand.Intn(10)+1))
-
-			if err != nil {
+			if err := insertMatchTeam(db, matchID, teamID, "blue", pos+1); err != nil {
 				return fmt.Errorf("failed to insert blue team: %w", err)
 			}
 		}
 	}
 
-	log.Printf("   ✅ Inserted %d matches with team assignments", len(matches))
+	log.Printf("   ✅ Inserted %d matches with full 2026 score breakdowns", len(matches))
 	return nil
+}
+
+// insertMatchTeam inserts a team's scouting data for a specific match
+func insertMatchTeam(db *sql.DB, matchID, teamID int, allianceColor string, position int) error {
+	// Generate random scouting data
+	startingPos := startingPositions[rand.Intn(len(startingPositions))]
+	autoTowerLevel := towerLevels[rand.Intn(len(towerLevels))]
+	endgameTowerLevel := towerLevels[rand.Intn(len(towerLevels))]
+	autoHand := rand.Intn(4)          // 0-3
+	endgameHang := rand.Intn(4)       // 0-3
+	scoringRating := rand.Intn(5) + 1 // 1-5 Likert
+	defenseRating := defenseRatings[rand.Intn(len(defenseRatings))]
+	throughput := throughputRatings[rand.Intn(len(throughputRatings))]
+	scoringStrategy := scoringStrategies[rand.Intn(len(scoringStrategies))]
+	traversal := traversalTypes[rand.Intn(len(traversalTypes))]
+
+	// Hub scoring contribution
+	hubAutoCount := rand.Intn(3)
+	hubTeleopCount := rand.Intn(8)
+	hubEndgameCount := rand.Intn(4)
+
+	autoScore := rand.Intn(30)
+	teleopScore := rand.Intn(50)
+	endgameScore := rand.Intn(25)
+	penaltiesCaused := rand.Intn(3)
+
+	// Generate auto path data as JSON
+	autoPathData := generateAutoPathJSON(startingPos)
+
+	scouterName := fmt.Sprintf("Scouter %d", rand.Intn(10)+1)
+
+	_, err := db.Exec(`
+		INSERT INTO match_teams (match_id, team_id, alliance_color, alliance_position,
+			auto_score, teleop_score, endgame_score, scouter_name,
+			starting_position, auto_path_data, auto_tower_level, auto_hand,
+			scoring_rating, endgame_tower_level, endgame_hang,
+			defense_rating, throughput, scoring_strategy, traversal,
+			hub_auto_count, hub_teleop_count, hub_endgame_count, penalties_caused,
+			scouted_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+	`, matchID, teamID, allianceColor, position,
+		autoScore, teleopScore, endgameScore, scouterName,
+		startingPos, autoPathData, autoTowerLevel, autoHand,
+		scoringRating, endgameTowerLevel, endgameHang,
+		defenseRating, throughput, scoringStrategy, traversal,
+		hubAutoCount, hubTeleopCount, hubEndgameCount, penaltiesCaused,
+		time.Now())
+
+	return err
+}
+
+// generateAutoPathJSON creates a simple auto path as JSON
+func generateAutoPathJSON(startingPos string) string {
+	// Generate a path with 5-10 waypoints
+	numPoints := 5 + rand.Intn(6)
+
+	// Starting coordinates based on position
+	var startX, startY float64
+	switch startingPos {
+	case "left":
+		startX, startY = 1.5, 4.0
+	case "center":
+		startX, startY = 8.0, 4.0
+	case "right":
+		startX, startY = 14.5, 4.0
+	}
+
+	path := fmt.Sprintf(`{"points": [{"x": %.2f, "y": %.2f, "t": 0}`, startX, startY)
+
+	currentX, currentY := startX, startY
+	for i := 1; i < numPoints; i++ {
+		// Move randomly but generally forward
+		currentX += rand.Float64()*2.0 - 0.5
+		currentY += rand.Float64()*1.5 - 0.75
+		// Keep within field bounds (roughly 16m x 8m)
+		if currentX < 0 {
+			currentX = 0
+		}
+		if currentX > 16 {
+			currentX = 16
+		}
+		if currentY < 0 {
+			currentY = 0
+		}
+		if currentY > 8 {
+			currentY = 8
+		}
+		path += fmt.Sprintf(`, {"x": %.2f, "y": %.2f, "t": %.1f}`, currentX, currentY, float64(i)*0.5)
+	}
+
+	path += `]}`
+	return path
 }
 
 func printSummary(db *sql.DB) {
