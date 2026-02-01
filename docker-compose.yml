@@ -4,7 +4,7 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: yourapp_db
+    container_name: tealteam_db
     restart: unless-stopped
     environment:
       POSTGRES_USER: user
@@ -24,7 +24,7 @@ services:
 
   web:
     build: .
-    container_name: yourapp_web
+    container_name: tealteam_web
     restart: unless-stopped
     environment:
       PORT: 8080
@@ -34,13 +34,15 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - ./web:/app/web
+    # Note: Removed volume mount - CSS/JS are built inside Docker
+    # For template hot-reload during development, uncomment:
+    # volumes:
+    #   - ./web/templates:/app/web/templates
 
   # Optional: Adminer for database management
   adminer:
     image: adminer
-    container_name: yourapp_adminer
+    container_name: tealteam_adminer
     restart: unless-stopped
     ports:
       - "8081:8080"
