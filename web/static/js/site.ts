@@ -60,6 +60,38 @@ document.body.addEventListener('htmx:responseError', function(event: Event) {
   // TODO: Show user-friendly error message
 });
 
+// Mobile menu toggle
+console.log('site.ts loaded - starting mobile menu setup');
+const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+const mobileMenu = document.getElementById('mobile-menu');
+console.log('Mobile menu init - btn:', mobileMenuBtn, 'menu:', mobileMenu);
+console.log('btn HTML:', mobileMenuBtn?.outerHTML);
+console.log('menu HTML:', mobileMenu?.outerHTML);
+
+if (mobileMenuBtn && mobileMenu) {
+  console.log('Both elements found, adding event listener');
+  mobileMenuBtn.addEventListener('click', function(e: Event) {
+    console.log('CLICK EVENT FIRED', e);
+    e.preventDefault();
+    console.log('Menu button clicked');
+    console.log('Before toggle - hidden class:', mobileMenu.classList.contains('hidden'));
+    mobileMenu.classList.toggle('hidden');
+    console.log('After toggle - hidden class:', mobileMenu.classList.contains('hidden'));
+    console.log('Menu classList after toggle:', mobileMenu.className);
+  });
+  console.log('Event listener added successfully');
+  // Close menu when a link is clicked
+  mobileMenu.querySelectorAll('a').forEach(link => {
+    console.log('Adding click listener to link:', link.href);
+    link.addEventListener('click', function() {
+      console.log('Link clicked, hiding menu');
+      mobileMenu.classList.add('hidden');
+    });
+  });
+} else {
+  console.warn('Mobile menu elements not found - btn:', !!mobileMenuBtn, 'menu:', !!mobileMenu);
+}
+
 // TODO: Add UI utility functions here
 // Example: Modal handling, toast notifications, etc.
 
