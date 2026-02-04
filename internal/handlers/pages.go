@@ -12,9 +12,13 @@ func (h *Handler) HandleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get current user if authenticated
+	user, _ := h.GetSessionUser(r)
+
 	data := map[string]any{
 		"Title":   "Home",
 		"Message": "Welcome to Your Application",
+		"User":    user,
 	}
 
 	h.render(w, "index", data)
@@ -22,12 +26,31 @@ func (h *Handler) HandleIndex(w http.ResponseWriter, r *http.Request) {
 
 // HandleExamplePage renders the example page
 func (h *Handler) HandleExamplePage(w http.ResponseWriter, r *http.Request) {
+	// Get current user if authenticated
+	user, _ := h.GetSessionUser(r)
+
 	data := map[string]any{
 		"Title":       "Example Page",
 		"Description": "This page demonstrates HTMX integration",
+		"User":        user,
 	}
 
 	h.render(w, "example", data)
+}
+
+func (h *Handler) HandleSignIn(w http.ResponseWriter, r *http.Request) {
+	// Redirect if already logged in
+	user, _ := h.GetSessionUser(r)
+	if user != nil {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+
+	data := map[string]any{
+		"Title":       "Sign In",
+		"Description": "Sign in to access higher level features.",
+	}
+	h.render(w, "signin", data)
 }
 
 // TODO: Add more page handlers here

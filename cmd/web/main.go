@@ -14,7 +14,7 @@ import (
 
 // Database configuration for different environments
 var dbConfigs = map[string]string{
-	"test": "postgres://user:password@localhost:5432/yourdb?sslmode=disable",
+	"test": "postgres://user:password@127.0.0.1:5432/yourdb?sslmode=disable",
 	"prod": "", // Set via RENDER_DATABASE_URL or DATABASE_URL environment variable
 }
 
@@ -86,6 +86,11 @@ func main() {
 	mux.HandleFunc("GET /", h.HandleIndex)
 	mux.HandleFunc("GET /example", h.HandleExamplePage)
 	mux.HandleFunc("GET /development/db", h.HandleDBViewer)
+	mux.HandleFunc("GET /sign-in", h.HandleSignIn)
+
+	// Authentication API routes
+	mux.HandleFunc("POST /api/auth/login", h.HandleLogin)
+	mux.HandleFunc("POST /api/auth/logout", h.HandleLogout)
 
 	// HTMX fragment routes (return HTML fragments only)
 	mux.HandleFunc("GET /hx/example/table", h.HandleExampleTable)
