@@ -38,7 +38,11 @@ func main() {
 	var databaseURL string
 	switch *env {
 	case "test":
-		databaseURL = dbConfigs["test"]
+		// Prefer DATABASE_URL from environment (e.g., Docker) if set
+		databaseURL = os.Getenv("DATABASE_URL")
+		if databaseURL == "" {
+			databaseURL = dbConfigs["test"]
+		}
 		log.Println("🧪 Running in TEST mode (local Docker database)")
 	case "prod":
 		// Check for Render's database URL first, then fall back to DATABASE_URL

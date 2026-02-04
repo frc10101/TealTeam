@@ -24,8 +24,8 @@ func (h *Handler) HandleIndex(w http.ResponseWriter, r *http.Request) {
 	h.render(w, "index", data)
 }
 
-// HandleExamplePage renders the example page
-func (h *Handler) HandleExamplePage(w http.ResponseWriter, r *http.Request) {
+// HandleSubmissionPage renders the submission page
+func (h *Handler) HandleSubmissionPage(w http.ResponseWriter, r *http.Request) {
 	// Get current user if authenticated
 	user, _ := h.GetSessionUser(r)
 

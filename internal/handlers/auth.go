@@ -232,6 +232,7 @@ func (h *Handler) GetSessionUser(r *http.Request) (*models.User, error) {
 }
 
 // sendAuthResponse sends an HTML response for authentication requests (for HTMX)
+// Note: We return 200 for validation errors so HTMX can render the message inline.
 func (h *Handler) sendAuthResponse(w http.ResponseWriter, success bool, message string, redirect string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
@@ -240,7 +241,6 @@ func (h *Handler) sendAuthResponse(w http.ResponseWriter, success bool, message 
 	}
 
 	if !success {
-		w.WriteHeader(http.StatusUnauthorized)
 		// Return error HTML
 		fmt.Fprintf(w, `<div class="bg-red-900/20 border border-red-500 text-red-300 px-4 py-3 rounded mb-4" role="alert">
 			<div class="flex items-center gap-2">
