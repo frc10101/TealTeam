@@ -39,7 +39,7 @@ func New(db *sql.DB) *Handler {
 	layoutFile := filepath.Join("web", "templates", "layout.html")
 
 	// Parse each page template with the layout
-	pages := []string{"index", "example", "db_viewer"}
+	pages := []string{"index", "example", "db_viewer", "signin"}
 	for _, page := range pages {
 		pageFile := filepath.Join("web", "templates", "pages", page+".html")
 		tmpl, err := template.New("").Funcs(funcMap).ParseFiles(layoutFile, pageFile)

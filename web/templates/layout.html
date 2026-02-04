@@ -26,12 +26,32 @@
                     </a>
                     <div class="hidden sm:flex sm:gap-6">
                         <a href="/" class="text-gray-300 hover:text-teal-300 transition-colors text-sm font-medium">Home</a>
-                        <a href="/example" class="text-gray-300 hover:text-teal-300 transition-colors text-sm font-medium">Example</a>
+                        <a href="/example" class="text-gray-300 hover:text-teal-300 transition-colors text-sm font-medium">Scouting Submission</a>
                         <a href="/development/db" class="text-gray-300 hover:text-teal-300 transition-colors text-sm font-medium">DB Viewer</a>
                     </div>
                 </div>
-                <div class="flex items-center gap-4 sm:hidden">
-                    <button id="mobile-menu-btn" class="text-gray-300 hover:text-teal-300 p-2">
+                <div class="flex items-center gap-4">
+                    {{if .User}}
+                    <!-- Logged in user -->
+                    <div class="hidden sm:flex items-center gap-4">
+                        <span class="text-gray-400 text-sm">{{.User.Name}}</span>
+                        <button 
+                            hx-post="/api/auth/logout"
+                            hx-swap="none"
+                            class="text-sm font-medium text-gray-300 hover:text-teal-300 transition-colors px-3 py-1.5 rounded-lg border border-gray-700 hover:border-teal-500">
+                            Logout
+                        </button>
+                    </div>
+                    {{else}}
+                    <!-- Not logged in -->
+                    <div class="hidden sm:flex items-center gap-4">
+                        <a href="/sign-in" class="text-sm font-medium text-gray-300 hover:text-teal-300 transition-colors">
+                            Sign In
+                        </a>
+                    </div>
+                    {{end}}
+                    <!-- Mobile menu button -->
+                    <button id="mobile-menu-btn" class="text-gray-300 hover:text-teal-300 p-2 sm:hidden">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
                         </svg>
@@ -41,8 +61,21 @@
             <!-- Mobile menu -->
             <div id="mobile-menu" class="hidden sm:hidden pb-4">
                 <a href="/" class="block px-2 py-2 text-gray-300 hover:text-teal-300 hover:bg-gray-800 rounded transition-colors text-sm font-medium">Home</a>
-                <a href="/example" class="block px-2 py-2 text-gray-300 hover:text-teal-300 hover:bg-gray-800 rounded transition-colors text-sm font-medium">Example</a>
+                <a href="/example" class="block px-2 py-2 text-gray-300 hover:text-teal-300 hover:bg-gray-800 rounded transition-colors text-sm font-medium">Scouting Submission</a>
                 <a href="/development/db" class="block px-2 py-2 text-gray-300 hover:text-teal-300 hover:bg-gray-800 rounded transition-colors text-sm font-medium">DB Viewer</a>
+                {{if .User}}
+                <div class="mt-2 pt-2 border-t border-gray-700">
+                    <span class="block px-2 py-2 text-gray-400 text-sm">{{.User.Name}}</span>
+                    <button 
+                        hx-post="/api/auth/logout"
+                        hx-swap="none"
+                        class="w-full text-left px-2 py-2 text-gray-300 hover:text-teal-300 hover:bg-gray-800 rounded transition-colors text-sm font-medium">
+                        Logout
+                    </button>
+                </div>
+                {{else}}
+                <a href="/sign-in" class="block px-2 py-2 text-gray-300 hover:text-teal-300 hover:bg-gray-800 rounded transition-colors text-sm font-medium">Sign In</a>
+                {{end}}
             </div>
         </div>
     </nav>

@@ -25,9 +25,18 @@ type ColumnInfo struct {
 // HandleDBViewer renders the database viewer page
 // Route: GET /development/db
 func (h *Handler) HandleDBViewer(w http.ResponseWriter, r *http.Request) {
+	// Check if user is authenticated
+	user, err := h.GetSessionUser(r)
+	if err != nil || user == nil {
+		// Redirect to sign-in page
+		http.Redirect(w, r, "/sign-in", http.StatusSeeOther)
+		return
+	}
+
 	data := map[string]any{
 		"Title":       "Database Viewer",
 		"DBConnected": h.hasDB(),
+		"User":        user,
 	}
 
 	if h.hasDB() {

@@ -62,9 +62,35 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.ResponseWriter.WriteHeader(code)
 }
 
+// AuthChecker is an interface for checking authentication
+type AuthChecker interface {
+	GetSessionUser(r *http.Request) (interface{}, error)
+}
+
+// RequireAuth middleware requires authentication to access a route
+func RequireAuth(checker AuthChecker) Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			user, err := checker.GetSessionUser(r)
+			if err != nil || user == nil {
+				// Check if this is an HTMX request
+				if r.Header.Get("HX-Request") == "true" {
+					// For HTMX requests, send a redirect header
+					w.Header().Set("HX-Redirect", "/sign-in")
+					w.WriteHeader(http.StatusUnauthorized)
+					return
+				}
+				// For regular requests, redirect to sign-in page
+				http.Redirect(w, r, "/sign-in", http.StatusSeeOther)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // TODO: Add more middleware as needed
 // Examples:
 // - CORS middleware
-// - Authentication middleware
 // - Rate limiting middleware
 // - Request ID middleware
