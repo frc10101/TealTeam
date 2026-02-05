@@ -88,7 +88,7 @@ func main() {
 
 	// Full page routes (render with layout)
 	mux.HandleFunc("GET /", h.HandleIndex)
-	mux.HandleFunc("GET /example", h.HandleExamplePage)
+	mux.HandleFunc("GET /example", h.HandleSubmissionPage)
 	mux.HandleFunc("GET /development/db", h.HandleDBViewer)
 	mux.HandleFunc("GET /sign-in", h.HandleSignIn)
 

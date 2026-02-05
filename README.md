@@ -112,6 +112,15 @@ go run ./cmd/web -env=test
 # Run with PRODUCTION database (Render)
 go run ./cmd/web -env=prod
 ```
+### Or With Docker Installed 
+
+```bash
+#build the enviorment
+docker-compose build
+
+#run the containers
+docker-compose up -d
+```
 
 ### 5. Open in Browser
 
