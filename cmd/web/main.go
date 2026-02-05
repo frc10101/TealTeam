@@ -91,9 +91,11 @@ func main() {
 	mux.HandleFunc("GET /example", h.HandleSubmissionPage)
 	mux.HandleFunc("GET /development/db", h.HandleDBViewer)
 	mux.HandleFunc("GET /sign-in", h.HandleSignIn)
+	mux.HandleFunc("GET /sign-up", h.HandleSignUp)
 
 	// Authentication API routes
 	mux.HandleFunc("POST /api/auth/login", h.HandleLogin)
+	mux.HandleFunc("POST /api/auth/signup", h.HandleSignup)
 	mux.HandleFunc("POST /api/auth/logout", h.HandleLogout)
 
 	// HTMX fragment routes (return HTML fragments only)
