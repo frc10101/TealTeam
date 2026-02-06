@@ -4,12 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 
 	"github.com/frc10101/TealTeam/internal/db"
 	"github.com/frc10101/TealTeam/internal/handlers"
-	"github.com/frc10101/TealTeam/internal/middleware"
+	"github.com/gin-gonic/gin"
 )
 
 // Database configuration for different environments
@@ -70,7 +69,9 @@ func main() {
 	}
 	defer func() {
 		if database != nil {
-			database.Close()
+			if sqlDB, err := database.DB(); err == nil {
+				_ = sqlDB.Close()
+			}
 		}
 	}()
 
@@ -79,42 +80,35 @@ func main() {
 	// Initialize handlers
 	h := handlers.New(database)
 
-	// Create router
-	mux := http.NewServeMux()
+	// Create Gin router
+	router := gin.New()
+	router.Use(gin.Logger(), gin.Recovery())
 
 	// Static files
-	fs := http.FileServer(http.Dir("web/static"))
-	mux.Handle("GET /static/", http.StripPrefix("/static/", fs))
+	router.Static("/static", "./web/static")
 
 	// Full page routes (render with layout)
-	mux.HandleFunc("GET /", h.HandleIndex)
-	mux.HandleFunc("GET /submission", h.HandleSubmissionPage)
-	mux.HandleFunc("GET /development/db", h.HandleDBViewer)
-	mux.HandleFunc("GET /sign-in", h.HandleSignIn)
-	mux.HandleFunc("GET /sign-up", h.HandleSignUp)
+	router.GET("/", h.HandleIndex)
+	router.GET("/submission", h.HandleSubmissionPage)
+	router.GET("/development/db", h.HandleDBViewer)
+	router.GET("/sign-in", h.HandleSignIn)
+	router.GET("/sign-up", h.HandleSignUp)
 
 	// Authentication API routes
-	mux.HandleFunc("POST /api/auth/login", h.HandleLogin)
-	mux.HandleFunc("POST /api/auth/signup", h.HandleSignup)
-	mux.HandleFunc("POST /api/auth/logout", h.HandleLogout)
+	router.POST("/api/auth/login", h.HandleLogin)
+	router.POST("/api/auth/signup", h.HandleSignup)
+	router.POST("/api/auth/logout", h.HandleLogout)
 
 	// HTMX fragment routes (return HTML fragments only)
-	mux.HandleFunc("GET /hx/development/db/table/{name}", h.HandleDBTableContent)
+	router.GET("/hx/development/db/table/:name", h.HandleDBTableContent)
 
 	// TODO: Add more routes here
-	// Full pages: mux.HandleFunc("GET /yourpage", h.HandleYourPage)
-	// HTMX fragments: mux.HandleFunc("GET /hx/yourfeature/fragment", h.HandleYourFragment)
-
-	// Apply middleware
-	handler := middleware.Chain(
-		mux,
-		middleware.Logger,
-		middleware.Recover,
-	)
+	// Full pages: router.GET("/yourpage", h.HandleYourPage)
+	// HTMX fragments: router.GET("/hx/yourfeature/fragment", h.HandleYourFragment)
 
 	// Start server
 	log.Printf("Server starting on http://localhost:%s", port)
-	if err := http.ListenAndServe(":"+port, handler); err != nil {
+	if err := router.Run(":" + port); err != nil {
 		log.Fatal(err)
 	}
 }

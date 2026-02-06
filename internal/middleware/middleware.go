@@ -1,91 +1,34 @@
 package middleware
 
 import (
-	"log"
 	"net/http"
-	"runtime/debug"
-	"time"
+
+	"github.com/gin-gonic/gin"
 )
-
-// Middleware is a function that wraps an http.Handler
-type Middleware func(http.Handler) http.Handler
-
-// Chain applies multiple middleware to a handler
-func Chain(h http.Handler, middlewares ...Middleware) http.Handler {
-	for i := len(middlewares) - 1; i >= 0; i-- {
-		h = middlewares[i](h)
-	}
-	return h
-}
-
-// Logger logs request details
-func Logger(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-
-		// Wrap response writer to capture status code
-		wrapped := &responseWriter{ResponseWriter: w, status: http.StatusOK}
-
-		next.ServeHTTP(wrapped, r)
-
-		log.Printf(
-			"%s %s %d %s",
-			r.Method,
-			r.URL.Path,
-			wrapped.status,
-			time.Since(start),
-		)
-	})
-}
-
-// Recover recovers from panics and returns a 500 error
-func Recover(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer func() {
-			if err := recover(); err != nil {
-				log.Printf("panic: %v\n%s", err, debug.Stack())
-				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			}
-		}()
-		next.ServeHTTP(w, r)
-	})
-}
-
-// responseWriter wraps http.ResponseWriter to capture the status code
-type responseWriter struct {
-	http.ResponseWriter
-	status int
-}
-
-func (rw *responseWriter) WriteHeader(code int) {
-	rw.status = code
-	rw.ResponseWriter.WriteHeader(code)
-}
 
 // AuthChecker is an interface for checking authentication
 type AuthChecker interface {
-	GetSessionUser(r *http.Request) (interface{}, error)
+	GetSessionUser(c *gin.Context) (interface{}, error)
 }
 
 // RequireAuth middleware requires authentication to access a route
-func RequireAuth(checker AuthChecker) Middleware {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			user, err := checker.GetSessionUser(r)
-			if err != nil || user == nil {
-				// Check if this is an HTMX request
-				if r.Header.Get("HX-Request") == "true" {
-					// For HTMX requests, send a redirect header
-					w.Header().Set("HX-Redirect", "/sign-in")
-					w.WriteHeader(http.StatusUnauthorized)
-					return
-				}
-				// For regular requests, redirect to sign-in page
-				http.Redirect(w, r, "/sign-in", http.StatusSeeOther)
+func RequireAuth(checker AuthChecker) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user, err := checker.GetSessionUser(c)
+		if err != nil || user == nil {
+			// Check if this is an HTMX request
+			if c.GetHeader("HX-Request") == "true" {
+				// For HTMX requests, send a redirect header
+				c.Header("HX-Redirect", "/sign-in")
+				c.Status(http.StatusUnauthorized)
 				return
 			}
-			next.ServeHTTP(w, r)
-		})
+			// For regular requests, redirect to sign-in page
+			http.Redirect(c.Writer, c.Request, "/sign-in", http.StatusSeeOther)
+			return
+		}
+
+		c.Next()
 	}
 }
 

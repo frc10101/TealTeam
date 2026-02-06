@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+
+	"github.com/gin-gonic/gin"
 )
 
 // TableInfo holds metadata about a database table
@@ -24,12 +26,12 @@ type ColumnInfo struct {
 
 // HandleDBViewer renders the database viewer page
 // Route: GET /development/db
-func (h *Handler) HandleDBViewer(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleDBViewer(c *gin.Context) {
 	// Check if user is authenticated
-	user, err := h.GetSessionUser(r)
+	user, err := h.GetSessionUser(c)
 	if err != nil || user == nil {
 		// Redirect to sign-in page
-		http.Redirect(w, r, "/sign-in", http.StatusSeeOther)
+		http.Redirect(c.Writer, c.Request, "/sign-in", http.StatusSeeOther)
 		return
 	}
 
@@ -40,7 +42,7 @@ func (h *Handler) HandleDBViewer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.hasDB() {
-		tables, err := h.getTableList(r.Context())
+		tables, err := h.getTableList(c.Request.Context())
 		if err != nil {
 			data["Error"] = fmt.Sprintf("Failed to get tables: %v", err)
 		} else {
@@ -48,32 +50,32 @@ func (h *Handler) HandleDBViewer(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Check if a table is selected via query param
-		selectedTable := r.URL.Query().Get("table")
+		selectedTable := c.Query("table")
 		if selectedTable != "" {
 			data["SelectedTable"] = selectedTable
 		}
 	}
 
-	h.render(w, "db_viewer", data)
+	h.render(c, "db_viewer", data)
 }
 
 // HandleDBTableContent returns the table content as an HTMX fragment
 // Route: GET /hx/development/db/table/{name}
-func (h *Handler) HandleDBTableContent(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleDBTableContent(c *gin.Context) {
 	if !h.hasDB() {
-		http.Error(w, "Database not connected", http.StatusServiceUnavailable)
+		http.Error(c.Writer, "Database not connected", http.StatusServiceUnavailable)
 		return
 	}
 
-	tableName := r.PathValue("name")
+	tableName := c.Param("name")
 	if tableName == "" {
-		http.Error(w, "Table name is required", http.StatusBadRequest)
+		http.Error(c.Writer, "Table name is required", http.StatusBadRequest)
 		return
 	}
 
 	// Parse pagination params
-	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	offset, _ := strconv.Atoi(c.Query("offset"))
+	limit, _ := strconv.Atoi(c.Query("limit"))
 	if limit <= 0 {
 		limit = 50
 	}
@@ -81,13 +83,13 @@ func (h *Handler) HandleDBTableContent(w http.ResponseWriter, r *http.Request) {
 		offset = 0
 	}
 
-	data, err := h.getTableData(r.Context(), tableName, offset, limit)
+	data, err := h.getTableData(c.Request.Context(), tableName, offset, limit)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get table data: %v", err), http.StatusInternalServerError)
+		http.Error(c.Writer, fmt.Sprintf("Failed to get table data: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	h.renderPartial(w, "db_table_content", data)
+	h.renderPartial(c, "db_table_content", data)
 }
 
 // getTableList retrieves all user tables from the database
@@ -102,7 +104,7 @@ func (h *Handler) getTableList(ctx context.Context) ([]TableInfo, error) {
 		ORDER BY table_name
 	`
 
-	rows, err := h.db.QueryContext(ctx, query)
+	rows, err := h.db.WithContext(ctx).Raw(query).Rows()
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +121,7 @@ func (h *Handler) getTableList(ctx context.Context) ([]TableInfo, error) {
 		// Get row count for each table
 		var count int64
 		countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %q", t.Name)
-		if err := h.db.QueryRowContext(ctx, countQuery).Scan(&count); err != nil {
+		if err := h.db.WithContext(ctx).Raw(countQuery).Scan(&count).Error; err != nil {
 			count = 0
 		}
 		t.RowCount = count
@@ -148,14 +150,14 @@ func (h *Handler) getTableData(ctx context.Context, tableName string, offset, li
 	// Get total row count
 	var totalRows int
 	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %q", tableName)
-	if err := h.db.QueryRowContext(ctx, countQuery).Scan(&totalRows); err != nil {
+	if err := h.db.WithContext(ctx).Raw(countQuery).Scan(&totalRows).Error; err != nil {
 		return nil, fmt.Errorf("failed to count rows: %w", err)
 	}
 	data["TotalRows"] = totalRows
 
 	// Get rows
 	dataQuery := fmt.Sprintf("SELECT * FROM %q ORDER BY 1 LIMIT %d OFFSET %d", tableName, limit, offset)
-	rows, err := h.db.QueryContext(ctx, dataQuery)
+	rows, err := h.db.WithContext(ctx).Raw(dataQuery).Rows()
 	if err != nil {
 		return nil, fmt.Errorf("failed to query rows: %w", err)
 	}
@@ -205,7 +207,7 @@ func (h *Handler) getColumnInfo(ctx context.Context, tableName string) ([]Column
 		ORDER BY ordinal_position
 	`
 
-	rows, err := h.db.QueryContext(ctx, query, tableName)
+	rows, err := h.db.WithContext(ctx).Raw(query, tableName).Rows()
 	if err != nil {
 		return nil, err
 	}

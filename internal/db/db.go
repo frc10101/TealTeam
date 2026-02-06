@@ -2,43 +2,48 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"os"
 	"time"
 
-	_ "github.com/lib/pq" // PostgreSQL driver
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 // DefaultTimeout is the default context timeout for database operations
 const DefaultTimeout = 5 * time.Second
 
-// Connect establishes a connection to the PostgreSQL database
-func Connect() (*sql.DB, error) {
+// Connect establishes a connection to the PostgreSQL database using GORM
+func Connect() (*gorm.DB, error) {
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		return nil, fmt.Errorf("DATABASE_URL environment variable is not set")
 	}
 
-	db, err := sql.Open("postgres", dsn)
+	gormDB, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
+	sqlDB, err := gormDB.DB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sql DB: %w", err)
+	}
+
 	// Configure connection pool
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
-	db.SetConnMaxLifetime(5 * time.Minute)
+	sqlDB.SetMaxOpenConns(25)
+	sqlDB.SetMaxIdleConns(5)
+	sqlDB.SetConnMaxLifetime(5 * time.Minute)
 
 	// Verify connection
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultTimeout)
 	defer cancel()
 
-	if err := db.PingContext(ctx); err != nil {
+	if err := sqlDB.PingContext(ctx); err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	return db, nil
+	return gormDB, nil
 }
 
 // WithTimeout creates a context with the default timeout
