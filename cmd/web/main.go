@@ -66,6 +66,14 @@ func main() {
 		database = nil
 	} else {
 		log.Println("✅ Database connected successfully")
+		if *env == "test" {
+			if err := db.ResetMigrations(database); err != nil {
+				log.Fatalf("Migration reset failed: %v", err)
+			}
+		}
+		if err := db.ApplyMigrations(database, "migrations"); err != nil {
+			log.Fatalf("Migration failed: %v", err)
+		}
 	}
 	defer func() {
 		if database != nil {

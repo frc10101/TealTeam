@@ -52,6 +52,9 @@ COPY --from=builder /server /server
 # Copy static assets and templates (includes compiled CSS and JS)
 COPY --from=builder /app/web ./web
 
+# Copy migrations for runtime auto-apply
+COPY --from=builder /app/migrations ./migrations
+
 # Expose port (Render will bind to PORT env var)
 EXPOSE 8080
 

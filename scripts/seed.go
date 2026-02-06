@@ -16,19 +16,19 @@ import (
 const (
 	numCompetitions    = 2
 	teamsPerComp       = 30
-	roundsPerTeam      = 5  // Each team plays this many matches
-	minMatchSeparation = 3  // Minimum matches between a team's appearances
+	roundsPerTeam      = 5 // Each team plays this many matches
+	minMatchSeparation = 3 // Minimum matches between a team's appearances
 	defaultDBURL       = "postgres://user:password@localhost:5432/yourdb?sslmode=disable"
 )
 
 // Match represents a single FRC match with 3v3 alliances
 type Match struct {
-	Number     int
-	MatchType  string
-	RedTeams   [3]int // Team IDs for red alliance (positions 1, 2, 3)
-	BlueTeams  [3]int // Team IDs for blue alliance (positions 1, 2, 3)
-	RedScore   int
-	BlueScore  int
+	Number    int
+	MatchType string
+	RedTeams  [3]int // Team IDs for red alliance (positions 1, 2, 3)
+	BlueTeams [3]int // Team IDs for blue alliance (positions 1, 2, 3)
+	RedScore  int
+	BlueScore int
 }
 
 // ScheduleStats tracks scheduling quality metrics
@@ -96,11 +96,11 @@ func seedDatabase(db *sql.DB) error {
 		return fmt.Errorf("failed to clear data: %w", err)
 	}
 
-	// Create competitions
-	log.Printf("📅 Creating %d competitions...", numCompetitions)
+	// Create events
+	log.Printf("📅 Creating %d events...", numCompetitions)
 	competitionIDs, err := createCompetitions(db)
 	if err != nil {
-		return fmt.Errorf("failed to create competitions: %w", err)
+		return fmt.Errorf("failed to create events: %w", err)
 	}
 
 	// Create teams
@@ -110,13 +110,13 @@ func seedDatabase(db *sql.DB) error {
 		return fmt.Errorf("failed to create teams: %w", err)
 	}
 
-	// For each competition, generate FRC-style match schedule
+	// For each event, generate FRC-style match schedule
 	for i, compID := range competitionIDs {
-		log.Printf("\n🏆 Competition %d: Generating FRC match schedule...", i+1)
+		log.Printf("\n🏆 Event %d: Generating FRC match schedule...", i+1)
 
-		// Associate teams with competition
+		// Associate teams with event
 		if err := associateTeamsWithCompetition(db, compID, teamIDs); err != nil {
-			return fmt.Errorf("failed to associate teams: %w", err)
+			return fmt.Errorf("failed to associate teams with event: %w", err)
 		}
 
 		// Generate FRC-style match schedule
@@ -141,7 +141,7 @@ func seedDatabase(db *sql.DB) error {
 }
 
 func clearData(db *sql.DB) error {
-	tables := []string{"zebra_data", "awards", "auto_paths", "team_event_stats", "match_teams", "matches", "match_rounds", "competition_teams", "competitions", "teams"}
+	tables := []string{"zebra_data", "awards", "auto_paths", "team_event_stats", "scouting_data", "matches", "event_teams", "events", "teams"}
 	for _, table := range tables {
 		_, err := db.Exec(fmt.Sprintf("DELETE FROM %s", table))
 		if err != nil {
@@ -175,7 +175,7 @@ func createCompetitions(db *sql.DB) ([]int, error) {
 
 		var id int
 		err := db.QueryRow(`
-			INSERT INTO competitions (name, location, start_date, end_date, tba_key, event_type, district_key, week)
+			INSERT INTO events (name, location, start_date, end_date, tba_key, event_type, district_key, week)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 			RETURNING id
 		`, name, fmt.Sprintf("Venue %d", i+1), startDate, endDate, tbaKey, eventType, districtKey, week).Scan(&id)
@@ -248,9 +248,9 @@ func generateTeamName() string {
 func associateTeamsWithCompetition(db *sql.DB, compID int, teamIDs []int) error {
 	for _, teamID := range teamIDs {
 		_, err := db.Exec(`
-			INSERT INTO competition_teams (competition_id, team_id)
+			INSERT INTO event_teams (event_id, team_id)
 			VALUES ($1, $2)
-			ON CONFLICT (competition_id, team_id) DO NOTHING
+			ON CONFLICT (event_id, team_id) DO NOTHING
 		`, compID, teamID)
 
 		if err != nil {
@@ -260,31 +260,31 @@ func associateTeamsWithCompetition(db *sql.DB, compID int, teamIDs []int) error 
 
 	// Create team_event_stats for each team at this competition
 	for _, teamID := range teamIDs {
-		opr := 20.0 + rand.Float64()*40.0     // OPR: 20-60
-		dpr := 5.0 + rand.Float64()*20.0      // DPR: 5-25
-		ccwm := opr - dpr                      // CCWM = OPR - DPR
-		autoOpr := 5.0 + rand.Float64()*15.0  // Auto OPR: 5-20
+		opr := 20.0 + rand.Float64()*40.0       // OPR: 20-60
+		dpr := 5.0 + rand.Float64()*20.0        // DPR: 5-25
+		ccwm := opr - dpr                       // CCWM = OPR - DPR
+		autoOpr := 5.0 + rand.Float64()*15.0    // Auto OPR: 5-20
 		teleopOpr := 10.0 + rand.Float64()*25.0 // Teleop OPR: 10-35
 		endgameOpr := 2.0 + rand.Float64()*10.0 // Endgame OPR: 2-12
 
 		_, err := db.Exec(`
-			INSERT INTO team_event_stats (team_id, competition_id, opr, dpr, ccwm, auto_opr, teleop_opr, endgame_opr,
+			INSERT INTO team_event_stats (team_id, event_id, opr, dpr, ccwm, auto_opr, teleop_opr, endgame_opr,
 				rank, matches_played, qual_average, wins, losses, ties, dq_count,
 				qual_points, elim_points, award_points, alliance_points, total_points)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
 		`, teamID, compID, opr, dpr, ccwm, autoOpr, teleopOpr, endgameOpr,
-			rand.Intn(30)+1,              // rank: 1-30
-			roundsPerTeam,                // matches_played
-			30.0+rand.Float64()*30.0,     // qual_average: 30-60
-			rand.Intn(5),                 // wins
-			rand.Intn(5),                 // losses
-			rand.Intn(2),                 // ties
-			rand.Intn(2),                 // dq_count
-			rand.Intn(20)+5,              // qual_points
-			rand.Intn(30),                // elim_points
-			rand.Intn(10),                // award_points
-			rand.Intn(16),                // alliance_points
-			rand.Intn(60)+20)             // total_points
+			rand.Intn(30)+1,          // rank: 1-30
+			roundsPerTeam,            // matches_played
+			30.0+rand.Float64()*30.0, // qual_average: 30-60
+			rand.Intn(5),             // wins
+			rand.Intn(5),             // losses
+			rand.Intn(2),             // ties
+			rand.Intn(2),             // dq_count
+			rand.Intn(20)+5,          // qual_points
+			rand.Intn(30),            // elim_points
+			rand.Intn(10),            // award_points
+			rand.Intn(16),            // alliance_points
+			rand.Intn(60)+20)         // total_points
 
 		if err != nil {
 			log.Printf("Warning: Could not insert team_event_stats: %v", err)
@@ -878,7 +878,7 @@ func insertMatches(db *sql.DB, compID int, matches []Match) error {
 		// Insert match with all new fields
 		var matchID int
 		err := db.QueryRow(`
-			INSERT INTO matches (competition_id, match_number, match_type, red_score, blue_score, played,
+			INSERT INTO matches (event_id, match_number, match_type, red_score, blue_score, played,
 				tba_key, comp_level, set_number, scheduled_time, winning_alliance,
 				red_auto_tower_points, red_endgame_tower_points, red_hub_auto_count, red_hub_auto_points,
 				red_hub_teleop_count, red_hub_teleop_points, red_hub_endgame_count, red_hub_endgame_points,
@@ -966,7 +966,7 @@ func insertMatchTeam(db *sql.DB, matchID, teamID int, allianceColor string, posi
 	scouterName := fmt.Sprintf("Scouter %d", rand.Intn(10)+1)
 
 	_, err := db.Exec(`
-		INSERT INTO match_teams (match_id, team_id, alliance_color, alliance_position,
+		INSERT INTO scouting_data (match_id, team_id, alliance_color, alliance_position,
 			auto_score, teleop_score, endgame_score, scouter_name,
 			starting_position, auto_path_data, auto_tower_level, auto_hand,
 			scoring_rating, endgame_tower_level, endgame_hang,
@@ -1033,23 +1033,23 @@ func printSummary(db *sql.DB) {
 
 	var compCount, teamCount, matchCount, matchTeamCount int
 
-	db.QueryRow("SELECT COUNT(*) FROM competitions").Scan(&compCount)
+	db.QueryRow("SELECT COUNT(*) FROM events").Scan(&compCount)
 	db.QueryRow("SELECT COUNT(*) FROM teams").Scan(&teamCount)
 	db.QueryRow("SELECT COUNT(*) FROM matches").Scan(&matchCount)
-	db.QueryRow("SELECT COUNT(*) FROM match_teams").Scan(&matchTeamCount)
+	db.QueryRow("SELECT COUNT(*) FROM scouting_data").Scan(&matchTeamCount)
 
-	log.Printf("   Competitions: %d", compCount)
+	log.Printf("   Events: %d", compCount)
 	log.Printf("   Teams: %d", teamCount)
 	log.Printf("   Matches: %d", matchCount)
 	log.Printf("   Match-Team assignments: %d", matchTeamCount)
 
 	// Print example matches
-	log.Println("\n📋 Example Match Schedule (first 5 matches of Competition 1):")
+	log.Println("\n📋 Example Match Schedule (first 5 matches of Event 1):")
 
 	rows, err := db.Query(`
 		SELECT m.match_number, m.red_score, m.blue_score
 		FROM matches m
-		WHERE m.competition_id = 1
+		WHERE m.event_id = 1
 		ORDER BY m.match_number
 		LIMIT 5
 	`)
@@ -1066,11 +1066,11 @@ func printSummary(db *sql.DB) {
 		// Get teams for this match
 		teamRows, _ := db.Query(`
 			SELECT t.team_number, mt.alliance_color, mt.alliance_position
-			FROM match_teams mt
-			JOIN teams t ON mt.team_id = t.id
-			JOIN matches m ON mt.match_id = m.id
-			WHERE m.match_number = $1 AND m.competition_id = 1
-			ORDER BY mt.alliance_color DESC, mt.alliance_position
+			FROM scouting_data sd
+			JOIN teams t ON sd.team_id = t.id
+			JOIN matches m ON sd.match_id = m.id
+			WHERE m.match_number = $1 AND m.event_id = 1
+			ORDER BY sd.alliance_color DESC, sd.alliance_position
 		`, matchNum)
 
 		redTeams := make([]int, 0, 3)
@@ -1098,20 +1098,20 @@ func printSummary(db *sql.DB) {
 	}
 
 	// Print team appearance stats
-	log.Println("\n📊 Team Appearance Stats (Competition 1):")
+	log.Println("\n📊 Team Appearance Stats (Event 1):")
 	rows, err = db.Query(`
 		SELECT t.team_number, 
-			   COUNT(*) as appearances,
-			   SUM(CASE WHEN mt.alliance_color = 'red' THEN 1 ELSE 0 END) as red_count,
-			   SUM(CASE WHEN mt.alliance_color = 'blue' THEN 1 ELSE 0 END) as blue_count
-		FROM match_teams mt
-		JOIN teams t ON mt.team_id = t.id
-		JOIN matches m ON mt.match_id = m.id
-		WHERE m.competition_id = 1
+		       COUNT(*) as appearances,
+		       SUM(CASE WHEN sd.alliance_color = 'red' THEN 1 ELSE 0 END) as red_count,
+		       SUM(CASE WHEN sd.alliance_color = 'blue' THEN 1 ELSE 0 END) as blue_count
+		FROM scouting_data sd
+		JOIN teams t ON sd.team_id = t.id
+		JOIN matches m ON sd.match_id = m.id
+		WHERE m.event_id = 1
 		GROUP BY t.team_number
 		ORDER BY t.team_number
 		LIMIT 10
-	`)
+		`)
 	if err != nil {
 		log.Printf("   Could not fetch stats: %v", err)
 		return

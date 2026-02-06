@@ -189,6 +189,7 @@ func (h *Handler) HandleSignup(c *gin.Context) {
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
+
 	if err := h.db.Create(&user).Error; err != nil {
 		log.Printf("Failed to create user: %v", err)
 		if strings.Contains(err.Error(), "duplicate") || strings.Contains(err.Error(), "unique") {
