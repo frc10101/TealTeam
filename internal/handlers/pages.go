@@ -30,12 +30,12 @@ func (h *Handler) HandleSubmissionPage(w http.ResponseWriter, r *http.Request) {
 	user, _ := h.GetSessionUser(r)
 
 	data := map[string]any{
-		"Title":       "Example Page",
-		"Description": "This page demonstrates HTMX integration",
+		"Title":       "Scouting Submission",
+		"Description": "Submit scouting data for competitions",
 		"User":        user,
 	}
 
-	h.render(w, "example", data)
+	h.render(w, "submission", data)
 }
 
 func (h *Handler) HandleSignIn(w http.ResponseWriter, r *http.Request) {
