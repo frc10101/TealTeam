@@ -142,24 +142,138 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	h.sendAuthResponse(w, true, "Login successful", "/")
 }
 
-// HandleLogout processes logout requests
+// HandleSignup processes user registration requests
+func (h *Handler) HandleSignup(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	name := strings.TrimSpace(r.FormValue("name"))
+	email := strings.TrimSpace(r.FormValue("email"))
+	password := r.FormValue("password")
+	confirmPassword := r.FormValue("confirm-password")
+	teamNumber := strings.TrimSpace(r.FormValue("team-number"))
+
+	if name == "" || email == "" || password == "" || confirmPassword == "" {
+		h.sendAuthResponse(w, false, "All fields are required", "")
+		return
+	}
+
+	if password != confirmPassword {
+		h.sendAuthResponse(w, false, "Passwords do not match", "")
+		return
+	}
+
+	if len(password) < 8 {
+		h.sendAuthResponse(w, false, "Password must be at least 8 characters long", "")
+		return
+	}
+
+	if !strings.Contains(email, "@") || !strings.Contains(email, ".") {
+		h.sendAuthResponse(w, false, "Invalid email format", "")
+		return
+	}
+
+	if !h.hasDB() {
+		h.sendAuthResponse(w, false, "Database unavailable", "")
+		return
+	}
+
+	var existingUserID int
+	err := h.db.QueryRow(`SELECT id FROM users WHERE email = $1`, email).Scan(&existingUserID)
+	if err == nil {
+		// User already exists
+		h.sendAuthResponse(w, false, "An account with this email already exists", "")
+		return
+	} else if err != sql.ErrNoRows {
+		log.Printf("Database error checking existing user: %v", err)
+		h.sendAuthResponse(w, false, "An error occurred. Please try again.", "")
+		return
+	}
+
+	passwordHash, err := HashPassword(password)
+	if err != nil {
+		log.Printf("Failed to hash password: %v", err)
+		h.sendAuthResponse(w, false, "Failed to create account. Please try again.", "")
+		return
+	}
+
+	var userID int
+	query := `INSERT INTO users (name, email, password_hash, role, created_at, updated_at) 
+	          VALUES ($1, $2, $3, $4, $5, $6) 
+	          RETURNING id`
+
+	now := time.Now()
+	err = h.db.QueryRow(
+		query,
+		name,
+		email,
+		passwordHash,
+		"user", // Default role
+		now,
+		now,
+	).Scan(&userID)
+
+	if err != nil {
+		log.Printf("Failed to create user: %v", err)
+		if strings.Contains(err.Error(), "duplicate") || strings.Contains(err.Error(), "unique") {
+			h.sendAuthResponse(w, false, "An account with this email already exists", "")
+		} else {
+			h.sendAuthResponse(w, false, "Failed to create account. Please try again.", "")
+		}
+		return
+	}
+
+	if teamNumber != "" {
+		log.Printf("User %d (%s) signed up with team number: %s", userID, email, teamNumber)
+	}
+
+	sessionID, err := generateSessionID()
+	if err != nil {
+		log.Printf("Failed to generate session ID: %v", err)
+		h.sendAuthResponse(w, true, "Account created! Redirecting to sign in...", "/sign-in")
+		return
+	}
+
+	expiresAt := time.Now().Add(sessionDuration)
+	_, err = h.db.Exec(
+		`INSERT INTO sessions (session_id, user_id, expires_at) VALUES ($1, $2, $3)`,
+		sessionID, userID, expiresAt,
+	)
+	if err != nil {
+		log.Printf("Failed to store session: %v", err)
+		h.sendAuthResponse(w, true, "Account created! Redirecting to sign in...", "/sign-in")
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    sessionID,
+		Path:     "/",
+		MaxAge:   int(sessionDuration.Seconds()),
+		HttpOnly: true,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	h.sendAuthResponse(w, true, "Account created successfully!", "/")
+}
+
 func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	// Get session cookie
 	cookie, err := r.Cookie(sessionCookieName)
 	if err == nil && h.hasDB() {
-		// Delete session from database
 		_, err = h.db.Exec(`DELETE FROM sessions WHERE session_id = $1`, cookie.Value)
 		if err != nil {
 			log.Printf("Failed to delete session: %v", err)
 		}
 	}
 
-	// Clear session cookie
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    "",
@@ -170,24 +284,20 @@ func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 	})
 
-	// Redirect to sign-in page
 	w.Header().Set("HX-Redirect", "/sign-in")
 	h.sendAuthResponse(w, true, "Logged out successfully", "/sign-in")
 }
 
-// GetSessionUser retrieves the user associated with the current session
 func (h *Handler) GetSessionUser(r *http.Request) (*models.User, error) {
 	if !h.hasDB() {
 		return nil, fmt.Errorf("database unavailable")
 	}
 
-	// Get session cookie
 	cookie, err := r.Cookie(sessionCookieName)
 	if err != nil {
 		return nil, fmt.Errorf("no session cookie")
 	}
 
-	// Look up session in database
 	var userID int
 	var expiresAt time.Time
 	err = h.db.QueryRow(
@@ -201,14 +311,11 @@ func (h *Handler) GetSessionUser(r *http.Request) (*models.User, error) {
 		return nil, fmt.Errorf("database error: %w", err)
 	}
 
-	// Check if session is expired
 	if time.Now().After(expiresAt) {
-		// Delete expired session
 		h.db.Exec(`DELETE FROM sessions WHERE session_id = $1`, cookie.Value)
 		return nil, fmt.Errorf("session expired")
 	}
 
-	// Get user details
 	var user models.User
 	err = h.db.QueryRow(
 		`SELECT id, email, name, role, created_at, updated_at, last_login 
@@ -231,8 +338,6 @@ func (h *Handler) GetSessionUser(r *http.Request) (*models.User, error) {
 	return &user, nil
 }
 
-// sendAuthResponse sends an HTML response for authentication requests (for HTMX)
-// Note: We return 200 for validation errors so HTMX can render the message inline.
 func (h *Handler) sendAuthResponse(w http.ResponseWriter, success bool, message string, redirect string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
@@ -263,8 +368,6 @@ func (h *Handler) sendAuthResponse(w http.ResponseWriter, success bool, message 
 	}
 }
 
-// CleanupExpiredSessions removes expired sessions from the database
-// This should be called periodically (e.g., via a background goroutine)
 func (h *Handler) CleanupExpiredSessions() error {
 	if !h.hasDB() {
 		return fmt.Errorf("database unavailable")

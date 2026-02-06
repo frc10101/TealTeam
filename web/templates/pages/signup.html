@@ -1,0 +1,141 @@
+{{define "content"}}
+<div class="min-h-[calc(100vh-4rem)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-md w-full space-y-8">
+        <!-- Header -->
+        <div class="text-center">
+            <h2 class="text-3xl font-bold text-gray-100 md-2">
+                Sign in to your account
+            </h2>
+            <p class="text-gray-400">{{.Description}}</p>
+        </div>
+        <!-- sign up card -->
+        <div class="card">
+            <div class="card-header accent-teal">
+                <h3 class="text-lg font-semibold text-gray-100">
+                    Create a new account
+                </h3>
+            </div>
+            <div class="card-body">
+                <div id="form-response"></div>
+
+                <!-- Sign Up Form -->
+                 <form
+                    hx-post="/api/auth/signup"
+                    hx-target="#form-response"
+                    hx-swap="innerHTML"
+                    class="space-y-6 mt-4">
+
+                    <div>
+                        <label for="name" class="block text-sm font-medium text-gray-700 mb-2">
+                            Username (format: First Initial Favorite color e.g. MGreen)
+                        </label>
+                        <input
+                            id="name"
+                            name="name"
+                            type="text"
+                            autocomplete="name"
+                            required
+                            class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors" placeholder="MGreen">
+                    </div>
+
+                    <div>
+                        <label for="email" class="block text-sm font-medium text-gray-700 mb-2">
+                            Email address
+                        </label>
+                        <input 
+                            id="email" 
+                            name="email" 
+                            type="email" 
+                            autocomplete="email" 
+                            required 
+                            class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors"
+                            placeholder="you@example.com">
+                    </div>
+
+                    <div>
+                        <label for="team-number" class="block text-sm font-medium text-gray-700 mb-2">
+                            Team Number
+                        </label>
+                        <div class="flex gap-2">
+                            <input 
+                                id="team-number" 
+                                name="team-number" 
+                                type="number" 
+                                min="1" 
+                                class="flex-1 px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors"
+                                placeholder="e.g. 1710">
+                            <button 
+                                type="button" 
+                                onclick="document.getElementById('team-number').value = ''; document.getElementById('team-number').removeAttribute('required');" 
+                                class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-500 transition-colors whitespace-nowrap">
+                                No team
+                            </button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label for="password" class="block text-sm font-medium text-gray-300 mb-2">
+                            Password
+                        </label>
+                        <input 
+                            id="password" 
+                            name="password" 
+                            type="password" 
+                            autocomplete="new-password" 
+                            required 
+                            class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors"
+                            placeholder="••••••••">
+                    </div>
+
+                    <div>
+                        <label for="confirm-password" class="block text-sm font-medium text-gray-300 mb-2">
+                            Confirm Password
+                        </label>
+                        <input 
+                            id="confirm-password" 
+                            name="confirm-password" 
+                            type="password" 
+                            autocomplete="off" 
+                            required 
+                            class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors"
+                            placeholder="••••••••">
+                    </div>
+
+                    <button 
+                        type="submit" 
+                        class="w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 focus:ring-offset-gray-900 transition-colors">
+                        Create account
+                    </button>
+                </form>
+
+                <!-- Sign In Link -->
+                <div class="mt-6 text-center">
+                    <p class="text-sm text-gray-400">
+                        Already have an account?
+                        <a href="/sign-in" class="font-medium text-teal-400 hover:text-teal-300 transition-colors">
+                            Sign in here
+                        </a>
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Info Card -->
+        <div class="card">
+            <div class="card-body">
+                <div class="flex items-start gap-3">
+                    <svg class="w-5 h-5 text-teal-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <div>
+                        <h4 class="text-sm font-medium text-gray-300 mb-1">Password Requirements</h4>
+                        <p class="text-xs text-gray-500">
+                            Your password will be securely hashed. Make sure it's at least 8 characters long and contains a mix of letters and numbers.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}

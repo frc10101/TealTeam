@@ -88,18 +88,17 @@ func main() {
 
 	// Full page routes (render with layout)
 	mux.HandleFunc("GET /", h.HandleIndex)
-	mux.HandleFunc("GET /example", h.HandleSubmissionPage)
+	mux.HandleFunc("GET /submission", h.HandleSubmissionPage)
 	mux.HandleFunc("GET /development/db", h.HandleDBViewer)
 	mux.HandleFunc("GET /sign-in", h.HandleSignIn)
+	mux.HandleFunc("GET /sign-up", h.HandleSignUp)
 
 	// Authentication API routes
 	mux.HandleFunc("POST /api/auth/login", h.HandleLogin)
+	mux.HandleFunc("POST /api/auth/signup", h.HandleSignup)
 	mux.HandleFunc("POST /api/auth/logout", h.HandleLogout)
 
 	// HTMX fragment routes (return HTML fragments only)
-	mux.HandleFunc("GET /hx/example/table", h.HandleExampleTable)
-	mux.HandleFunc("POST /hx/example/item", h.HandleExampleItemCreate)
-	mux.HandleFunc("DELETE /hx/example/item/{id}", h.HandleExampleItemDelete)
 	mux.HandleFunc("GET /hx/development/db/table/{name}", h.HandleDBTableContent)
 
 	// TODO: Add more routes here
