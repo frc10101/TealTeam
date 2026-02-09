@@ -94,42 +94,35 @@ func (h *Handler) HandleDBTableContent(c *gin.Context) {
 
 // getTableList retrieves all user tables from the database
 func (h *Handler) getTableList(ctx context.Context) ([]TableInfo, error) {
-	query := `
-		SELECT 
-			table_name,
-			(SELECT COUNT(*) FROM information_schema.columns c WHERE c.table_name = t.table_name AND c.table_schema = 'public') as col_count
-		FROM information_schema.tables t
-		WHERE table_schema = 'public' 
-		AND table_type = 'BASE TABLE'
-		ORDER BY table_name
-	`
-
-	rows, err := h.db.WithContext(ctx).Raw(query).Rows()
-	if err != nil {
+	var tableNames []string
+	if err := h.db.WithContext(ctx).
+		Table("information_schema.tables").
+		Select("table_name").
+		Where("table_schema = ? AND table_type = ?", "public", "BASE TABLE").
+		Order("table_name").
+		Scan(&tableNames).Error; err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
 	var tables []TableInfo
-	for rows.Next() {
-		var t TableInfo
+	for _, name := range tableNames {
 		var colCount int64
-		if err := rows.Scan(&t.Name, &colCount); err != nil {
+		if err := h.db.WithContext(ctx).
+			Table("information_schema.columns").
+			Where("table_schema = ? AND table_name = ?", "public", name).
+			Count(&colCount).Error; err != nil {
 			return nil, err
 		}
 
-		// Get row count for each table
-		var count int64
-		countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %q", t.Name)
-		if err := h.db.WithContext(ctx).Raw(countQuery).Scan(&count).Error; err != nil {
-			count = 0
+		var rowCount int64
+		if err := h.db.WithContext(ctx).Table(name).Count(&rowCount).Error; err != nil {
+			rowCount = 0
 		}
-		t.RowCount = count
 
-		tables = append(tables, t)
+		tables = append(tables, TableInfo{Name: name, RowCount: rowCount})
 	}
 
-	return tables, rows.Err()
+	return tables, nil
 }
 
 // getTableData retrieves data and schema for a specific table
@@ -140,6 +133,14 @@ func (h *Handler) getTableData(ctx context.Context, tableName string, offset, li
 		"Limit":         limit,
 	}
 
+	allowed, err := h.isTableAllowed(ctx, tableName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate table: %w", err)
+	}
+	if !allowed {
+		return nil, fmt.Errorf("invalid table name")
+	}
+
 	// Get column info
 	columns, err := h.getColumnInfo(ctx, tableName)
 	if err != nil {
@@ -148,83 +149,75 @@ func (h *Handler) getTableData(ctx context.Context, tableName string, offset, li
 	data["Columns"] = columns
 
 	// Get total row count
-	var totalRows int
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %q", tableName)
-	if err := h.db.WithContext(ctx).Raw(countQuery).Scan(&totalRows).Error; err != nil {
+	var totalRows int64
+	if err := h.db.WithContext(ctx).Table(tableName).Count(&totalRows).Error; err != nil {
 		return nil, fmt.Errorf("failed to count rows: %w", err)
 	}
 	data["TotalRows"] = totalRows
 
 	// Get rows
-	dataQuery := fmt.Sprintf("SELECT * FROM %q ORDER BY 1 LIMIT %d OFFSET %d", tableName, limit, offset)
-	rows, err := h.db.WithContext(ctx).Raw(dataQuery).Rows()
-	if err != nil {
-		return nil, fmt.Errorf("failed to query rows: %w", err)
+	var rowMaps []map[string]any
+	query := h.db.WithContext(ctx).Table(tableName).Limit(limit).Offset(offset)
+	if len(columns) > 0 {
+		query = query.Order(columns[0].Name)
 	}
-	defer rows.Close()
-
-	// Get column names from result
-	colNames, err := rows.Columns()
-	if err != nil {
-		return nil, err
+	if err := query.Find(&rowMaps).Error; err != nil {
+		return nil, fmt.Errorf("failed to query rows: %w", err)
 	}
 
 	var rowData [][]any
-	for rows.Next() {
-		// Create a slice of interface{} to hold the values
-		values := make([]any, len(colNames))
-		valuePtrs := make([]any, len(colNames))
-		for i := range values {
-			valuePtrs[i] = &values[i]
-		}
-
-		if err := rows.Scan(valuePtrs...); err != nil {
-			return nil, err
-		}
-
-		// Convert values to strings for display
-		rowValues := make([]any, len(values))
-		for i, v := range values {
-			rowValues[i] = formatValue(v)
+	for _, row := range rowMaps {
+		rowValues := make([]any, len(columns))
+		for i, col := range columns {
+			rowValues[i] = formatValue(row[col.Name])
 		}
 		rowData = append(rowData, rowValues)
 	}
 	data["Rows"] = rowData
 
-	return data, rows.Err()
+	return data, nil
 }
 
 // getColumnInfo retrieves column metadata for a table
 func (h *Handler) getColumnInfo(ctx context.Context, tableName string) ([]ColumnInfo, error) {
-	query := `
-		SELECT 
-			column_name,
-			data_type,
-			is_nullable,
-			column_default
-		FROM information_schema.columns
-		WHERE table_schema = 'public' AND table_name = $1
-		ORDER BY ordinal_position
-	`
+	var rawColumns []struct {
+		Name     string
+		Type     string
+		Nullable string
+		Default  sql.NullString
+	}
 
-	rows, err := h.db.WithContext(ctx).Raw(query, tableName).Rows()
-	if err != nil {
+	if err := h.db.WithContext(ctx).
+		Table("information_schema.columns").
+		Select("column_name as name, data_type as type, is_nullable as nullable, column_default as default").
+		Where("table_schema = ? AND table_name = ?", "public", tableName).
+		Order("ordinal_position").
+		Scan(&rawColumns).Error; err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var columns []ColumnInfo
-	for rows.Next() {
-		var c ColumnInfo
-		var nullable string
-		if err := rows.Scan(&c.Name, &c.Type, &nullable, &c.Default); err != nil {
-			return nil, err
-		}
-		c.Nullable = nullable == "YES"
-		columns = append(columns, c)
+	columns := make([]ColumnInfo, 0, len(rawColumns))
+	for _, col := range rawColumns {
+		columns = append(columns, ColumnInfo{
+			Name:     col.Name,
+			Type:     col.Type,
+			Nullable: col.Nullable == "YES",
+			Default:  col.Default,
+		})
 	}
 
-	return columns, rows.Err()
+	return columns, nil
+}
+
+func (h *Handler) isTableAllowed(ctx context.Context, tableName string) (bool, error) {
+	var count int64
+	if err := h.db.WithContext(ctx).
+		Table("information_schema.tables").
+		Where("table_schema = ? AND table_type = ? AND table_name = ?", "public", "BASE TABLE", tableName).
+		Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 // formatValue converts a database value to a display string

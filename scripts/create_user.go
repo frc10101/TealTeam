@@ -1,15 +1,17 @@
 package main
 
 import (
-	"database/sql"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 
-	_ "github.com/lib/pq"
+	appdb "github.com/frc10101/TealTeam/internal/db"
+	"github.com/frc10101/TealTeam/internal/models"
 	"golang.org/x/crypto/bcrypt"
 )
+
+const defaultDBURL = "postgres://user:password@localhost:5432/yourdb?sslmode=disable"
 
 func createUser() {
 	// Parse command line flags
@@ -25,19 +27,21 @@ func createUser() {
 	// Connect to database
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
-		databaseURL = "postgres://user:password@localhost:5432/yourdb?sslmode=disable"
+		databaseURL = defaultDBURL
+		if err := os.Setenv("DATABASE_URL", databaseURL); err != nil {
+			log.Fatalf("Failed to set DATABASE_URL: %v", err)
+		}
 	}
 
-	db, err := sql.Open("postgres", databaseURL)
+	db, err := appdb.Connect()
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
-	defer db.Close()
-
-	// Test connection
-	if err := db.Ping(); err != nil {
-		log.Fatalf("Failed to ping database: %v", err)
+	sqlDB, err := db.DB()
+	if err != nil {
+		log.Fatalf("Failed to access sql DB: %v", err)
 	}
+	defer sqlDB.Close()
 
 	// Hash password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(*password), 12)
@@ -46,20 +50,18 @@ func createUser() {
 	}
 
 	// Insert user
-	var userID int
-	err = db.QueryRow(
-		`INSERT INTO users (email, name, password_hash, role) 
-		 VALUES ($1, $2, $3, 'user') 
-		 RETURNING id`,
-		*email, *name, string(hashedPassword),
-	).Scan(&userID)
-
-	if err != nil {
+	user := models.User{
+		Email:        *email,
+		Name:         *name,
+		PasswordHash: string(hashedPassword),
+		Role:         "user",
+	}
+	if err := db.Create(&user).Error; err != nil {
 		log.Fatalf("Failed to create user: %v", err)
 	}
 
 	fmt.Printf("✅ User created successfully!\n")
-	fmt.Printf("   ID: %d\n", userID)
+	fmt.Printf("   ID: %d\n", user.ID)
 	fmt.Printf("   Email: %s\n", *email)
 	fmt.Printf("   Name: %s\n", *name)
 	fmt.Printf("\nYou can now sign in at http://localhost:8080/sign-in\n")

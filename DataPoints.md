@@ -1,19 +1,20 @@
 # Data Points for Scouting
 
-## Manual Scouting Data (Collected by Scouts)
+## Scouting Sheet User Inputs
 | Field | Values | Notes |
 |-------|--------|-------|
+| Team | Team selector | Team being scouted |
+| Alliance Color | Red, Blue | Alliance color |
+| Notes | Free text | Qualitative notes |
 | Starting Position | Left, Right, Center | Pre-match setup |
-| Team Number | Integer | FRC team number |
-| Auto Path | Visual Path Map | Interactive sketch of autonomous movement |
-| Scoring | Likert Scale | Subjective performance rating |
-| Standard Dev of Stats Per Match | Percentage | Consistency metric |
-| End Game Hang | 0, 1, 2, 3 | Climbing level achieved |
-| Auto Hand | 0, 1, 2, 3 | Autonomous game piece handling |
-| Defence | Low, Mid, High | Defensive capability rating |
-| Throughput | Low, Mid, High | Game piece cycling speed |
-| Scoring Strategy | Passer, Stealer, Scorer | Play style |
+| Auto Path Data | Visual path map | Autonomous movement sketch |
+| Defense Rating | Low, Mid, High | Defensive capability |
 | Traversal | Trench, Bump | Robot mobility type |
+| Shooting Speed | Fast, Medium, Slow | Throughput of shooting mechanism |
+| Capacity | High, Medium, Low | Capacity of hopper |
+| Defendablility | Notes | How would we defend against them |
+| TELEOP Strategy | Scoring, Defending, Passing | what dokd they do in teleop | 4
+| Auto Score | integer? | What they score in auto only |
 
 ---
 

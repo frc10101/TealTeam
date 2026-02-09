@@ -1,7 +1,6 @@
 package main
 
 import (
-	"database/sql"
 	"fmt"
 	"log"
 	"math/rand"
@@ -9,7 +8,8 @@ import (
 	"sort"
 	"time"
 
-	_ "github.com/lib/pq"
+	appdb "github.com/frc10101/TealTeam/internal/db"
+	"gorm.io/gorm"
 )
 
 // Configuration
@@ -18,7 +18,7 @@ const (
 	teamsPerComp       = 30
 	roundsPerTeam      = 5 // Each team plays this many matches
 	minMatchSeparation = 3 // Minimum matches between a team's appearances
-	defaultDBURL       = "postgres://user:password@localhost:5432/yourdb?sslmode=disable"
+	seedDefaultDBURL   = "postgres://user:password@localhost:5432/yourdb?sslmode=disable"
 )
 
 // Match represents a single FRC match with 3v3 alliances
@@ -30,6 +30,195 @@ type Match struct {
 	RedScore  int
 	BlueScore int
 }
+
+type DBEvent struct {
+	ID          int       `gorm:"column:id;primaryKey"`
+	Name        string    `gorm:"column:name"`
+	Location    string    `gorm:"column:location"`
+	StartDate   time.Time `gorm:"column:start_date"`
+	EndDate     time.Time `gorm:"column:end_date"`
+	TBAKey      string    `gorm:"column:tba_key"`
+	EventType   string    `gorm:"column:event_type"`
+	DistrictKey string    `gorm:"column:district_key"`
+	Week        int       `gorm:"column:week"`
+	CreatedAt   time.Time `gorm:"column:created_at"`
+	UpdatedAt   time.Time `gorm:"column:updated_at"`
+}
+
+func (DBEvent) TableName() string { return "events" }
+
+type DBTeam struct {
+	ID         int       `gorm:"column:id;primaryKey"`
+	TeamNumber int       `gorm:"column:team_number"`
+	Name       string    `gorm:"column:name"`
+	School     string    `gorm:"column:school"`
+	City       string    `gorm:"column:city"`
+	State      string    `gorm:"column:state"`
+	TBAKey     string    `gorm:"column:tba_key"`
+	Nickname   string    `gorm:"column:nickname"`
+	SchoolName string    `gorm:"column:school_name"`
+	Country    string    `gorm:"column:country"`
+	RookieYear int       `gorm:"column:rookie_year"`
+	Motto      string    `gorm:"column:motto"`
+	Website    string    `gorm:"column:website"`
+	CreatedAt  time.Time `gorm:"column:created_at"`
+	UpdatedAt  time.Time `gorm:"column:updated_at"`
+}
+
+func (DBTeam) TableName() string { return "teams" }
+
+type DBEventTeam struct {
+	ID        int       `gorm:"column:id;primaryKey"`
+	EventID   int       `gorm:"column:event_id"`
+	TeamID    int       `gorm:"column:team_id"`
+	CreatedAt time.Time `gorm:"column:created_at"`
+}
+
+func (DBEventTeam) TableName() string { return "event_teams" }
+
+type DBMatch struct {
+	ID                     int       `gorm:"column:id;primaryKey"`
+	EventID                int       `gorm:"column:event_id"`
+	MatchNumber            int       `gorm:"column:match_number"`
+	MatchType              string    `gorm:"column:match_type"`
+	RedScore               int       `gorm:"column:red_score"`
+	BlueScore              int       `gorm:"column:blue_score"`
+	Played                 bool      `gorm:"column:played"`
+	TBAKey                 string    `gorm:"column:tba_key"`
+	CompLevel              string    `gorm:"column:comp_level"`
+	SetNumber              int       `gorm:"column:set_number"`
+	ScheduledTime          time.Time `gorm:"column:scheduled_time"`
+	WinningAlliance        string    `gorm:"column:winning_alliance"`
+	RedAutoTowerPoints     int       `gorm:"column:red_auto_tower_points"`
+	RedEndgameTowerPoints  int       `gorm:"column:red_endgame_tower_points"`
+	RedHubAutoCount        int       `gorm:"column:red_hub_auto_count"`
+	RedHubAutoPoints       int       `gorm:"column:red_hub_auto_points"`
+	RedHubTeleopCount      int       `gorm:"column:red_hub_teleop_count"`
+	RedHubTeleopPoints     int       `gorm:"column:red_hub_teleop_points"`
+	RedHubEndgameCount     int       `gorm:"column:red_hub_endgame_count"`
+	RedHubEndgamePoints    int       `gorm:"column:red_hub_endgame_points"`
+	RedHubTotalCount       int       `gorm:"column:red_hub_total_count"`
+	RedHubTotalPoints      int       `gorm:"column:red_hub_total_points"`
+	RedEnergizedAchieved   bool      `gorm:"column:red_energized_achieved"`
+	RedSupercharged        bool      `gorm:"column:red_supercharged_achieved"`
+	RedTraversalAchieved   bool      `gorm:"column:red_traversal_achieved"`
+	RedMinorFoulCount      int       `gorm:"column:red_minor_foul_count"`
+	RedMajorFoulCount      int       `gorm:"column:red_major_foul_count"`
+	RedFoulPoints          int       `gorm:"column:red_foul_points"`
+	RedRP                  int       `gorm:"column:red_rp"`
+	RedTotalAutoPoints     int       `gorm:"column:red_total_auto_points"`
+	RedTotalTeleopPoints   int       `gorm:"column:red_total_teleop_points"`
+	BlueAutoTowerPoints    int       `gorm:"column:blue_auto_tower_points"`
+	BlueEndgameTowerPoints int       `gorm:"column:blue_endgame_tower_points"`
+	BlueHubAutoCount       int       `gorm:"column:blue_hub_auto_count"`
+	BlueHubAutoPoints      int       `gorm:"column:blue_hub_auto_points"`
+	BlueHubTeleopCount     int       `gorm:"column:blue_hub_teleop_count"`
+	BlueHubTeleopPoints    int       `gorm:"column:blue_hub_teleop_points"`
+	BlueHubEndgameCount    int       `gorm:"column:blue_hub_endgame_count"`
+	BlueHubEndgamePoints   int       `gorm:"column:blue_hub_endgame_points"`
+	BlueHubTotalCount      int       `gorm:"column:blue_hub_total_count"`
+	BlueHubTotalPoints     int       `gorm:"column:blue_hub_total_points"`
+	BlueEnergizedAchieved  bool      `gorm:"column:blue_energized_achieved"`
+	BlueSupercharged       bool      `gorm:"column:blue_supercharged_achieved"`
+	BlueTraversalAchieved  bool      `gorm:"column:blue_traversal_achieved"`
+	BlueMinorFoulCount     int       `gorm:"column:blue_minor_foul_count"`
+	BlueMajorFoulCount     int       `gorm:"column:blue_major_foul_count"`
+	BlueFoulPoints         int       `gorm:"column:blue_foul_points"`
+	BlueRP                 int       `gorm:"column:blue_rp"`
+	BlueTotalAutoPoints    int       `gorm:"column:blue_total_auto_points"`
+	BlueTotalTeleopPoints  int       `gorm:"column:blue_total_teleop_points"`
+	CreatedAt              time.Time `gorm:"column:created_at"`
+	UpdatedAt              time.Time `gorm:"column:updated_at"`
+}
+
+func (DBMatch) TableName() string { return "matches" }
+
+type DBScoutingData struct {
+	ID                int       `gorm:"column:id;primaryKey"`
+	MatchID           int       `gorm:"column:match_id"`
+	TeamID            int       `gorm:"column:team_id"`
+	AllianceColor     string    `gorm:"column:alliance_color"`
+	AlliancePosition  int       `gorm:"column:alliance_position"`
+	AutoScore         int       `gorm:"column:auto_score"`
+	TeleopScore       int       `gorm:"column:teleop_score"`
+	EndgameScore      int       `gorm:"column:endgame_score"`
+	ScouterName       string    `gorm:"column:scouter_name"`
+	StartingPosition  string    `gorm:"column:starting_position"`
+	AutoPathData      string    `gorm:"column:auto_path_data;type:jsonb"`
+	AutoTowerLevel    string    `gorm:"column:auto_tower_level"`
+	AutoHand          int       `gorm:"column:auto_hand"`
+	ScoringRating     int       `gorm:"column:scoring_rating"`
+	EndgameTowerLevel string    `gorm:"column:endgame_tower_level"`
+	EndgameHang       int       `gorm:"column:endgame_hang"`
+	DefenseRating     string    `gorm:"column:defense_rating"`
+	Throughput        string    `gorm:"column:throughput"`
+	ScoringStrategy   string    `gorm:"column:scoring_strategy"`
+	Traversal         string    `gorm:"column:traversal"`
+	HubAutoCount      int       `gorm:"column:hub_auto_count"`
+	HubTeleopCount    int       `gorm:"column:hub_teleop_count"`
+	HubEndgameCount   int       `gorm:"column:hub_endgame_count"`
+	PenaltiesCaused   int       `gorm:"column:penalties_caused"`
+	ScoutedAt         time.Time `gorm:"column:scouted_at"`
+	CreatedAt         time.Time `gorm:"column:created_at"`
+	UpdatedAt         time.Time `gorm:"column:updated_at"`
+}
+
+func (DBScoutingData) TableName() string { return "scouting_data" }
+
+type DBTeamEventStats struct {
+	ID             int       `gorm:"column:id;primaryKey"`
+	TeamID         int       `gorm:"column:team_id"`
+	EventID        int       `gorm:"column:event_id"`
+	OPR            float64   `gorm:"column:opr"`
+	DPR            float64   `gorm:"column:dpr"`
+	CCWM           float64   `gorm:"column:ccwm"`
+	AutoOPR        float64   `gorm:"column:auto_opr"`
+	TeleopOPR      float64   `gorm:"column:teleop_opr"`
+	EndgameOPR     float64   `gorm:"column:endgame_opr"`
+	Rank           int       `gorm:"column:rank"`
+	MatchesPlayed  int       `gorm:"column:matches_played"`
+	QualAverage    float64   `gorm:"column:qual_average"`
+	Wins           int       `gorm:"column:wins"`
+	Losses         int       `gorm:"column:losses"`
+	Ties           int       `gorm:"column:ties"`
+	DQCount        int       `gorm:"column:dq_count"`
+	QualPoints     int       `gorm:"column:qual_points"`
+	ElimPoints     int       `gorm:"column:elim_points"`
+	AwardPoints    int       `gorm:"column:award_points"`
+	AlliancePoints int       `gorm:"column:alliance_points"`
+	TotalPoints    int       `gorm:"column:total_points"`
+	CreatedAt      time.Time `gorm:"column:created_at"`
+	UpdatedAt      time.Time `gorm:"column:updated_at"`
+}
+
+func (DBTeamEventStats) TableName() string { return "team_event_stats" }
+
+type DBAward struct {
+	ID        int       `gorm:"column:id;primaryKey"`
+	EventID   int       `gorm:"column:event_id"`
+	TeamID    *int      `gorm:"column:team_id"`
+	Name      string    `gorm:"column:name"`
+	CreatedAt time.Time `gorm:"column:created_at"`
+}
+
+func (DBAward) TableName() string { return "awards" }
+
+type DBAutoPath struct {
+	ID        int       `gorm:"column:id;primaryKey"`
+	TeamID    int       `gorm:"column:team_id"`
+	CreatedAt time.Time `gorm:"column:created_at"`
+}
+
+func (DBAutoPath) TableName() string { return "auto_paths" }
+
+type DBZebraData struct {
+	ID        int       `gorm:"column:id;primaryKey"`
+	MatchID   int       `gorm:"column:match_id"`
+	TeamID    int       `gorm:"column:team_id"`
+	CreatedAt time.Time `gorm:"column:created_at"`
+}
+
+func (DBZebraData) TableName() string { return "zebra_data" }
 
 // ScheduleStats tracks scheduling quality metrics
 type ScheduleStats struct {
@@ -64,32 +253,34 @@ func main() {
 	// Get database URL
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		dbURL = defaultDBURL
+		dbURL = seedDefaultDBURL
 		log.Printf("DATABASE_URL not set, using default: %s", dbURL)
+		if err := os.Setenv("DATABASE_URL", dbURL); err != nil {
+			log.Fatalf("Failed to set DATABASE_URL: %v", err)
+		}
 	}
 
-	// Connect to database
-	db, err := sql.Open("postgres", dbURL)
+	// Connect to database using GORM
+	gormDB, err := appdb.Connect()
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
-	defer db.Close()
-
-	// Verify connection
-	if err := db.Ping(); err != nil {
-		log.Fatalf("Failed to ping database: %v", err)
+	sqlDB, err := gormDB.DB()
+	if err != nil {
+		log.Fatalf("Failed to access sql DB: %v", err)
 	}
+	defer sqlDB.Close()
 	log.Println("✅ Connected to database")
 
 	// Seed the database
-	if err := seedDatabase(db); err != nil {
+	if err := seedDatabase(gormDB); err != nil {
 		log.Fatalf("Failed to seed database: %v", err)
 	}
 
 	log.Println("✅ Database seeded successfully!")
 }
 
-func seedDatabase(db *sql.DB) error {
+func seedDatabase(db *gorm.DB) error {
 	// Clear existing data
 	log.Println("🗑️  Clearing existing data...")
 	if err := clearData(db); err != nil {
@@ -140,14 +331,23 @@ func seedDatabase(db *sql.DB) error {
 	return nil
 }
 
-func clearData(db *sql.DB) error {
-	tables := []string{"zebra_data", "awards", "auto_paths", "team_event_stats", "scouting_data", "matches", "event_teams", "events", "teams"}
-	for _, table := range tables {
-		_, err := db.Exec(fmt.Sprintf("DELETE FROM %s", table))
-		if err != nil {
-			log.Printf("  Note: Could not clear %s (may not exist)", table)
+func clearData(db *gorm.DB) error {
+	deleteAll := func(model interface{}, name string) {
+		if err := db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(model).Error; err != nil {
+			log.Printf("  Note: Could not clear %s (may not exist)", name)
 		}
 	}
+
+	deleteAll(&DBZebraData{}, "zebra_data")
+	deleteAll(&DBAward{}, "awards")
+	deleteAll(&DBAutoPath{}, "auto_paths")
+	deleteAll(&DBTeamEventStats{}, "team_event_stats")
+	deleteAll(&DBScoutingData{}, "scouting_data")
+	deleteAll(&DBMatch{}, "matches")
+	deleteAll(&DBEventTeam{}, "event_teams")
+	deleteAll(&DBEvent{}, "events")
+	deleteAll(&DBTeam{}, "teams")
+
 	return nil
 }
 
@@ -155,7 +355,7 @@ func clearData(db *sql.DB) error {
 var eventTypes = []string{"regional", "district", "championship"}
 var districtKeys = []string{"2026fit", "2026fim", "2026fma", "2026ne", "2026pnw"}
 
-func createCompetitions(db *sql.DB) ([]int, error) {
+func createCompetitions(db *gorm.DB) ([]int, error) {
 	var ids []int
 
 	for i := 0; i < numCompetitions; i++ {
@@ -173,18 +373,24 @@ func createCompetitions(db *sql.DB) ([]int, error) {
 		districtKey := districtKeys[i%len(districtKeys)]
 		week := i + 1
 
-		var id int
-		err := db.QueryRow(`
-			INSERT INTO events (name, location, start_date, end_date, tba_key, event_type, district_key, week)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-			RETURNING id
-		`, name, fmt.Sprintf("Venue %d", i+1), startDate, endDate, tbaKey, eventType, districtKey, week).Scan(&id)
+		event := DBEvent{
+			Name:        name,
+			Location:    fmt.Sprintf("Venue %d", i+1),
+			StartDate:   startDate,
+			EndDate:     endDate,
+			TBAKey:      tbaKey,
+			EventType:   eventType,
+			DistrictKey: districtKey,
+			Week:        week,
+		}
+
+		err := db.Create(&event).Error
 
 		if err != nil {
 			return nil, err
 		}
-		ids = append(ids, id)
-		log.Printf("  Created competition: %s (ID: %d, TBA: %s)", name, id, tbaKey)
+		ids = append(ids, event.ID)
+		log.Printf("  Created competition: %s (ID: %d, TBA: %s)", name, event.ID, tbaKey)
 	}
 
 	return ids, nil
@@ -204,7 +410,7 @@ var teamMottos = []string{
 
 var countries = []string{"USA", "USA", "USA", "USA", "Canada", "Mexico", "Israel", "Turkey"}
 
-func createTeams(db *sql.DB, count int) ([]int, error) {
+func createTeams(db *gorm.DB, count int) ([]int, error) {
 	var ids []int
 
 	for i := 0; i < count; i++ {
@@ -222,17 +428,27 @@ func createTeams(db *sql.DB, count int) ([]int, error) {
 		motto := teamMottos[i%len(teamMottos)]
 		website := fmt.Sprintf("https://team%d.org", teamNumber)
 
-		var id int
-		err := db.QueryRow(`
-			INSERT INTO teams (team_number, name, school, city, state, tba_key, nickname, school_name, country, rookie_year, motto, website)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-			RETURNING id
-		`, teamNumber, name, school, city, state, tbaKey, nickname, schoolName, country, rookieYear, motto, website).Scan(&id)
+		team := DBTeam{
+			TeamNumber: teamNumber,
+			Name:       name,
+			School:     school,
+			City:       city,
+			State:      state,
+			TBAKey:     tbaKey,
+			Nickname:   nickname,
+			SchoolName: schoolName,
+			Country:    country,
+			RookieYear: rookieYear,
+			Motto:      motto,
+			Website:    website,
+		}
+
+		err := db.Create(&team).Error
 
 		if err != nil {
 			return nil, err
 		}
-		ids = append(ids, id)
+		ids = append(ids, team.ID)
 	}
 
 	log.Printf("  Created %d teams with TBA data", count)
@@ -245,13 +461,10 @@ func generateTeamName() string {
 	return fmt.Sprintf("%s %s", prefix, suffix)
 }
 
-func associateTeamsWithCompetition(db *sql.DB, compID int, teamIDs []int) error {
+func associateTeamsWithCompetition(db *gorm.DB, compID int, teamIDs []int) error {
 	for _, teamID := range teamIDs {
-		_, err := db.Exec(`
-			INSERT INTO event_teams (event_id, team_id)
-			VALUES ($1, $2)
-			ON CONFLICT (event_id, team_id) DO NOTHING
-		`, compID, teamID)
+		eventTeam := DBEventTeam{EventID: compID, TeamID: teamID}
+		err := db.Where("event_id = ? AND team_id = ?", compID, teamID).FirstOrCreate(&eventTeam).Error
 
 		if err != nil {
 			return err
@@ -267,24 +480,30 @@ func associateTeamsWithCompetition(db *sql.DB, compID int, teamIDs []int) error 
 		teleopOpr := 10.0 + rand.Float64()*25.0 // Teleop OPR: 10-35
 		endgameOpr := 2.0 + rand.Float64()*10.0 // Endgame OPR: 2-12
 
-		_, err := db.Exec(`
-			INSERT INTO team_event_stats (team_id, event_id, opr, dpr, ccwm, auto_opr, teleop_opr, endgame_opr,
-				rank, matches_played, qual_average, wins, losses, ties, dq_count,
-				qual_points, elim_points, award_points, alliance_points, total_points)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
-		`, teamID, compID, opr, dpr, ccwm, autoOpr, teleopOpr, endgameOpr,
-			rand.Intn(30)+1,          // rank: 1-30
-			roundsPerTeam,            // matches_played
-			30.0+rand.Float64()*30.0, // qual_average: 30-60
-			rand.Intn(5),             // wins
-			rand.Intn(5),             // losses
-			rand.Intn(2),             // ties
-			rand.Intn(2),             // dq_count
-			rand.Intn(20)+5,          // qual_points
-			rand.Intn(30),            // elim_points
-			rand.Intn(10),            // award_points
-			rand.Intn(16),            // alliance_points
-			rand.Intn(60)+20)         // total_points
+		stats := DBTeamEventStats{
+			TeamID:         teamID,
+			EventID:        compID,
+			OPR:            opr,
+			DPR:            dpr,
+			CCWM:           ccwm,
+			AutoOPR:        autoOpr,
+			TeleopOPR:      teleopOpr,
+			EndgameOPR:     endgameOpr,
+			Rank:           rand.Intn(30) + 1,
+			MatchesPlayed:  roundsPerTeam,
+			QualAverage:    30.0 + rand.Float64()*30.0,
+			Wins:           rand.Intn(5),
+			Losses:         rand.Intn(5),
+			Ties:           rand.Intn(2),
+			DQCount:        rand.Intn(2),
+			QualPoints:     rand.Intn(20) + 5,
+			ElimPoints:     rand.Intn(30),
+			AwardPoints:    rand.Intn(10),
+			AlliancePoints: rand.Intn(16),
+			TotalPoints:    rand.Intn(60) + 20,
+		}
+
+		err := db.Create(&stats).Error
 
 		if err != nil {
 			log.Printf("Warning: Could not insert team_event_stats: %v", err)
@@ -811,7 +1030,7 @@ var throughputRatings = []string{"low", "mid", "high"}
 var scoringStrategies = []string{"passer", "stealer", "scorer"}
 var traversalTypes = []string{"trench", "bump"}
 
-func insertMatches(db *sql.DB, compID int, matches []Match) error {
+func insertMatches(db *gorm.DB, compID int, matches []Match) error {
 	for _, match := range matches {
 		// Generate 2026 game-specific score breakdown
 		redAutoTower := rand.Intn(15)
@@ -876,36 +1095,59 @@ func insertMatches(db *sql.DB, compID int, matches []Match) error {
 		scheduledTime := time.Now().Add(time.Duration(match.Number) * time.Hour)
 
 		// Insert match with all new fields
-		var matchID int
-		err := db.QueryRow(`
-			INSERT INTO matches (event_id, match_number, match_type, red_score, blue_score, played,
-				tba_key, comp_level, set_number, scheduled_time, winning_alliance,
-				red_auto_tower_points, red_endgame_tower_points, red_hub_auto_count, red_hub_auto_points,
-				red_hub_teleop_count, red_hub_teleop_points, red_hub_endgame_count, red_hub_endgame_points,
-				red_hub_total_count, red_hub_total_points, red_energized_achieved, red_supercharged_achieved,
-				red_traversal_achieved, red_minor_foul_count, red_major_foul_count, red_foul_points,
-				red_rp, red_total_auto_points, red_total_teleop_points,
-				blue_auto_tower_points, blue_endgame_tower_points, blue_hub_auto_count, blue_hub_auto_points,
-				blue_hub_teleop_count, blue_hub_teleop_points, blue_hub_endgame_count, blue_hub_endgame_points,
-				blue_hub_total_count, blue_hub_total_points, blue_energized_achieved, blue_supercharged_achieved,
-				blue_traversal_achieved, blue_minor_foul_count, blue_major_foul_count, blue_foul_points,
-				blue_rp, blue_total_auto_points, blue_total_teleop_points)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-				$12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30,
-				$31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49)
-			RETURNING id
-		`, compID, match.Number, match.MatchType, redTotal, blueTotal, true,
-			tbaKey, "qm", 1, scheduledTime, winningAlliance,
-			redAutoTower, redEndgameTower, redHubAuto, redHubAuto*3,
-			redHubTeleop, redHubTeleop*2, redHubEndgame, redHubEndgame*4,
-			redHubAuto+redHubTeleop+redHubEndgame, redHubAuto*3+redHubTeleop*2+redHubEndgame*4,
-			redEnergized, redSupercharged, redTraversal, redMinorFouls, redMajorFouls, redFoulPoints,
-			redRp, redAutoPoints, redTeleopPoints,
-			blueAutoTower, blueEndgameTower, blueHubAuto, blueHubAuto*3,
-			blueHubTeleop, blueHubTeleop*2, blueHubEndgame, blueHubEndgame*4,
-			blueHubAuto+blueHubTeleop+blueHubEndgame, blueHubAuto*3+blueHubTeleop*2+blueHubEndgame*4,
-			blueEnergized, blueSupercharged, blueTraversal, blueMinorFouls, blueMajorFouls, blueFoulPoints,
-			blueRp, blueAutoPoints, blueTeleopPoints).Scan(&matchID)
+		dbMatch := DBMatch{
+			EventID:                compID,
+			MatchNumber:            match.Number,
+			MatchType:              match.MatchType,
+			RedScore:               redTotal,
+			BlueScore:              blueTotal,
+			Played:                 true,
+			TBAKey:                 tbaKey,
+			CompLevel:              "qm",
+			SetNumber:              1,
+			ScheduledTime:          scheduledTime,
+			WinningAlliance:        winningAlliance,
+			RedAutoTowerPoints:     redAutoTower,
+			RedEndgameTowerPoints:  redEndgameTower,
+			RedHubAutoCount:        redHubAuto,
+			RedHubAutoPoints:       redHubAuto * 3,
+			RedHubTeleopCount:      redHubTeleop,
+			RedHubTeleopPoints:     redHubTeleop * 2,
+			RedHubEndgameCount:     redHubEndgame,
+			RedHubEndgamePoints:    redHubEndgame * 4,
+			RedHubTotalCount:       redHubAuto + redHubTeleop + redHubEndgame,
+			RedHubTotalPoints:      redHubAuto*3 + redHubTeleop*2 + redHubEndgame*4,
+			RedEnergizedAchieved:   redEnergized,
+			RedSupercharged:        redSupercharged,
+			RedTraversalAchieved:   redTraversal,
+			RedMinorFoulCount:      redMinorFouls,
+			RedMajorFoulCount:      redMajorFouls,
+			RedFoulPoints:          redFoulPoints,
+			RedRP:                  redRp,
+			RedTotalAutoPoints:     redAutoPoints,
+			RedTotalTeleopPoints:   redTeleopPoints,
+			BlueAutoTowerPoints:    blueAutoTower,
+			BlueEndgameTowerPoints: blueEndgameTower,
+			BlueHubAutoCount:       blueHubAuto,
+			BlueHubAutoPoints:      blueHubAuto * 3,
+			BlueHubTeleopCount:     blueHubTeleop,
+			BlueHubTeleopPoints:    blueHubTeleop * 2,
+			BlueHubEndgameCount:    blueHubEndgame,
+			BlueHubEndgamePoints:   blueHubEndgame * 4,
+			BlueHubTotalCount:      blueHubAuto + blueHubTeleop + blueHubEndgame,
+			BlueHubTotalPoints:     blueHubAuto*3 + blueHubTeleop*2 + blueHubEndgame*4,
+			BlueEnergizedAchieved:  blueEnergized,
+			BlueSupercharged:       blueSupercharged,
+			BlueTraversalAchieved:  blueTraversal,
+			BlueMinorFoulCount:     blueMinorFouls,
+			BlueMajorFoulCount:     blueMajorFouls,
+			BlueFoulPoints:         blueFoulPoints,
+			BlueRP:                 blueRp,
+			BlueTotalAutoPoints:    blueAutoPoints,
+			BlueTotalTeleopPoints:  blueTeleopPoints,
+		}
+
+		err := db.Create(&dbMatch).Error
 
 		if err != nil {
 			return fmt.Errorf("failed to insert match %d: %w", match.Number, err)
@@ -916,7 +1158,7 @@ func insertMatches(db *sql.DB, compID int, matches []Match) error {
 			if teamID == 0 {
 				continue
 			}
-			if err := insertMatchTeam(db, matchID, teamID, "red", pos+1); err != nil {
+			if err := insertMatchTeam(db, dbMatch.ID, teamID, "red", pos+1); err != nil {
 				return fmt.Errorf("failed to insert red team: %w", err)
 			}
 		}
@@ -926,7 +1168,7 @@ func insertMatches(db *sql.DB, compID int, matches []Match) error {
 			if teamID == 0 {
 				continue
 			}
-			if err := insertMatchTeam(db, matchID, teamID, "blue", pos+1); err != nil {
+			if err := insertMatchTeam(db, dbMatch.ID, teamID, "blue", pos+1); err != nil {
 				return fmt.Errorf("failed to insert blue team: %w", err)
 			}
 		}
@@ -937,7 +1179,7 @@ func insertMatches(db *sql.DB, compID int, matches []Match) error {
 }
 
 // insertMatchTeam inserts a team's scouting data for a specific match
-func insertMatchTeam(db *sql.DB, matchID, teamID int, allianceColor string, position int) error {
+func insertMatchTeam(db *gorm.DB, matchID, teamID int, allianceColor string, position int) error {
 	// Generate random scouting data
 	startingPos := startingPositions[rand.Intn(len(startingPositions))]
 	autoTowerLevel := towerLevels[rand.Intn(len(towerLevels))]
@@ -965,22 +1207,34 @@ func insertMatchTeam(db *sql.DB, matchID, teamID int, allianceColor string, posi
 
 	scouterName := fmt.Sprintf("Scouter %d", rand.Intn(10)+1)
 
-	_, err := db.Exec(`
-		INSERT INTO scouting_data (match_id, team_id, alliance_color, alliance_position,
-			auto_score, teleop_score, endgame_score, scouter_name,
-			starting_position, auto_path_data, auto_tower_level, auto_hand,
-			scoring_rating, endgame_tower_level, endgame_hang,
-			defense_rating, throughput, scoring_strategy, traversal,
-			hub_auto_count, hub_teleop_count, hub_endgame_count, penalties_caused,
-			scouted_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
-	`, matchID, teamID, allianceColor, position,
-		autoScore, teleopScore, endgameScore, scouterName,
-		startingPos, autoPathData, autoTowerLevel, autoHand,
-		scoringRating, endgameTowerLevel, endgameHang,
-		defenseRating, throughput, scoringStrategy, traversal,
-		hubAutoCount, hubTeleopCount, hubEndgameCount, penaltiesCaused,
-		time.Now())
+	scouting := DBScoutingData{
+		MatchID:           matchID,
+		TeamID:            teamID,
+		AllianceColor:     allianceColor,
+		AlliancePosition:  position,
+		AutoScore:         autoScore,
+		TeleopScore:       teleopScore,
+		EndgameScore:      endgameScore,
+		ScouterName:       scouterName,
+		StartingPosition:  startingPos,
+		AutoPathData:      autoPathData,
+		AutoTowerLevel:    autoTowerLevel,
+		AutoHand:          autoHand,
+		ScoringRating:     scoringRating,
+		EndgameTowerLevel: endgameTowerLevel,
+		EndgameHang:       endgameHang,
+		DefenseRating:     defenseRating,
+		Throughput:        throughput,
+		ScoringStrategy:   scoringStrategy,
+		Traversal:         traversal,
+		HubAutoCount:      hubAutoCount,
+		HubTeleopCount:    hubTeleopCount,
+		HubEndgameCount:   hubEndgameCount,
+		PenaltiesCaused:   penaltiesCaused,
+		ScoutedAt:         time.Now(),
+	}
+
+	err := db.Create(&scouting).Error
 
 	return err
 }
@@ -1028,15 +1282,15 @@ func generateAutoPathJSON(startingPos string) string {
 	return path
 }
 
-func printSummary(db *sql.DB) {
+func printSummary(db *gorm.DB) {
 	log.Println("\n📊 Seed Summary:")
 
-	var compCount, teamCount, matchCount, matchTeamCount int
+	var compCount, teamCount, matchCount, matchTeamCount int64
 
-	db.QueryRow("SELECT COUNT(*) FROM events").Scan(&compCount)
-	db.QueryRow("SELECT COUNT(*) FROM teams").Scan(&teamCount)
-	db.QueryRow("SELECT COUNT(*) FROM matches").Scan(&matchCount)
-	db.QueryRow("SELECT COUNT(*) FROM scouting_data").Scan(&matchTeamCount)
+	db.Model(&DBEvent{}).Count(&compCount)
+	db.Model(&DBTeam{}).Count(&teamCount)
+	db.Model(&DBMatch{}).Count(&matchCount)
+	db.Model(&DBScoutingData{}).Count(&matchTeamCount)
 
 	log.Printf("   Events: %d", compCount)
 	log.Printf("   Teams: %d", teamCount)
@@ -1046,81 +1300,79 @@ func printSummary(db *sql.DB) {
 	// Print example matches
 	log.Println("\n📋 Example Match Schedule (first 5 matches of Event 1):")
 
-	rows, err := db.Query(`
-		SELECT m.match_number, m.red_score, m.blue_score
-		FROM matches m
-		WHERE m.event_id = 1
-		ORDER BY m.match_number
-		LIMIT 5
-	`)
-	if err != nil {
+	var sampleMatches []DBMatch
+	if err := db.Model(&DBMatch{}).
+		Select("match_number, red_score, blue_score").
+		Where("event_id = ?", 1).
+		Order("match_number").
+		Limit(5).
+		Find(&sampleMatches).Error; err != nil {
 		log.Printf("   Could not fetch matches: %v", err)
 		return
 	}
-	defer rows.Close()
 
-	for rows.Next() {
-		var matchNum, redScore, blueScore int
-		rows.Scan(&matchNum, &redScore, &blueScore)
+	for _, match := range sampleMatches {
 
 		// Get teams for this match
-		teamRows, _ := db.Query(`
-			SELECT t.team_number, mt.alliance_color, mt.alliance_position
-			FROM scouting_data sd
-			JOIN teams t ON sd.team_id = t.id
-			JOIN matches m ON sd.match_id = m.id
-			WHERE m.match_number = $1 AND m.event_id = 1
-			ORDER BY sd.alliance_color DESC, sd.alliance_position
-		`, matchNum)
+		type teamRow struct {
+			TeamNumber       int
+			AllianceColor    string
+			AlliancePosition int
+		}
+		var teamRows []teamRow
+		if err := db.Model(&DBScoutingData{}).
+			Select("teams.team_number, scouting_data.alliance_color, scouting_data.alliance_position").
+			Joins("JOIN teams ON scouting_data.team_id = teams.id").
+			Joins("JOIN matches ON scouting_data.match_id = matches.id").
+			Where("matches.match_number = ? AND matches.event_id = ?", match.MatchNumber, 1).
+			Order("scouting_data.alliance_color DESC, scouting_data.alliance_position").
+			Scan(&teamRows).Error; err != nil {
+			log.Printf("   Could not fetch teams for match %d: %v", match.MatchNumber, err)
+			continue
+		}
 
 		redTeams := make([]int, 0, 3)
 		blueTeams := make([]int, 0, 3)
 
-		for teamRows.Next() {
-			var teamNum int
-			var color string
-			var pos int
-			teamRows.Scan(&teamNum, &color, &pos)
-			if color == "red" {
-				redTeams = append(redTeams, teamNum)
+		for _, row := range teamRows {
+			if row.AllianceColor == "red" {
+				redTeams = append(redTeams, row.TeamNumber)
 			} else {
-				blueTeams = append(blueTeams, teamNum)
+				blueTeams = append(blueTeams, row.TeamNumber)
 			}
 		}
-		teamRows.Close()
 
 		// Sort for consistent display
 		sort.Ints(redTeams)
 		sort.Ints(blueTeams)
 
 		log.Printf("   Match %2d: Red %v vs Blue %v | Score: %d - %d",
-			matchNum, redTeams, blueTeams, redScore, blueScore)
+			match.MatchNumber, redTeams, blueTeams, match.RedScore, match.BlueScore)
 	}
 
 	// Print team appearance stats
 	log.Println("\n📊 Team Appearance Stats (Event 1):")
-	rows, err = db.Query(`
-		SELECT t.team_number, 
-		       COUNT(*) as appearances,
-		       SUM(CASE WHEN sd.alliance_color = 'red' THEN 1 ELSE 0 END) as red_count,
-		       SUM(CASE WHEN sd.alliance_color = 'blue' THEN 1 ELSE 0 END) as blue_count
-		FROM scouting_data sd
-		JOIN teams t ON sd.team_id = t.id
-		JOIN matches m ON sd.match_id = m.id
-		WHERE m.event_id = 1
-		GROUP BY t.team_number
-		ORDER BY t.team_number
-		LIMIT 10
-		`)
-	if err != nil {
+	type appearanceRow struct {
+		TeamNumber  int
+		Appearances int
+		RedCount    int
+		BlueCount   int
+	}
+	var appearances []appearanceRow
+	if err := db.Model(&DBScoutingData{}).
+		Select("teams.team_number as team_number, COUNT(*) as appearances, SUM(CASE WHEN scouting_data.alliance_color = 'red' THEN 1 ELSE 0 END) as red_count, SUM(CASE WHEN scouting_data.alliance_color = 'blue' THEN 1 ELSE 0 END) as blue_count").
+		Joins("JOIN teams ON scouting_data.team_id = teams.id").
+		Joins("JOIN matches ON scouting_data.match_id = matches.id").
+		Where("matches.event_id = ?", 1).
+		Group("teams.team_number").
+		Order("teams.team_number").
+		Limit(10).
+		Scan(&appearances).Error; err != nil {
 		log.Printf("   Could not fetch stats: %v", err)
 		return
 	}
-	defer rows.Close()
 
-	for rows.Next() {
-		var teamNum, appearances, redCount, blueCount int
-		rows.Scan(&teamNum, &appearances, &redCount, &blueCount)
-		log.Printf("   Team %4d: %d matches (Red: %d, Blue: %d)", teamNum, appearances, redCount, blueCount)
+	for _, row := range appearances {
+		log.Printf("   Team %4d: %d matches (Red: %d, Blue: %d)", row.TeamNumber, row.Appearances, row.RedCount, row.BlueCount)
 	}
 }
