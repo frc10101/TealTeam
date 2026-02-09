@@ -3,8 +3,11 @@
 ## Scouting Sheet User Inputs
 | Field | Values | Notes |
 |-------|--------|-------|
+| Event | Event selector | Event being scouted |
 | Team | Team selector | Team being scouted |
 | Alliance Color | Red, Blue | Alliance color |
+| Alliance Position | 1, 2, 3 | Station position |
+| Match Type | Qualification, Playoff | Round type |
 | Notes | Free text | Qualitative notes |
 | Starting Position | Left, Right, Center | Pre-match setup |
 | Auto Path Data | Visual path map | Autonomous movement sketch |
@@ -12,9 +15,8 @@
 | Traversal | Trench, Bump | Robot mobility type |
 | Shooting Speed | Fast, Medium, Slow | Throughput of shooting mechanism |
 | Capacity | High, Medium, Low | Capacity of hopper |
-| Defendablility | Notes | How would we defend against them |
-| TELEOP Strategy | Scoring, Defending, Passing | what dokd they do in teleop | 4
-| Auto Score | integer? | What they score in auto only |
+| Defendability | Notes | How would we defend against them |
+| Teleop Strategy | Scoring, Defending, Passing | What they do in teleop |
 
 ---
 

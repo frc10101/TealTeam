@@ -29,9 +29,9 @@ type ColumnInfo struct {
 func (h *Handler) HandleDBViewer(c *gin.Context) {
 	// Check if user is authenticated
 	user, err := h.GetSessionUser(c)
-	if err != nil || user == nil {
+	if err != nil {
 		// Redirect to sign-in page
-		http.Redirect(c.Writer, c.Request, "/sign-in", http.StatusSeeOther)
+		http.Redirect(c.Writer, c.Request, "/", http.StatusSeeOther)
 		return
 	}
 

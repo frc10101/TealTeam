@@ -40,11 +40,17 @@ func New(db *gorm.DB) *Handler {
 	// Parse layout
 	layoutFile := filepath.Join("web", "templates", "layout.html")
 
-	// Parse each page template with the layout
+	partialFiles, err := filepath.Glob(filepath.Join("web", "templates", "partials", "*.html"))
+	if err != nil {
+		log.Fatalf("Failed to list partial templates: %v", err)
+	}
+
+	// Parse each page template with the layout (and partials)
 	pages := []string{"index", "submission", "db_viewer", "signin", "signup"}
 	for _, page := range pages {
 		pageFile := filepath.Join("web", "templates", "pages", page+".html")
-		tmpl, err := template.New("").Funcs(funcMap).ParseFiles(layoutFile, pageFile)
+		files := append([]string{layoutFile, pageFile}, partialFiles...)
+		tmpl, err := template.New("").Funcs(funcMap).ParseFiles(files...)
 		if err != nil {
 			log.Fatalf("Failed to parse template %s: %v", page, err)
 		}

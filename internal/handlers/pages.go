@@ -37,6 +37,33 @@ func (h *Handler) HandleSubmissionPage(c *gin.Context) {
 		"User":        user,
 	}
 
+	if h.hasDB() {
+		var teams []struct {
+			ID         int
+			TeamNumber int
+			Name       string
+		}
+		if err := h.db.WithContext(c.Request.Context()).
+			Table("teams").
+			Select("id, team_number, name").
+			Order("team_number").
+			Scan(&teams).Error; err == nil {
+			data["Teams"] = teams
+		}
+
+		var events []struct {
+			ID   int
+			Name string
+		}
+		if err := h.db.WithContext(c.Request.Context()).
+			Table("events").
+			Select("id, name").
+			Order("start_date").
+			Scan(&events).Error; err == nil {
+			data["Events"] = events
+		}
+	}
+
 	h.render(c, "submission", data)
 }
 

@@ -101,6 +101,7 @@ func main() {
 	router.GET("/development/db", h.HandleDBViewer)
 	router.GET("/sign-in", h.HandleSignIn)
 	router.GET("/sign-up", h.HandleSignUp)
+	router.POST("/submission", h.HandleSubmission)
 
 	// Authentication API routes
 	router.POST("/api/auth/login", h.HandleLogin)
