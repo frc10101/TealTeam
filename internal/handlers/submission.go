@@ -26,6 +26,9 @@ type scoutingFormInput struct {
 	Capacity         string
 	Defendability    string
 	TeleopStrategy   string
+	HangLevel        string
+	AutoHang         string
+	HangPosition     string
 }
 
 type scoutingAPIMetrics struct {
@@ -53,6 +56,9 @@ type scoutingData struct {
 	ShootingSpeed    string    `gorm:"column:shooting_speed"`
 	Capacity         string    `gorm:"column:capacity"`
 	Defendability    string    `gorm:"column:defendability"`
+	HangLevel        string    `gorm:"column:hang_level"`
+	AutoHang         string    `gorm:"column:auto_hang"`
+	HangPosition     string    `gorm:"column:hang_position"`
 	ScoutedAt        time.Time `gorm:"column:scouted_at"`
 	ScouterID        *int      `gorm:"column:scouter_id"`
 }
@@ -113,6 +119,9 @@ func (h *Handler) HandleSubmission(c *gin.Context) {
 		ShootingSpeed:    input.ShootingSpeed,
 		Capacity:         input.Capacity,
 		Defendability:    input.Defendability,
+		HangLevel:        input.HangLevel,
+		AutoHang:         input.AutoHang,
+		HangPosition:     input.HangPosition,
 		ScoutedAt:        time.Now().UTC(),
 		ScouterID:        &user.ID,
 	}
@@ -155,6 +164,9 @@ func parseScoutingForm(c *gin.Context) (scoutingFormInput, error) {
 	input.Capacity = strings.ToLower(strings.TrimSpace(c.PostForm("capacity")))
 	input.Defendability = strings.TrimSpace(c.PostForm("defendability"))
 	input.TeleopStrategy = strings.ToLower(strings.TrimSpace(c.PostForm("teleop_strategy")))
+	input.HangLevel = strings.ToLower(strings.TrimSpace(c.PostForm("hang_level")))
+	input.AutoHang = strings.ToLower(strings.TrimSpace(c.PostForm("auto_hang")))
+	input.HangPosition = strings.ToLower(strings.TrimSpace(c.PostForm("hang_position")))
 
 	if input.AllianceColor == "" {
 		return input, fmt.Errorf("alliance_color is required")

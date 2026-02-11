@@ -28,8 +28,12 @@ func (h *Handler) HandleIndex(c *gin.Context) {
 
 // HandleSubmissionPage renders the submission page
 func (h *Handler) HandleSubmissionPage(c *gin.Context) {
-	// Get current user if authenticated
-	user, _ := h.GetSessionUser(c)
+	// Require authentication
+	user, err := h.GetSessionUser(c)
+	if err != nil || user == nil {
+		http.Redirect(c.Writer, c.Request, "/sign-in", http.StatusSeeOther)
+		return
+	}
 
 	data := map[string]any{
 		"Title":       "Scouting Submission",
@@ -43,6 +47,7 @@ func (h *Handler) HandleSubmissionPage(c *gin.Context) {
 			TeamNumber int
 			Name       string
 		}
+
 		if err := h.db.WithContext(c.Request.Context()).
 			Table("teams").
 			Select("id, team_number, name").
@@ -55,6 +60,7 @@ func (h *Handler) HandleSubmissionPage(c *gin.Context) {
 			ID   int
 			Name string
 		}
+
 		if err := h.db.WithContext(c.Request.Context()).
 			Table("events").
 			Select("id, name").
