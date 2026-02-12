@@ -145,14 +145,8 @@ func parseScoutingForm(c *gin.Context) (scoutingFormInput, error) {
 	if err != nil {
 		return input, err
 	}
-	alliancePosition, err := parseRequiredInt(c, "alliance_position")
-	if err != nil {
-		return input, err
-	}
-
 	input.EventID = eventID
 	input.TeamID = teamID
-	input.AlliancePosition = alliancePosition
 	input.AllianceColor = strings.ToLower(strings.TrimSpace(c.PostForm("alliance_color")))
 	input.MatchType = strings.ToLower(strings.TrimSpace(c.PostForm("match_type")))
 	input.Notes = strings.TrimSpace(c.PostForm("notes"))
@@ -163,10 +157,27 @@ func parseScoutingForm(c *gin.Context) (scoutingFormInput, error) {
 	input.ShootingSpeed = strings.ToLower(strings.TrimSpace(c.PostForm("shooting_speed")))
 	input.Capacity = strings.ToLower(strings.TrimSpace(c.PostForm("capacity")))
 	input.Defendability = strings.TrimSpace(c.PostForm("defendability"))
-	input.TeleopStrategy = strings.ToLower(strings.TrimSpace(c.PostForm("teleop_strategy")))
+	input.TeleopStrategy = strings.ToLower(strings.TrimSpace(strings.Join(c.PostFormArray("teleop_strategy"), ",")))
 	input.HangLevel = strings.ToLower(strings.TrimSpace(c.PostForm("hang_level")))
-	input.AutoHang = strings.ToLower(strings.TrimSpace(c.PostForm("auto_hang")))
+	if c.PostForm("auto_hang") == "yes" {
+		input.AutoHang = "yes"
+	} else {
+		input.AutoHang = "no"
+	}
 	input.HangPosition = strings.ToLower(strings.TrimSpace(c.PostForm("hang_position")))
+
+	alliancePosition, err := parseOptionalInt(c, "alliance_position")
+	if err != nil {
+		return input, err
+	}
+	if alliancePosition == 0 {
+		alliancePosition = 1
+	}
+	input.AlliancePosition = alliancePosition
+
+	if input.MatchType == "" {
+		input.MatchType = "qualification"
+	}
 
 	if input.AllianceColor == "" {
 		return input, fmt.Errorf("alliance_color is required")
@@ -185,6 +196,18 @@ func parseRequiredInt(c *gin.Context, field string) (int, error) {
 	value := strings.TrimSpace(c.PostForm(field))
 	if value == "" {
 		return 0, fmt.Errorf("%s is required", field)
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be a number", field)
+	}
+	return parsed, nil
+}
+
+func parseOptionalInt(c *gin.Context, field string) (int, error) {
+	value := strings.TrimSpace(c.PostForm(field))
+	if value == "" {
+		return 0, nil
 	}
 	parsed, err := strconv.Atoi(value)
 	if err != nil {

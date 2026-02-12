@@ -38,32 +38,14 @@
             </select>
         </div>
 
-        <div>
-            <label for="alliance-position" class="block text-sm font-medium text-gray-300 mb-2">Alliance Position</label>
-            <select id="alliance-position" name="alliance_position" required class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
-                <option value="" disabled selected>Select position</option>
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-            </select>
-        </div>
-
-        <div>
-            <label for="match-type" class="block text-sm font-medium text-gray-300 mb-2">Match Type</label>
-            <select id="match-type" name="match_type" required class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
-                <option value="" disabled selected>Select match type</option>
-                <option value="qualification">Qualification</option>
-                <option value="playoff">Playoff</option>
-            </select>
-        </div>
 
         <div>
             <label for="starting-position" class="block text-sm font-medium text-gray-300 mb-2">Starting Position</label>
             <select id="starting-position" name="starting_position" required class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
                 <option value="" disabled selected>Select position</option>
                 <option value="left">Left</option>
-                <option value="center">Center</option>
                 <option value="right">Right</option>
+                <option value="center">Center</option>
             </select>
         </div>
 
@@ -107,32 +89,39 @@
         </div>
 
         <div>
-            <label for="teleop-strategy" class="block text-sm font-medium text-gray-300 mb-2">Teleop Strategy</label>
-            <select id="teleop-strategy" name="teleop_strategy" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
-                <option value="" disabled selected>Select strategy</option>
-                <option value="scoring">Scoring</option>
-                <option value="defending">Defending</option>
-                <option value="passing">Passing</option>
-            </select>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Teleop Strategy (select all that apply)</label>
+            <div class="space-y-2 text-sm text-gray-200">
+                <label class="flex items-center gap-2">
+                    <input type="checkbox" name="teleop_strategy" value="scoring">
+                    <span>Scoring</span>
+                </label>
+                <label class="flex items-center gap-2">
+                    <input type="checkbox" name="teleop_strategy" value="defending">
+                    <span>Defending</span>
+                </label>
+                <label class="flex items-center gap-2">
+                    <input type="checkbox" name="teleop_strategy" value="passing">
+                    <span>Passing</span>
+                </label>
+            </div>
         </div>
 
         <div>
             <label for="hang-level" class="block text-sm font-medium text-gray-300 mb-2">Hang Level</label>
             <select id="hang-level" name="hang_level" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
                 <option value="" disabled selected>Select level</option>
-                <option value="l1">L1</option>
-                <option value="l2">L2</option>
-                <option value="l3">L3</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
             </select>
         </div>
 
         <div>
-            <label for="auto-hang" class="block text-sm font-medium text-gray-300 mb-2">Auto Hang</label>
-            <select id="auto-hang" name="auto_hang" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
-                <option value="" disabled selected>Select option</option>
-                <option value="yes">Yes</option>
-                <option value="no">No</option>
-            </select>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Auto Hang</label>
+            <label class="flex items-center gap-2 text-sm text-gray-200">
+                <input type="checkbox" id="auto-hang" name="auto_hang" value="yes">
+                <span>Completed hang in auto</span>
+            </label>
         </div>
 
         <div>
@@ -144,6 +133,7 @@
                 <option value="center">Center</option>
             </select>
         </div>
+
     </div>
 
     <div>
@@ -153,7 +143,7 @@
 
     <div>
         <label for="auto-path-data" class="block text-sm font-medium text-gray-300 mb-2">Auto Path Data</label>
-        <textarea id="auto-path-data" name="auto_path_data" rows="3" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors" placeholder="Describe the path or paste JSON"></textarea>
+        <textarea id="auto-path-data" name="auto_path_data" rows="3" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors" placeholder="Visual path map or notes"></textarea>
     </div>
 
     <div>

@@ -6,8 +6,6 @@
 | Event | Event selector | Event being scouted |
 | Team | Team selector | Team being scouted |
 | Alliance Color | Red, Blue | Alliance color |
-| Alliance Position | 1, 2, 3 | Station position |
-| Match Type | Qualification, Playoff | Round type |
 | Notes | Free text | Qualitative notes |
 | Starting Position | Left, Right, Center | Pre-match setup |
 | Auto Path Data | Visual path map | Autonomous movement sketch |
@@ -16,7 +14,11 @@
 | Shooting Speed | Fast, Medium, Slow | Throughput of shooting mechanism |
 | Capacity | High, Medium, Low | Capacity of hopper |
 | Defendability | Notes | How would we defend against them |
-| Teleop Strategy | Scoring, Defending, Passing | What they do in teleop |
+| Teleop Strategy | Scoring, Defending, Passing (multiselect) | What they do in teleop |
+| Hang Level | 1, 2, 3 | what level that they hang in teleop |
+| Auto Hang | checkbox | did htey hang in auto |
+| Hang Position | Left, Right, Center | Where do they hang / what space do they take up |
+
 
 ---
 
