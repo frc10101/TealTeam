@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -181,10 +182,20 @@ func (h *Handler) HandleSignup(c *gin.Context) {
 		return
 	}
 
+	var parsedTeamNumber *int
+	if teamNumber != "" {
+		if value, err := strconv.Atoi(teamNumber); err == nil {
+			parsedTeamNumber = &value
+		} else {
+			log.Printf("Invalid team number provided by %s: %s", email, teamNumber)
+		}
+	}
+
 	user := models.User{
 		Name:         name,
 		Email:        email,
 		PasswordHash: passwordHash,
+		TeamNumber:   parsedTeamNumber,
 		Role:         "user",
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
@@ -200,8 +211,8 @@ func (h *Handler) HandleSignup(c *gin.Context) {
 		return
 	}
 
-	if teamNumber != "" {
-		log.Printf("User %d (%s) signed up with team number: %s", user.ID, email, teamNumber)
+	if parsedTeamNumber != nil {
+		log.Printf("User %d (%s) signed up with team number: %d", user.ID, email, *parsedTeamNumber)
 	}
 
 	sessionID, err := generateSessionID()
@@ -258,7 +269,7 @@ func (h *Handler) HandleLogout(c *gin.Context) {
 	h.sendAuthResponse(c, true, "Logged out successfully", "/sign-in")
 }
 
-func (h *Handler) GetSessionUser(c *gin.Context) (*models.User, error) {
+func (h *Handler) GetSession(c *gin.Context) (*models.Session, error) {
 	if !h.hasDB() {
 		return nil, fmt.Errorf("database unavailable")
 	}
@@ -279,6 +290,15 @@ func (h *Handler) GetSessionUser(c *gin.Context) (*models.User, error) {
 	if time.Now().After(session.ExpiresAt) {
 		_ = h.db.Where("session_id = ?", cookie.Value).Delete(&models.Session{}).Error
 		return nil, fmt.Errorf("session expired")
+	}
+
+	return &session, nil
+}
+
+func (h *Handler) GetSessionUser(c *gin.Context) (*models.User, error) {
+	session, err := h.GetSession(c)
+	if err != nil {
+		return nil, err
 	}
 
 	var user models.User

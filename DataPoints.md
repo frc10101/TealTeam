@@ -12,11 +12,12 @@
 | Starting Position | Left, Right, Center | Pre-match setup |
 | Auto Path Data | Visual path map | Autonomous movement sketch |
 | Defense Rating | Low, Mid, High | Defensive capability |
-| Traversal | Trench, Bump | Robot mobility type |
+| Bump | Yes (default to no) | Robot mobility type |
+| Trench | Yes (default to no) | Robot mobility type |
 | Shooting Speed | Fast, Medium, Slow | Throughput of shooting mechanism |
 | Capacity | High, Medium, Low | Capacity of hopper |
 | Defendability | Notes | How would we defend against them |
-| Teleop Strategy | Scoring, Defending, Passing | What they do in teleop |
+| Teleop Strategy | Scoring, Defending, Passing (multi select) | What they do in teleop |
 
 ---
 

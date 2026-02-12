@@ -56,21 +56,13 @@
                         <label for="team-number" class="block text-sm font-medium text-gray-700 mb-2">
                             Team Number
                         </label>
-                        <div class="flex gap-2">
-                            <input 
-                                id="team-number" 
-                                name="team-number" 
-                                type="number" 
-                                min="1" 
-                                class="flex-1 px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors"
-                                placeholder="e.g. 1710">
-                            <button 
-                                type="button" 
-                                onclick="document.getElementById('team-number').value = ''; document.getElementById('team-number').removeAttribute('required');" 
-                                class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-500 transition-colors whitespace-nowrap">
-                                No team
-                            </button>
-                        </div>
+                        <input 
+                            id="team-number" 
+                            name="team-number" 
+                            type="number" 
+                            min="1" 
+                            class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors"
+                            placeholder="e.g. 1710">
                     </div>
 
                     <div>

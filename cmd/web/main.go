@@ -98,6 +98,7 @@ func main() {
 	// Full page routes (render with layout)
 	router.GET("/", h.HandleIndex)
 	router.GET("/submission", h.HandleSubmissionPage)
+	router.GET("/lead-scout", h.HandleAdminViewer)
 	router.GET("/development/db", h.HandleDBViewer)
 	router.GET("/sign-in", h.HandleSignIn)
 	router.GET("/sign-up", h.HandleSignUp)
@@ -107,9 +108,12 @@ func main() {
 	router.POST("/api/auth/login", h.HandleLogin)
 	router.POST("/api/auth/signup", h.HandleSignup)
 	router.POST("/api/auth/logout", h.HandleLogout)
+	router.POST("/api/events/select", h.HandleSelectEvent)
 
 	// HTMX fragment routes (return HTML fragments only)
 	router.GET("/hx/development/db/table/:name", h.HandleDBTableContent)
+	router.POST("/hx/lead-scout/submissions/:id/approve", h.HandleApproveSubmission)
+	router.POST("/hx/lead-scout/submissions/:id/decline", h.HandleDeclineSubmission)
 
 	// TODO: Add more routes here
 	// Full pages: router.GET("/yourpage", h.HandleYourPage)

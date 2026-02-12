@@ -65,6 +65,35 @@ type scoutingData struct {
 
 func (scoutingData) TableName() string { return "scouting_data" }
 
+type scoutingSubmission struct {
+	ID               int       `gorm:"column:id;primaryKey"`
+	MatchID          int       `gorm:"column:match_id"`
+	TeamID           int       `gorm:"column:team_id"`
+	AllianceColor    string    `gorm:"column:alliance_color"`
+	AlliancePosition int       `gorm:"column:alliance_position"`
+	AutoScore        int       `gorm:"column:auto_score"`
+	TeleopScore      int       `gorm:"column:teleop_score"`
+	EndgameScore     int       `gorm:"column:endgame_score"`
+	Notes            string    `gorm:"column:notes"`
+	StartingPosition string    `gorm:"column:starting_position"`
+	AutoPathData     string    `gorm:"column:auto_path_data;type:jsonb"`
+	DefenseRating    string    `gorm:"column:defense_rating"`
+	Traversal        string    `gorm:"column:traversal"`
+	Throughput       string    `gorm:"column:throughput"`
+	ScoringStrategy  string    `gorm:"column:scoring_strategy"`
+	ShootingSpeed    string    `gorm:"column:shooting_speed"`
+	Capacity         string    `gorm:"column:capacity"`
+	Defendability    string    `gorm:"column:defendability"`
+	HangLevel        string    `gorm:"column:hang_level"`
+	AutoHang         string    `gorm:"column:auto_hang"`
+	HangPosition     string    `gorm:"column:hang_position"`
+	ScoutedAt        time.Time `gorm:"column:scouted_at"`
+	ScouterID        *int      `gorm:"column:scouter_id"`
+	CreatedAt        time.Time `gorm:"column:created_at"`
+}
+
+func (scoutingSubmission) TableName() string { return "scouting_submissions" }
+
 type matchInfo struct {
 	ID          int
 	MatchNumber int
@@ -101,7 +130,7 @@ func (h *Handler) HandleSubmission(c *gin.Context) {
 		return
 	}
 
-	submission := scoutingData{
+	submission := scoutingSubmission{
 		MatchID:          match.ID,
 		TeamID:           input.TeamID,
 		AllianceColor:    input.AllianceColor,
@@ -127,7 +156,7 @@ func (h *Handler) HandleSubmission(c *gin.Context) {
 	}
 
 	if err := h.db.WithContext(ctx).Create(&submission).Error; err != nil {
-		http.Error(c.Writer, fmt.Sprintf("Failed to save submission: %v", err), http.StatusInternalServerError)
+		http.Error(c.Writer, fmt.Sprintf("Failed to queue submission: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -202,6 +231,15 @@ func (h *Handler) findNextMatchForTeam(ctx context.Context, eventID int, matchTy
 		Count(&scoutedCount).Error; err != nil {
 		return nil, fmt.Errorf("failed to check existing submissions: %w", err)
 	}
+	var pendingCount int64
+	if err := h.db.WithContext(ctx).
+		Table("scouting_submissions").
+		Joins("JOIN matches ON matches.id = scouting_submissions.match_id").
+		Where("scouting_submissions.team_id = ? AND matches.event_id = ? AND matches.match_type = ?", teamID, eventID, matchType).
+		Count(&pendingCount).Error; err != nil {
+		return nil, fmt.Errorf("failed to check pending submissions: %w", err)
+	}
+	scoutedCount += pendingCount
 
 	var matches []matchInfo
 	if err := h.db.WithContext(ctx).
@@ -234,9 +272,27 @@ func (h *Handler) findNextMatchForTeam(ctx context.Context, eventID int, matchTy
 		if existingCount > 0 {
 			continue
 		}
+		if err := h.db.WithContext(ctx).
+			Table("scouting_submissions").
+			Where("match_id = ? AND team_id = ?", match.ID, teamID).
+			Count(&existingCount).Error; err != nil {
+			return nil, fmt.Errorf("failed to validate team match: %w", err)
+		}
+		if existingCount > 0 {
+			continue
+		}
 
 		if err := h.db.WithContext(ctx).
 			Table("scouting_data").
+			Where("match_id = ? AND alliance_color = ? AND alliance_position = ?", match.ID, allianceColor, alliancePosition).
+			Count(&existingCount).Error; err != nil {
+			return nil, fmt.Errorf("failed to validate alliance slot: %w", err)
+		}
+		if existingCount > 0 {
+			continue
+		}
+		if err := h.db.WithContext(ctx).
+			Table("scouting_submissions").
 			Where("match_id = ? AND alliance_color = ? AND alliance_position = ?", match.ID, allianceColor, alliancePosition).
 			Count(&existingCount).Error; err != nil {
 			return nil, fmt.Errorf("failed to validate alliance slot: %w", err)

@@ -18,7 +18,9 @@ type User struct {
 	Email        string     `json:"email" gorm:"column:email"`
 	Name         string     `json:"name" gorm:"column:name"`
 	PasswordHash string     `json:"-" gorm:"column:password_hash"` // Never send password hash in JSON
+	TeamNumber   *int       `json:"team_number,omitempty" gorm:"column:team_number"`
 	Role         string     `json:"role" gorm:"column:role"`
+	IsAdmin      bool       `json:"is_admin" gorm:"column:is_admin"`
 	LastLogin    *time.Time `json:"last_login,omitempty" gorm:"column:last_login"`
 	CreatedAt    time.Time  `json:"created_at" gorm:"column:created_at"`
 	UpdatedAt    time.Time  `json:"updated_at" gorm:"column:updated_at"`
@@ -28,6 +30,7 @@ type User struct {
 type Session struct {
 	SessionID string    `gorm:"column:session_id;primaryKey"`
 	UserID    int       `gorm:"column:user_id"`
+	SelectedEventID *int `gorm:"column:selected_event_id"`
 	ExpiresAt time.Time `gorm:"column:expires_at"`
 	CreatedAt time.Time `gorm:"column:created_at"`
 }

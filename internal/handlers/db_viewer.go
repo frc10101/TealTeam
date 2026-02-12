@@ -34,6 +34,10 @@ func (h *Handler) HandleDBViewer(c *gin.Context) {
 		http.Redirect(c.Writer, c.Request, "/", http.StatusSeeOther)
 		return
 	}
+	if user == nil || !user.IsAdmin {
+		http.Redirect(c.Writer, c.Request, "/", http.StatusSeeOther)
+		return
+	}
 
 	data := map[string]any{
 		"Title":       "Database Viewer",
