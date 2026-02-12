@@ -28,11 +28,11 @@ type User struct {
 
 // Session represents a user session
 type Session struct {
-	SessionID string    `gorm:"column:session_id;primaryKey"`
-	UserID    int       `gorm:"column:user_id"`
-	SelectedEventID *int `gorm:"column:selected_event_id"`
-	ExpiresAt time.Time `gorm:"column:expires_at"`
-	CreatedAt time.Time `gorm:"column:created_at"`
+	SessionID       string    `gorm:"column:session_id;primaryKey"`
+	UserID          int       `gorm:"column:user_id"`
+	SelectedEventID *int      `gorm:"column:selected_event_id"`
+	ExpiresAt       time.Time `gorm:"column:expires_at"`
+	CreatedAt       time.Time `gorm:"column:created_at"`
 }
 
 // TODO: Add more models as needed
