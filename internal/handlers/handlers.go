@@ -1,22 +1,24 @@
 package handlers
 
 import (
-	"database/sql"
 	"html/template"
 	"log"
 	"net/http"
 	"path/filepath"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // Handler holds dependencies for HTTP handlers
 type Handler struct {
-	db        *sql.DB
+	db        *gorm.DB
 	templates map[string]*template.Template
 	partials  *template.Template
 }
 
 // New creates a new Handler with the given database connection
-func New(db *sql.DB) *Handler {
+func New(db *gorm.DB) *Handler {
 	templates := make(map[string]*template.Template)
 
 	// Template functions for pagination
@@ -38,11 +40,17 @@ func New(db *sql.DB) *Handler {
 	// Parse layout
 	layoutFile := filepath.Join("web", "templates", "layout.html")
 
-	// Parse each page template with the layout
+	partialFiles, err := filepath.Glob(filepath.Join("web", "templates", "partials", "*.html"))
+	if err != nil {
+		log.Fatalf("Failed to list partial templates: %v", err)
+	}
+
+	// Parse each page template with the layout (and partials)
 	pages := []string{"index", "submission", "db_viewer", "signin", "signup"}
 	for _, page := range pages {
 		pageFile := filepath.Join("web", "templates", "pages", page+".html")
-		tmpl, err := template.New("").Funcs(funcMap).ParseFiles(layoutFile, pageFile)
+		files := append([]string{layoutFile, pageFile}, partialFiles...)
+		tmpl, err := template.New("").Funcs(funcMap).ParseFiles(files...)
 		if err != nil {
 			log.Fatalf("Failed to parse template %s: %v", page, err)
 		}
@@ -63,27 +71,27 @@ func New(db *sql.DB) *Handler {
 }
 
 // render executes a page template with the layout
-func (h *Handler) render(w http.ResponseWriter, page string, data any) {
+func (h *Handler) render(c *gin.Context, page string, data any) {
 	tmpl, ok := h.templates[page]
 	if !ok {
 		log.Printf("Template not found: %s", page)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		http.Error(c.Writer, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := tmpl.ExecuteTemplate(w, "base", data); err != nil {
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	if err := tmpl.ExecuteTemplate(c.Writer, "base", data); err != nil {
 		log.Printf("Template error: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		http.Error(c.Writer, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
 
 // renderPartial executes a partial template (for HTMX responses)
-func (h *Handler) renderPartial(w http.ResponseWriter, name string, data any) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := h.partials.ExecuteTemplate(w, name, data); err != nil {
+func (h *Handler) renderPartial(c *gin.Context, name string, data any) {
+	c.Header("Content-Type", "text/html; charset=utf-8")
+	if err := h.partials.ExecuteTemplate(c.Writer, name, data); err != nil {
 		log.Printf("Template error: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		http.Error(c.Writer, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
 

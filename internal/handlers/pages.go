@@ -2,18 +2,20 @@ package handlers
 
 import (
 	"net/http"
+
+	"github.com/gin-gonic/gin"
 )
 
 // HandleIndex renders the home page
-func (h *Handler) HandleIndex(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleIndex(c *gin.Context) {
 	// Redirect non-root paths to 404
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
+	if c.Request.URL.Path != "/" {
+		http.NotFound(c.Writer, c.Request)
 		return
 	}
 
 	// Get current user if authenticated
-	user, _ := h.GetSessionUser(r)
+	user, _ := h.GetSessionUser(c)
 
 	data := map[string]any{
 		"Title":   "Home",
@@ -21,13 +23,17 @@ func (h *Handler) HandleIndex(w http.ResponseWriter, r *http.Request) {
 		"User":    user,
 	}
 
-	h.render(w, "index", data)
+	h.render(c, "index", data)
 }
 
 // HandleSubmissionPage renders the submission page
-func (h *Handler) HandleSubmissionPage(w http.ResponseWriter, r *http.Request) {
-	// Get current user if authenticated
-	user, _ := h.GetSessionUser(r)
+func (h *Handler) HandleSubmissionPage(c *gin.Context) {
+	// Require authentication
+	user, err := h.GetSessionUser(c)
+	if err != nil || user == nil {
+		http.Redirect(c.Writer, c.Request, "/sign-in", http.StatusSeeOther)
+		return
+	}
 
 	data := map[string]any{
 		"Title":       "Scouting Submission",
@@ -35,14 +41,43 @@ func (h *Handler) HandleSubmissionPage(w http.ResponseWriter, r *http.Request) {
 		"User":        user,
 	}
 
-	h.render(w, "submission", data)
+	if h.hasDB() {
+		var teams []struct {
+			ID         int
+			TeamNumber int
+			Name       string
+		}
+
+		if err := h.db.WithContext(c.Request.Context()).
+			Table("teams").
+			Select("id, team_number, name").
+			Order("team_number").
+			Scan(&teams).Error; err == nil {
+			data["Teams"] = teams
+		}
+
+		var events []struct {
+			ID   int
+			Name string
+		}
+
+		if err := h.db.WithContext(c.Request.Context()).
+			Table("events").
+			Select("id, name").
+			Order("start_date").
+			Scan(&events).Error; err == nil {
+			data["Events"] = events
+		}
+	}
+
+	h.render(c, "submission", data)
 }
 
-func (h *Handler) HandleSignIn(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleSignIn(c *gin.Context) {
 	// Redirect if already logged in
-	user, _ := h.GetSessionUser(r)
+	user, _ := h.GetSessionUser(c)
 	if user != nil {
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		http.Redirect(c.Writer, c.Request, "/", http.StatusSeeOther)
 		return
 	}
 
@@ -50,14 +85,14 @@ func (h *Handler) HandleSignIn(w http.ResponseWriter, r *http.Request) {
 		"Title":       "Sign In",
 		"Description": "Sign in to access higher level features.",
 	}
-	h.render(w, "signin", data)
+	h.render(c, "signin", data)
 }
 
-func (h *Handler) HandleSignUp(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleSignUp(c *gin.Context) {
 	// Redirect if already logged in
-	user, _ := h.GetSessionUser(r)
+	user, _ := h.GetSessionUser(c)
 	if user != nil {
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		http.Redirect(c.Writer, c.Request, "/", http.StatusSeeOther)
 		return
 	}
 
@@ -65,7 +100,7 @@ func (h *Handler) HandleSignUp(w http.ResponseWriter, r *http.Request) {
 		"Title":       "Sign Up",
 		"Description": "Create an account to get started.",
 	}
-	h.render(w, "signup", data)
+	h.render(c, "signup", data)
 }
 
 // TODO: Add more page handlers here

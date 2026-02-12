@@ -1,0 +1,170 @@
+{{define "scouting_form"}}
+<form action="/submission" method="post" class="space-y-6">
+    <div class="grid gap-6 md:grid-cols-2">
+        <div>
+            <label for="event-id" class="block text-sm font-medium text-gray-300 mb-2">Event</label>
+            <select id="event-id" name="event_id" required class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled selected>Select event</option>
+                {{if .Events}}
+                    {{range .Events}}
+                        <option value="{{.ID}}">{{.Name}}</option>
+                    {{end}}
+                {{else}}
+                    <option value="" disabled>No events available</option>
+                {{end}}
+            </select>
+        </div>
+
+        <div>
+            <label for="team-id" class="block text-sm font-medium text-gray-300 mb-2">Team</label>
+            <select id="team-id" name="team_id" required class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled selected>Select team</option>
+                {{if .Teams}}
+                    {{range .Teams}}
+                        <option value="{{.ID}}">{{.TeamNumber}} - {{.Name}}</option>
+                    {{end}}
+                {{else}}
+                    <option value="" disabled>No teams available</option>
+                {{end}}
+            </select>
+        </div>
+
+        <div>
+            <label for="alliance-color" class="block text-sm font-medium text-gray-300 mb-2">Alliance Color</label>
+            <select id="alliance-color" name="alliance_color" required class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled selected>Select color</option>
+                <option value="red">Red</option>
+                <option value="blue">Blue</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="alliance-position" class="block text-sm font-medium text-gray-300 mb-2">Alliance Position</label>
+            <select id="alliance-position" name="alliance_position" required class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled selected>Select position</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="match-type" class="block text-sm font-medium text-gray-300 mb-2">Match Type</label>
+            <select id="match-type" name="match_type" required class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled selected>Select match type</option>
+                <option value="qualification">Qualification</option>
+                <option value="playoff">Playoff</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="starting-position" class="block text-sm font-medium text-gray-300 mb-2">Starting Position</label>
+            <select id="starting-position" name="starting_position" required class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled selected>Select position</option>
+                <option value="left">Left</option>
+                <option value="center">Center</option>
+                <option value="right">Right</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="defense-rating" class="block text-sm font-medium text-gray-300 mb-2">Defense Rating</label>
+            <select id="defense-rating" name="defense_rating" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled selected>Select rating</option>
+                <option value="low">Low</option>
+                <option value="mid">Mid</option>
+                <option value="high">High</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="traversal" class="block text-sm font-medium text-gray-300 mb-2">Traversal</label>
+            <select id="traversal" name="traversal" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled selected>Select type</option>
+                <option value="trench">Trench</option>
+                <option value="bump">Bump</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="shooting-speed" class="block text-sm font-medium text-gray-300 mb-2">Shooting Speed</label>
+            <select id="shooting-speed" name="shooting_speed" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled selected>Select speed</option>
+                <option value="fast">Fast</option>
+                <option value="medium">Medium</option>
+                <option value="slow">Slow</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="capacity" class="block text-sm font-medium text-gray-300 mb-2">Capacity</label>
+            <select id="capacity" name="capacity" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled selected>Select capacity</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="teleop-strategy" class="block text-sm font-medium text-gray-300 mb-2">Teleop Strategy</label>
+            <select id="teleop-strategy" name="teleop_strategy" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled selected>Select strategy</option>
+                <option value="scoring">Scoring</option>
+                <option value="defending">Defending</option>
+                <option value="passing">Passing</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="hang-level" class="block text-sm font-medium text-gray-300 mb-2">Hang Level</label>
+            <select id="hang-level" name="hang_level" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled selected>Select level</option>
+                <option value="l1">L1</option>
+                <option value="l2">L2</option>
+                <option value="l3">L3</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="auto-hang" class="block text-sm font-medium text-gray-300 mb-2">Auto Hang</label>
+            <select id="auto-hang" name="auto_hang" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled selected>Select option</option>
+                <option value="yes">Yes</option>
+                <option value="no">No</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="hang-position" class="block text-sm font-medium text-gray-300 mb-2">Hang Position</label>
+            <select id="hang-position" name="hang_position" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled selected>Select position</option>
+                <option value="left">Left</option>
+                <option value="right">Right</option>
+                <option value="center">Center</option>
+            </select>
+        </div>
+    </div>
+
+    <div>
+        <label for="notes" class="block text-sm font-medium text-gray-300 mb-2">Notes</label>
+        <textarea id="notes" name="notes" rows="4" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors" placeholder="Observations and qualitative notes"></textarea>
+    </div>
+
+    <div>
+        <label for="auto-path-data" class="block text-sm font-medium text-gray-300 mb-2">Auto Path Data</label>
+        <textarea id="auto-path-data" name="auto_path_data" rows="3" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors" placeholder="Describe the path or paste JSON"></textarea>
+    </div>
+
+    <div>
+        <label for="defendability" class="block text-sm font-medium text-gray-300 mb-2">Defendability</label>
+        <textarea id="defendability" name="defendability" rows="3" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors" placeholder="How would we defend against them?"></textarea>
+    </div>
+
+    <div class="flex justify-end">
+        <button type="submit" class="px-6 py-2 rounded-lg text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 focus:ring-offset-gray-900 transition-colors">
+            Submit Scouting Data
+        </button>
+    </div>
+</form>
+{{end}}

@@ -14,22 +14,22 @@ type Item struct {
 
 // User represents an authenticated user
 type User struct {
-	ID           int        `json:"id"`
-	Email        string     `json:"email"`
-	Name         string     `json:"name"`
-	PasswordHash string     `json:"-"` // Never send password hash in JSON
-	Role         string     `json:"role"`
-	LastLogin    *time.Time `json:"last_login,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
+	ID           int        `json:"id" gorm:"column:id;primaryKey"`
+	Email        string     `json:"email" gorm:"column:email"`
+	Name         string     `json:"name" gorm:"column:name"`
+	PasswordHash string     `json:"-" gorm:"column:password_hash"` // Never send password hash in JSON
+	Role         string     `json:"role" gorm:"column:role"`
+	LastLogin    *time.Time `json:"last_login,omitempty" gorm:"column:last_login"`
+	CreatedAt    time.Time  `json:"created_at" gorm:"column:created_at"`
+	UpdatedAt    time.Time  `json:"updated_at" gorm:"column:updated_at"`
 }
 
 // Session represents a user session
 type Session struct {
-	SessionID string
-	UserID    int
-	ExpiresAt time.Time
-	CreatedAt time.Time
+	SessionID string    `gorm:"column:session_id;primaryKey"`
+	UserID    int       `gorm:"column:user_id"`
+	ExpiresAt time.Time `gorm:"column:expires_at"`
+	CreatedAt time.Time `gorm:"column:created_at"`
 }
 
 // TODO: Add more models as needed
