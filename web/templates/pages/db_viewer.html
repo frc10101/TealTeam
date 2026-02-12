@@ -27,105 +27,82 @@
     </div>
     {{else}}
     
-    <div class="grid lg:grid-cols-3 gap-6">
-        <!-- Sidebar: 1 column -->
-        <div class="lg:col-span-1">
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="text-lg font-semibold">Database Schema</h2>
-                </div>
-                <div class="card-body p-0">
-                    {{if .Tables}}
-                    
-                    <!-- Core Entities -->
-                    <div class="border-b border-gray-600">
-                        <div class="px-4 py-2 bg-gray-700 border-b-accent-teal">
-                            <h3 class="text-xs font-semibold text-teal-300 uppercase tracking-wider">Core Entities</h3>
-                        </div>
-                        {{range .Tables}}
-                        {{if or (eq .Name "teams") (eq .Name "events") (eq .Name "users")}}
-                        <a 
-                            href="#"
-                            hx-get="/hx/development/db/table/{{.Name}}"
-                            hx-target="#table-content"
-                            hx-swap="innerHTML"
-                            hx-push-url="/development/db?table={{.Name}}"
-                            class="block px-4 py-2.5 hover:bg-gray-700 transition-colors {{if eq $.SelectedTable .Name}}bg-gray-700 border-l-4 border-teal-500 pl-3{{end}}"
-                        >
-                            <div class="flex items-center justify-between">
-                                <span class="font-medium text-gray-200">{{.Name}}</span>
-                                <span class="text-xs text-gray-400 bg-gray-700 px-2 py-0.5 rounded">{{.RowCount}}</span>
-                            </div>
-                        </a>
-                        {{end}}
-                        {{end}}
-                    </div>
-
-                    <!-- Relationships -->
-                    <div class="border-b border-gray-600">
-                        <div class="px-4 py-2 bg-gray-700 border-b-accent-red">
-                            <h3 class="text-xs font-semibold text-red-300 uppercase tracking-wider">Relationships</h3>
-                        </div>
-                        {{range .Tables}}
-                        {{if eq .Name "event_teams"}}
-                        <a 
-                            href="#"
-                            hx-get="/hx/development/db/table/{{.Name}}"
-                            hx-target="#table-content"
-                            hx-swap="innerHTML"
-                            hx-push-url="/development/db?table={{.Name}}"
-                            class="block px-4 py-2.5 hover:bg-gray-700 transition-colors {{if eq $.SelectedTable .Name}}bg-gray-700 border-l-4 border-teal-500 pl-3{{end}}"
-                        >
-                            <div class="flex items-center justify-between">
-                                <div>
-                                    <span class="font-medium text-gray-200">{{.Name}}</span>
-                                    <div class="text-xs text-gray-400 mt-0.5">teams ↔ events</div>
-                                </div>
-                                <span class="text-xs text-gray-400 bg-gray-700 px-2 py-0.5 rounded">{{.RowCount}}</span>
-                            </div>
-                        </a>
-                        {{end}}
-                        {{end}}
-                    </div>
-
-                    <!-- Match Data -->
-                    <div class="border-b border-gray-600">
-                        <div class="px-4 py-2 bg-gray-700 border-b-accent-yellow">
-                            <h3 class="text-xs font-semibold text-yellow-300 uppercase tracking-wider">Match Data</h3>
-                        </div>
-                        {{range .Tables}}
-                        {{if or (eq .Name "matches") (eq .Name "scouting_data")}}
-                        <a 
-                            href="#"
-                            hx-get="/hx/development/db/table/{{.Name}}"
-                            hx-target="#table-content"
-                            hx-swap="innerHTML"
-                            hx-push-url="/development/db?table={{.Name}}"
-                            class="block px-4 py-2.5 hover:bg-gray-700 transition-colors {{if eq $.SelectedTable .Name}}bg-gray-700 border-l-4 border-teal-500 pl-3{{end}}"
-                        >
-                            <div class="flex items-center justify-between">
-                                <div>
-                                    <span class="font-medium text-gray-200">{{.Name}}</span>
-                                    {{if eq .Name "scouting_data"}}
-                                    <div class="text-xs text-gray-400 mt-0.5">Team KPIs per match</div>
-                                    {{end}}
-                                </div>
-                                <span class="text-xs text-gray-400 bg-gray-700 px-2 py-0.5 rounded">{{.RowCount}}</span>
-                            </div>
-                        </a>
-                        {{end}}
-                        {{end}}
-                    </div>
-
-                    {{else}}
-                    <div class="px-4 py-3 text-gray-500 text-sm">No tables found</div>
-                    {{end}}
-                </div>
+    <!-- Tab Navigation and Content Container -->
+    <div id="db-container">
+        <!-- Tab Navigation -->
+        <div class="card mb-6">
+            <div class="flex border-b border-gray-700 overflow-x-auto">
+                <button
+                    hx-get="/development/db?tab=core"
+                    hx-target="#db-container"
+                    hx-swap="innerHTML"
+                    hx-push-url="/development/db?tab=core"
+                    class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{if or (eq .ActiveTab \"core\") (eq .ActiveTab \"\")}}border-teal-500 text-teal-300{{else}}border-transparent text-gray-400 hover:text-gray-300{{end}}"
+                >
+                    <span class="text-teal-300">●</span> Core Entities
+                </button>
+                <button
+                    hx-get="/development/db?tab=relationships"
+                    hx-target="#db-container"
+                    hx-swap="innerHTML"
+                    hx-push-url="/development/db?tab=relationships"
+                    class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{if eq .ActiveTab \"relationships\"}}border-red-500 text-red-300{{else}}border-transparent text-gray-400 hover:text-gray-300{{end}}"
+                >
+                    <span class="text-red-300">●</span> Relationships
+                </button>
+                <button
+                    hx-get="/development/db?tab=match_data"
+                    hx-target="#db-container"
+                    hx-swap="innerHTML"
+                    hx-push-url="/development/db?tab=match_data"
+                    class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{if eq .ActiveTab \"match_data\"}}border-yellow-500 text-yellow-300{{else}}border-transparent text-gray-400 hover:text-gray-300{{end}}"
+                >
+                    <span class="text-yellow-300">●</span> Match Data
+                </button>
+                <button
+                    hx-get="/development/db?tab=submissions"
+                    hx-target="#db-container"
+                    hx-swap="innerHTML"
+                    hx-push-url="/development/db?tab=submissions"
+                    class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{if eq .ActiveTab \"submissions\"}}border-purple-500 text-purple-300{{else}}border-transparent text-gray-400 hover:text-gray-300{{end}}"
+                >
+                    <span class="text-purple-300">●</span> Submissions
+                </button>
             </div>
         </div>
 
-        <!-- Table Content: 2 columns -->
-        <div class="lg:col-span-2">
+        {{if .Tables}}
+        <div class="space-y-6">
+            <!-- Table List -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="text-lg font-semibold">Available Tables</h2>
+                </div>
+                <div class="card-body">
+                    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                        {{range .Tables}}
+                        {{if or (and (or (eq $.ActiveTab \"core\") (eq $.ActiveTab \"\")) (or (eq .Name "teams") (eq .Name "events") (eq .Name "users"))) (and (eq $.ActiveTab \"relationships\") (eq .Name "event_teams")) (and (eq $.ActiveTab \"match_data\") (or (eq .Name "matches") (eq .Name "scouting_data"))) (and (eq $.ActiveTab \"submissions\") (or (eq .Name "scouting_submissions") (eq .Name "sessions")))}}
+                        <a
+                            href="#"
+                            hx-get="/hx/development/db/table/{{.Name}}"
+                            hx-target="#table-content"
+                            hx-swap="innerHTML"
+                            hx-push-url="/development/db?table={{.Name}}"
+                            class="p-3 rounded-lg border border-gray-700 hover:border-gray-600 hover:bg-gray-800 transition-colors {{if eq $.SelectedTable .Name}}bg-gray-800 border-teal-500{{end}}"
+                        >
+                            <div class="font-medium text-gray-200 text-sm">{{.Name}}</div>
+                            <div class="text-xs text-gray-400 mt-1">
+                                {{if eq .Name "scouting_data"}}Scouting data{{else if eq .Name "event_teams"}}Team-event mapping{{else if eq .Name "scouting_submissions"}}Pending submissions{{else if eq .Name "sessions"}}User sessions{{else}}{{.RowCount}} rows{{end}}
+                            </div>
+                            <div class="text-xs text-teal-400 font-semibold mt-2">{{.RowCount}} rows</div>
+                        </a>
+                        {{end}}
+                        {{end}}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Table Content -->
             <div id="table-content">
                 {{if .SelectedTable}}
                 <div 
@@ -147,12 +124,17 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/>
                         </svg>
                         <h3 class="mt-4 text-lg font-medium text-gray-200">Select a table</h3>
-                        <p class="mt-2 text-sm text-gray-400">Choose a table from the sidebar to view its contents</p>
+                        <p class="mt-2 text-sm text-gray-400">Click on a table above to view its contents</p>
                     </div>
                 </div>
                 {{end}}
             </div>
         </div>
+        {{else}}
+        <div class="card">
+            <div class="card-body text-center py-12 text-gray-500">No tables found</div>
+        </div>
+        {{end}}
     </div>
     {{end}}
 </div>

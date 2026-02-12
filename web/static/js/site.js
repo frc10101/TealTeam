@@ -70,12 +70,10 @@ if (mobileMenuBtn && mobileMenu) {
 else {
     console.warn('Mobile menu elements not found - btn:', !!mobileMenuBtn, 'menu:', !!mobileMenu);
 }
-
 const submissionForm = document.getElementById('scouting-form');
 const submissionHistoryList = document.getElementById('submission-history');
 const submissionHistoryEmpty = document.getElementById('submission-history-empty');
 const submissionHistoryKey = 'scoutingSubmissionHistory';
-
 function getSelectedText(id) {
     const select = document.getElementById(id);
     if (!select) {
@@ -84,7 +82,6 @@ function getSelectedText(id) {
     const option = select.options[select.selectedIndex];
     return option ? option.textContent?.trim() ?? '' : '';
 }
-
 function loadSubmissionHistory() {
     const raw = localStorage.getItem(submissionHistoryKey);
     if (!raw) {
@@ -99,41 +96,33 @@ function loadSubmissionHistory() {
         return [];
     }
 }
-
 function renderSubmissionHistory() {
     if (!submissionHistoryList || !submissionHistoryEmpty) {
         return;
     }
     const entries = loadSubmissionHistory();
     submissionHistoryList.innerHTML = '';
-
     if (!entries.length) {
         submissionHistoryEmpty.classList.remove('hidden');
         return;
     }
-
     submissionHistoryEmpty.classList.add('hidden');
     entries.forEach((entry) => {
         const item = document.createElement('li');
         item.className = 'rounded-lg border border-gray-700 bg-gray-900 px-3 py-2';
-
         const title = document.createElement('div');
         title.className = 'text-sm font-semibold text-gray-200';
         title.textContent = `${entry.matchType} - ${entry.team}`;
-
         const meta = document.createElement('div');
         meta.className = 'text-xs text-gray-400';
         meta.textContent = `${entry.event} | ${entry.alliance} ${entry.position} | ${entry.time}`;
-
         item.appendChild(title);
         item.appendChild(meta);
         submissionHistoryList.appendChild(item);
     });
 }
-
 if (submissionForm) {
     renderSubmissionHistory();
-
     submissionForm.addEventListener('submit', () => {
         const eventName = getSelectedText('event-id') || 'Event';
         const teamName = getSelectedText('team-id') || 'Team';
@@ -141,7 +130,6 @@ if (submissionForm) {
         const alliance = getSelectedText('alliance-color') || 'Alliance';
         const position = getSelectedText('alliance-position') || 'Pos';
         const time = new Date().toLocaleString();
-
         const entry = {
             event: eventName,
             team: teamName,
@@ -150,14 +138,12 @@ if (submissionForm) {
             position: position,
             time: time
         };
-
         const entries = loadSubmissionHistory();
         entries.unshift(entry);
         const trimmed = entries.slice(0, 5);
         localStorage.setItem(submissionHistoryKey, JSON.stringify(trimmed));
     });
 }
-
 const pickList = document.getElementById('pick-list');
 const pickListKey = 'leadScoutPickList';
 const pickListColorClasses = {
@@ -165,7 +151,6 @@ const pickListColorClasses = {
     yellow: ['bg-yellow-900', 'border-yellow-600', 'text-yellow-200'],
     teal: ['bg-teal-900', 'border-teal-500', 'text-teal-200']
 };
-
 function loadPickListState() {
     const raw = localStorage.getItem(pickListKey);
     if (!raw) {
@@ -180,25 +165,20 @@ function loadPickListState() {
         return {};
     }
 }
-
 function savePickListState(state) {
     localStorage.setItem(pickListKey, JSON.stringify(state));
 }
-
 function clearPickListColors(element) {
     Object.values(pickListColorClasses).forEach((classes) => {
         element.classList.remove(...classes);
     });
 }
-
 function applyPickListEntry(element, entry) {
     clearPickListColors(element);
     element.classList.add('bg-gray-900', 'border-gray-700');
-
     if (entry.color && pickListColorClasses[entry.color]) {
         element.classList.add(...pickListColorClasses[entry.color]);
     }
-
     const label = element.querySelector('.pick-list-label');
     const status = element.querySelector('.pick-list-status');
     if (label) {
@@ -210,7 +190,6 @@ function applyPickListEntry(element, entry) {
         status.textContent = entry.crossed ? '[X]' : '';
     }
 }
-
 if (pickList) {
     const state = loadPickListState();
     pickList.querySelectorAll('.pick-list-item').forEach((item) => {
@@ -220,23 +199,19 @@ if (pickList) {
         }
         applyPickListEntry(item, state[teamNumber] || {});
     });
-
     pickList.addEventListener('click', (event) => {
         const target = event.target;
         if (!target || !target.dataset.action) {
             return;
         }
-
         const item = target.closest('.pick-list-item');
         if (!item) {
             return;
         }
-
         const teamNumber = item.dataset.teamNumber;
         if (!teamNumber) {
             return;
         }
-
         const entry = state[teamNumber] || {};
         if (target.dataset.action === 'pick') {
             const color = target.dataset.color;
@@ -245,29 +220,15 @@ if (pickList) {
             }
             entry.crossed = false;
         }
-
         if (target.dataset.action === 'cross') {
             entry.crossed = !entry.crossed;
             if (entry.crossed) {
                 entry.color = undefined;
             }
         }
-
         state[teamNumber] = entry;
         savePickListState(state);
         applyPickListEntry(item, entry);
-    });
-}
-            try {
-                entries = JSON.parse(raw);
-            }
-            catch (error) {
-                console.warn('Invalid submission history payload', error);
-            }
-        }
-        entries.unshift(entry);
-        const trimmed = entries.slice(0, 5);
-        localStorage.setItem(submissionHistoryKey, JSON.stringify(trimmed));
     });
 }
 // TODO: Add UI utility functions here

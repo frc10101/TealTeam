@@ -39,10 +39,17 @@ func (h *Handler) HandleDBViewer(c *gin.Context) {
 		return
 	}
 
+	// Get the active tab from query param, default to "core"
+	activeTab := c.Query("tab")
+	if activeTab == "" {
+		activeTab = "core"
+	}
+
 	data := map[string]any{
 		"Title":       "Database Viewer",
 		"DBConnected": h.hasDB(),
 		"User":        user,
+		"ActiveTab":   activeTab,
 	}
 
 	if h.hasDB() {
