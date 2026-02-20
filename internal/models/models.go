@@ -21,6 +21,7 @@ type User struct {
 	TeamNumber   *int       `json:"team_number,omitempty" gorm:"column:team_number"`
 	Role         string     `json:"role" gorm:"column:role"`
 	IsAdmin      bool       `json:"is_admin" gorm:"column:is_admin"`
+	IsLeadScout  bool       `json:"is_lead_scout" gorm:"column:is_lead_scout"`
 	LastLogin    *time.Time `json:"last_login,omitempty" gorm:"column:last_login"`
 	CreatedAt    time.Time  `json:"created_at" gorm:"column:created_at"`
 	UpdatedAt    time.Time  `json:"updated_at" gorm:"column:updated_at"`

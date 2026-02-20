@@ -37,7 +37,7 @@
                     hx-target="#db-container"
                     hx-swap="innerHTML"
                     hx-push-url="/development/db?tab=core"
-                    class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{if or (eq .ActiveTab \"core\") (eq .ActiveTab \"\")}}border-teal-500 text-teal-300{{else}}border-transparent text-gray-400 hover:text-gray-300{{end}}"
+                        class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{if or (eq .ActiveTab "core") (eq .ActiveTab "")}}border-teal-500 text-teal-300{{else}}border-transparent text-gray-400 hover:text-gray-300{{end}}"
                 >
                     <span class="text-teal-300">●</span> Core Entities
                 </button>
@@ -46,7 +46,7 @@
                     hx-target="#db-container"
                     hx-swap="innerHTML"
                     hx-push-url="/development/db?tab=relationships"
-                    class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{if eq .ActiveTab \"relationships\"}}border-red-500 text-red-300{{else}}border-transparent text-gray-400 hover:text-gray-300{{end}}"
+                        class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{if eq .ActiveTab "relationships"}}border-red-500 text-red-300{{else}}border-transparent text-gray-400 hover:text-gray-300{{end}}"
                 >
                     <span class="text-red-300">●</span> Relationships
                 </button>
@@ -55,7 +55,7 @@
                     hx-target="#db-container"
                     hx-swap="innerHTML"
                     hx-push-url="/development/db?tab=match_data"
-                    class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{if eq .ActiveTab \"match_data\"}}border-yellow-500 text-yellow-300{{else}}border-transparent text-gray-400 hover:text-gray-300{{end}}"
+                        class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{if eq .ActiveTab "match_data"}}border-yellow-500 text-yellow-300{{else}}border-transparent text-gray-400 hover:text-gray-300{{end}}"
                 >
                     <span class="text-yellow-300">●</span> Match Data
                 </button>
@@ -64,7 +64,7 @@
                     hx-target="#db-container"
                     hx-swap="innerHTML"
                     hx-push-url="/development/db?tab=submissions"
-                    class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{if eq .ActiveTab \"submissions\"}}border-purple-500 text-purple-300{{else}}border-transparent text-gray-400 hover:text-gray-300{{end}}"
+                        class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{if eq .ActiveTab "submissions"}}border-purple-500 text-purple-300{{else}}border-transparent text-gray-400 hover:text-gray-300{{end}}"
                 >
                     <span class="text-purple-300">●</span> Submissions
                 </button>
@@ -81,7 +81,7 @@
                 <div class="card-body">
                     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                         {{range .Tables}}
-                        {{if or (and (or (eq $.ActiveTab \"core\") (eq $.ActiveTab \"\")) (or (eq .Name "teams") (eq .Name "events") (eq .Name "users"))) (and (eq $.ActiveTab \"relationships\") (eq .Name "event_teams")) (and (eq $.ActiveTab \"match_data\") (or (eq .Name "matches") (eq .Name "scouting_data"))) (and (eq $.ActiveTab \"submissions\") (or (eq .Name "scouting_submissions") (eq .Name "sessions")))}}
+                        {{if or (and (or (eq $.ActiveTab "core") (eq $.ActiveTab "")) (or (eq .Name "teams") (eq .Name "events") (eq .Name "users"))) (and (eq $.ActiveTab "relationships") (eq .Name "event_teams")) (and (eq $.ActiveTab "match_data") (or (eq .Name "matches") (eq .Name "scouting_data"))) (and (eq $.ActiveTab "submissions") (or (eq .Name "scouting_submissions") (eq .Name "sessions")))}}
                         <a
                             href="#"
                             hx-get="/hx/development/db/table/{{.Name}}"

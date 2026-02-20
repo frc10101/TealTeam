@@ -27,7 +27,7 @@
                     <div class="hidden sm:flex sm:gap-6">
                         <a href="/" class="text-gray-300 hover:text-teal-300 transition-colors text-sm font-medium">Home</a>
                         <a href="/submission" class="text-gray-300 hover:text-teal-300 transition-colors text-sm font-medium">Scouting Submission</a>
-                        {{if and .User .User.IsAdmin}}
+                        {{if and .User (or .User.IsAdmin .User.IsLeadScout)}}
                         <a href="/lead-scout" class="text-gray-300 hover:text-teal-300 transition-colors text-sm font-medium">Lead Scout Panel</a>
                         {{end}}
                     </div>
@@ -64,7 +64,7 @@
             <div id="mobile-menu" class="hidden sm:hidden pb-4">
                 <a href="/" class="block px-2 py-2 text-gray-300 hover:text-teal-300 hover:bg-gray-800 rounded transition-colors text-sm font-medium">Home</a>
                 <a href="/submission" class="block px-2 py-2 text-gray-300 hover:text-teal-300 hover:bg-gray-800 rounded transition-colors text-sm font-medium">Scouting Submission</a>
-                {{if and .User .User.IsAdmin}}
+                {{if and .User (or .User.IsAdmin .User.IsLeadScout)}}
                 <a href="/lead-scout" class="block px-2 py-2 text-gray-300 hover:text-teal-300 hover:bg-gray-800 rounded transition-colors text-sm font-medium">Lead Scout Panel</a>
                 {{end}}
                 {{if .User}}

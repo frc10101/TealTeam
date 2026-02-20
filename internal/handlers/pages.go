@@ -155,7 +155,7 @@ func (h *Handler) HandleAdminViewer(c *gin.Context) {
 		http.Redirect(c.Writer, c.Request, "/sign-in", http.StatusSeeOther)
 		return
 	}
-	if !user.IsAdmin {
+	if !user.IsAdmin && !user.IsLeadScout {
 		http.Redirect(c.Writer, c.Request, "/", http.StatusSeeOther)
 		return
 	}
@@ -167,6 +167,15 @@ func (h *Handler) HandleAdminViewer(c *gin.Context) {
 	}
 
 	if h.hasDB() {
+		session, err := h.GetSession(c)
+		if err == nil && session.SelectedEventID != nil {
+			data["SelectedEventID"] = *session.SelectedEventID
+			if topTeams, userTeam, aroundTeams, err := h.loadRankingSnapshot(c, *session.SelectedEventID, user.TeamNumber); err == nil {
+				data["TopRankedTeams"] = topTeams
+				data["UserRankedTeam"] = userTeam
+				data["AroundRankedTeams"] = aroundTeams
+			}
+		}
 		pending, err := h.loadPendingSubmissions(c)
 		if err == nil {
 			data["PendingSubmissions"] = pending
