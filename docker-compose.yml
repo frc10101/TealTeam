@@ -26,6 +26,8 @@ services:
     build: .
     container_name: tealteam_web
     restart: unless-stopped
+    env_file:
+      - .env.example
     environment:
       PORT: 8080
       DATABASE_URL: postgres://user:password@db:5432/yourdb?sslmode=disable

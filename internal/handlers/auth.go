@@ -138,6 +138,7 @@ func (h *Handler) HandleSignup(c *gin.Context) {
 	confirmPassword := c.PostForm("confirm-password")
 	teamNumber := strings.TrimSpace(c.PostForm("team-number"))
 	leadScout := strings.TrimSpace(c.PostForm("lead-scout")) != ""
+	coach := strings.TrimSpace(c.PostForm("coach")) != ""
 
 	if name == "" || email == "" || password == "" || confirmPassword == "" {
 		h.sendAuthResponse(c, false, "All fields are required", "")
@@ -199,6 +200,7 @@ func (h *Handler) HandleSignup(c *gin.Context) {
 		TeamNumber:   parsedTeamNumber,
 		Role:         "user",
 		IsLeadScout:  leadScout,
+		IsCoach:      coach,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
@@ -304,8 +306,11 @@ func (h *Handler) GetSessionUser(c *gin.Context) (*models.User, error) {
 	}
 
 	var user models.User
-	if err := h.db.Where("id = ?", session.UserID).First(&user).Error; err != nil {
-		return nil, fmt.Errorf("user not found: %w", err)
+	err = h.db.Where("id = ?", session.UserID).First(&user).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, fmt.Errorf("user not found")
+	} else if err != nil {
+		return nil, fmt.Errorf("database error: %w", err)
 	}
 
 	return &user, nil

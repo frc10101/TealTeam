@@ -95,9 +95,7 @@ if (mobileMenuBtn && mobileMenu) {
 type SubmissionHistoryEntry = {
   event: string;
   team: string;
-  matchType: string;
   alliance: string;
-  position: string;
   time: string;
 };
 
@@ -148,11 +146,11 @@ function renderSubmissionHistory(): void {
 
     const title = document.createElement('div');
     title.className = 'text-sm font-semibold text-gray-200';
-    title.textContent = `${entry.matchType} - ${entry.team}`;
+    title.textContent = `${entry.team}`;
 
     const meta = document.createElement('div');
     meta.className = 'text-xs text-gray-400';
-    meta.textContent = `${entry.event} | ${entry.alliance} ${entry.position} | ${entry.time}`;
+    meta.textContent = `${entry.event} | ${entry.alliance} | ${entry.time}`;
 
     item.appendChild(title);
     item.appendChild(meta);
@@ -166,17 +164,13 @@ if (submissionForm) {
   submissionForm.addEventListener('submit', () => {
     const eventName = getSelectedText('event-id') || 'Event';
     const teamName = getSelectedText('team-id') || 'Team';
-    const matchType = getSelectedText('match-type') || 'Match';
     const alliance = getSelectedText('alliance-color') || 'Alliance';
-    const position = getSelectedText('alliance-position') || 'Pos';
     const time = new Date().toLocaleString();
 
     const entry: SubmissionHistoryEntry = {
       event: eventName,
       team: teamName,
-      matchType: matchType,
       alliance: alliance,
-      position: position,
       time: time
     };
 

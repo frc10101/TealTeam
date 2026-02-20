@@ -112,10 +112,10 @@ function renderSubmissionHistory() {
         item.className = 'rounded-lg border border-gray-700 bg-gray-900 px-3 py-2';
         const title = document.createElement('div');
         title.className = 'text-sm font-semibold text-gray-200';
-        title.textContent = `${entry.matchType} - ${entry.team}`;
+        title.textContent = `${entry.team}`;
         const meta = document.createElement('div');
         meta.className = 'text-xs text-gray-400';
-        meta.textContent = `${entry.event} | ${entry.alliance} ${entry.position} | ${entry.time}`;
+        meta.textContent = `${entry.event} | ${entry.alliance} | ${entry.time}`;
         item.appendChild(title);
         item.appendChild(meta);
         submissionHistoryList.appendChild(item);
@@ -126,16 +126,12 @@ if (submissionForm) {
     submissionForm.addEventListener('submit', () => {
         const eventName = getSelectedText('event-id') || 'Event';
         const teamName = getSelectedText('team-id') || 'Team';
-        const matchType = getSelectedText('match-type') || 'Match';
         const alliance = getSelectedText('alliance-color') || 'Alliance';
-        const position = getSelectedText('alliance-position') || 'Pos';
         const time = new Date().toLocaleString();
         const entry = {
             event: eventName,
             team: teamName,
-            matchType: matchType,
             alliance: alliance,
-            position: position,
             time: time
         };
         const entries = loadSubmissionHistory();
