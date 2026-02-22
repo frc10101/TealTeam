@@ -137,6 +137,7 @@ func (h *Handler) HandleSignup(c *gin.Context) {
 	password := c.PostForm("password")
 	confirmPassword := c.PostForm("confirm-password")
 	teamNumber := strings.TrimSpace(c.PostForm("team-number"))
+	leadScout := strings.TrimSpace(c.PostForm("lead-scout")) != ""
 
 	if name == "" || email == "" || password == "" || confirmPassword == "" {
 		h.sendAuthResponse(c, false, "All fields are required", "")
@@ -197,6 +198,7 @@ func (h *Handler) HandleSignup(c *gin.Context) {
 		PasswordHash: passwordHash,
 		TeamNumber:   parsedTeamNumber,
 		Role:         "user",
+		IsLeadScout:  leadScout,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
