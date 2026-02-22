@@ -28,15 +28,16 @@
     {{else}}
     
     <!-- Tab Navigation and Content Container -->
-    <div id="db-container">
+    <div id="db-container" class="fade-swap">
         <!-- Tab Navigation -->
         <div class="card mb-6">
             <div class="flex border-b border-gray-700 overflow-x-auto">
                 <button
                     hx-get="/development/db?tab=core"
                     hx-target="#db-container"
-                    hx-swap="innerHTML"
+                    hx-swap="innerHTML transition:true"
                     hx-push-url="/development/db?tab=core"
+                    hx-indicator="#db-tabs-indicator"
                     class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{if or (eq .ActiveTab \"core\") (eq .ActiveTab \"\")}}border-teal-500 text-teal-300{{else}}border-transparent text-gray-400 hover:text-gray-300{{end}}"
                 >
                     <span class="text-teal-300">●</span> Core Entities
@@ -44,8 +45,9 @@
                 <button
                     hx-get="/development/db?tab=relationships"
                     hx-target="#db-container"
-                    hx-swap="innerHTML"
+                    hx-swap="innerHTML transition:true"
                     hx-push-url="/development/db?tab=relationships"
+                    hx-indicator="#db-tabs-indicator"
                     class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{if eq .ActiveTab \"relationships\"}}border-red-500 text-red-300{{else}}border-transparent text-gray-400 hover:text-gray-300{{end}}"
                 >
                     <span class="text-red-300">●</span> Relationships
@@ -53,8 +55,9 @@
                 <button
                     hx-get="/development/db?tab=match_data"
                     hx-target="#db-container"
-                    hx-swap="innerHTML"
+                    hx-swap="innerHTML transition:true"
                     hx-push-url="/development/db?tab=match_data"
+                    hx-indicator="#db-tabs-indicator"
                     class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{if eq .ActiveTab \"match_data\"}}border-yellow-500 text-yellow-300{{else}}border-transparent text-gray-400 hover:text-gray-300{{end}}"
                 >
                     <span class="text-yellow-300">●</span> Match Data
@@ -62,12 +65,20 @@
                 <button
                     hx-get="/development/db?tab=submissions"
                     hx-target="#db-container"
-                    hx-swap="innerHTML"
+                    hx-swap="innerHTML transition:true"
                     hx-push-url="/development/db?tab=submissions"
+                    hx-indicator="#db-tabs-indicator"
                     class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{if eq .ActiveTab \"submissions\"}}border-purple-500 text-purple-300{{else}}border-transparent text-gray-400 hover:text-gray-300{{end}}"
                 >
                     <span class="text-purple-300">●</span> Submissions
                 </button>
+            </div>
+        </div>
+
+        <div class="mb-4 flex items-center gap-2 text-xs text-gray-400">
+            <div id="db-tabs-indicator" class="htmx-indicator flex items-center gap-2">
+                <span class="loading-spinner"></span>
+                Updating view...
             </div>
         </div>
 
@@ -86,8 +97,9 @@
                             href="#"
                             hx-get="/hx/development/db/table/{{.Name}}"
                             hx-target="#table-content"
-                            hx-swap="innerHTML"
+                            hx-swap="innerHTML transition:true"
                             hx-push-url="/development/db?table={{.Name}}"
+                            hx-indicator="#table-content-indicator"
                             class="p-3 rounded-lg border border-gray-700 hover:border-gray-600 hover:bg-gray-800 transition-colors {{if eq $.SelectedTable .Name}}bg-gray-800 border-teal-500{{end}}"
                         >
                             <div class="font-medium text-gray-200 text-sm">{{.Name}}</div>
@@ -103,12 +115,13 @@
             </div>
 
             <!-- Table Content -->
-            <div id="table-content">
+            <div id="table-content" class="fade-swap">
                 {{if .SelectedTable}}
                 <div 
                     hx-get="/hx/development/db/table/{{.SelectedTable}}"
                     hx-trigger="load"
-                    hx-swap="innerHTML"
+                    hx-swap="innerHTML transition:true"
+                    hx-indicator="#table-content-indicator"
                 >
                     <div class="card">
                         <div class="card-body text-center py-8">
@@ -128,6 +141,12 @@
                     </div>
                 </div>
                 {{end}}
+            </div>
+            <div class="mt-4 flex items-center gap-2 text-xs text-gray-400">
+                <div id="table-content-indicator" class="htmx-indicator flex items-center gap-2">
+                    <span class="loading-spinner"></span>
+                    Loading table data...
+                </div>
             </div>
         </div>
         {{else}}

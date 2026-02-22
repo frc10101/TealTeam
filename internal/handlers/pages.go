@@ -24,39 +24,45 @@ func (h *Handler) HandleIndex(c *gin.Context) {
 		"User":    user,
 	}
 
-	if user != nil && h.hasDB() {
-		var events []struct {
-			ID   int
-			Name string
-		}
+	h.hydrateEventSelectionData(c, user, data)
 
-		if err := h.db.WithContext(c.Request.Context()).
-			Table("events").
-			Select("id, name").
-			Order("start_date").
-			Scan(&events).Error; err == nil {
-			data["Events"] = events
-		}
+	h.render(c, "index", data)
+}
 
-		session, err := h.GetSession(c)
-		if err == nil && session.SelectedEventID != nil {
-			data["SelectedEventID"] = *session.SelectedEventID
+func (h *Handler) hydrateEventSelectionData(c *gin.Context, user *models.User, data map[string]any) {
+	if user == nil || !h.hasDB() {
+		return
+	}
 
-			if user.TeamNumber != nil {
-				var teamMatchCount int64
-				_ = h.db.WithContext(c.Request.Context()).
-					Table("event_teams").
-					Joins("JOIN teams ON teams.id = event_teams.team_id").
-					Where("event_teams.event_id = ? AND teams.team_number = ?", *session.SelectedEventID, *user.TeamNumber).
-					Count(&teamMatchCount).Error
-				if teamMatchCount == 0 {
-					data["EventWarning"] = "Your team is not listed for this event yet."
-				}
+	var events []struct {
+		ID   int
+		Name string
+	}
+
+	if err := h.db.WithContext(c.Request.Context()).
+		Table("events").
+		Select("id, name").
+		Order("start_date").
+		Scan(&events).Error; err == nil {
+		data["Events"] = events
+	}
+
+	session, err := h.GetSession(c)
+	if err == nil && session.SelectedEventID != nil {
+		data["SelectedEventID"] = *session.SelectedEventID
+
+		if user.TeamNumber != nil {
+			var teamMatchCount int64
+			_ = h.db.WithContext(c.Request.Context()).
+				Table("event_teams").
+				Joins("JOIN teams ON teams.id = event_teams.team_id").
+				Where("event_teams.event_id = ? AND teams.team_number = ?", *session.SelectedEventID, *user.TeamNumber).
+				Count(&teamMatchCount).Error
+			if teamMatchCount == 0 {
+				data["EventWarning"] = "Your team is not listed for this event yet."
 			}
 		}
 	}
-
-	h.render(c, "index", data)
 }
 
 // HandleSubmissionPage renders the submission page
@@ -68,46 +74,7 @@ func (h *Handler) HandleSubmissionPage(c *gin.Context) {
 		return
 	}
 
-	data := map[string]any{
-		"Title":       "Scouting Submission",
-		"Description": "Submit scouting data for competitions",
-		"User":        user,
-	}
-
-	if h.hasDB() {
-		session, err := h.GetSession(c)
-		if err == nil && session.SelectedEventID != nil {
-			data["SelectedEventID"] = *session.SelectedEventID
-		}
-
-		var teams []struct {
-			ID         int
-			TeamNumber int
-			Name       string
-		}
-
-		if err := h.db.WithContext(c.Request.Context()).
-			Table("teams").
-			Select("id, team_number, name").
-			Order("team_number").
-			Scan(&teams).Error; err == nil {
-			data["Teams"] = teams
-		}
-
-		var events []struct {
-			ID   int
-			Name string
-		}
-
-		if err := h.db.WithContext(c.Request.Context()).
-			Table("events").
-			Select("id, name").
-			Order("start_date").
-			Scan(&events).Error; err == nil {
-			data["Events"] = events
-		}
-	}
-
+	data := h.buildSubmissionPageData(c, user)
 	h.render(c, "submission", data)
 }
 
@@ -119,12 +86,29 @@ func (h *Handler) HandleSelectEvent(c *gin.Context) {
 		return
 	}
 	if !h.hasDB() {
+		if c.GetHeader("HX-Request") == "true" {
+			data := map[string]any{
+				"User":       user,
+				"EventError": "Database unavailable",
+			}
+			h.renderPartial(c, "event_selection", data)
+			return
+		}
 		http.Error(c.Writer, "Database unavailable", http.StatusServiceUnavailable)
 		return
 	}
 
 	selectedEventID, err := parseRequiredInt(c, "event_id")
 	if err != nil {
+		if c.GetHeader("HX-Request") == "true" {
+			data := map[string]any{
+				"User":       user,
+				"EventError": err.Error(),
+			}
+			h.hydrateEventSelectionData(c, user, data)
+			h.renderPartial(c, "event_selection", data)
+			return
+		}
 		http.Error(c.Writer, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -139,11 +123,30 @@ func (h *Handler) HandleSelectEvent(c *gin.Context) {
 		Model(&models.Session{}).
 		Where("session_id = ?", session.SessionID).
 		Update("selected_event_id", selectedEventID).Error; err != nil {
+		if c.GetHeader("HX-Request") == "true" {
+			data := map[string]any{
+				"User":       user,
+				"EventError": "Failed to save event selection",
+			}
+			h.hydrateEventSelectionData(c, user, data)
+			h.renderPartial(c, "event_selection", data)
+			return
+		}
 		http.Error(c.Writer, "Failed to save event selection", http.StatusInternalServerError)
 		return
 	}
 
 	// TODO: If the user's team is in the event, hydrate match schedule and related data.
+
+	if c.GetHeader("HX-Request") == "true" {
+		data := map[string]any{
+			"User":         user,
+			"EventUpdated": true,
+		}
+		h.hydrateEventSelectionData(c, user, data)
+		h.renderPartial(c, "event_selection", data)
+		return
+	}
 
 	http.Redirect(c.Writer, c.Request, "/", http.StatusSeeOther)
 }

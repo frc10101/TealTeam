@@ -1,9 +1,27 @@
 {{define "scouting_form"}}
-<form action="/submission" method="post" class="space-y-6" id="scouting-form" data-history-form="scouting">
+<form
+    action="/submission"
+    method="post"
+    hx-post="/submission"
+    hx-target="#submission-panel"
+    hx-swap="outerHTML transition:true"
+    hx-indicator="#submission-spinner"
+    class="space-y-6"
+    id="scouting-form"
+    data-history-form="scouting">
     <div class="grid gap-6 md:grid-cols-2">
         <div>
             <label for="event-id" class="block text-sm font-medium text-gray-300 mb-2">Event</label>
-            <select id="event-id" name="event_id" required class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+            <select
+                id="event-id"
+                name="event_id"
+                required
+                hx-get="/hx/events/summary"
+                hx-target="#event-summary"
+                hx-include="#event-id"
+                hx-trigger="change"
+                hx-indicator="#event-summary-indicator"
+                class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
                 <option value="" disabled {{if not .SelectedEventID}}selected{{end}}>Select event</option>
                 {{if .Events}}
                     {{range .Events}}
@@ -161,7 +179,11 @@
         <textarea id="defendability" name="defendability" rows="3" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors" placeholder="How would we defend against them?"></textarea>
     </div>
 
-    <div class="flex justify-end">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <div id="submission-spinner" class="htmx-indicator flex items-center gap-2 text-xs text-gray-400">
+            <span class="loading-spinner"></span>
+            Saving submission...
+        </div>
         <button type="submit" class="px-6 py-2 rounded-lg text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 focus:ring-offset-gray-900 transition-colors">
             Submit Scouting Data
         </button>

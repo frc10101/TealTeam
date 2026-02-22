@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/frc10101/TealTeam/internal/models"
 	"github.com/gin-gonic/gin"
 )
 
@@ -99,6 +100,50 @@ type matchInfo struct {
 	MatchNumber int
 }
 
+func (h *Handler) buildSubmissionPageData(c *gin.Context, user *models.User) map[string]any {
+	data := map[string]any{
+		"Title":       "Scouting Submission",
+		"Description": "Submit scouting data for competitions",
+		"User":        user,
+	}
+
+	if h.hasDB() {
+		session, err := h.GetSession(c)
+		if err == nil && session.SelectedEventID != nil {
+			data["SelectedEventID"] = *session.SelectedEventID
+		}
+
+		var teams []struct {
+			ID         int
+			TeamNumber int
+			Name       string
+		}
+
+		if err := h.db.WithContext(c.Request.Context()).
+			Table("teams").
+			Select("id, team_number, name").
+			Order("team_number").
+			Scan(&teams).Error; err == nil {
+			data["Teams"] = teams
+		}
+
+		var events []struct {
+			ID   int
+			Name string
+		}
+
+		if err := h.db.WithContext(c.Request.Context()).
+			Table("events").
+			Select("id, name").
+			Order("start_date").
+			Scan(&events).Error; err == nil {
+			data["Events"] = events
+		}
+	}
+
+	return data
+}
+
 func (h *Handler) HandleSubmission(c *gin.Context) {
 	user, err := h.GetSessionUser(c)
 	if err != nil || user == nil {
@@ -107,12 +152,24 @@ func (h *Handler) HandleSubmission(c *gin.Context) {
 	}
 
 	if !h.hasDB() {
+		if c.GetHeader("HX-Request") == "true" {
+			data := h.buildSubmissionPageData(c, user)
+			data["SubmissionError"] = "Database not connected"
+			h.renderPartial(c, "submission_panel", data)
+			return
+		}
 		http.Error(c.Writer, "Database not connected", http.StatusServiceUnavailable)
 		return
 	}
 
 	input, err := parseScoutingForm(c)
 	if err != nil {
+		if c.GetHeader("HX-Request") == "true" {
+			data := h.buildSubmissionPageData(c, user)
+			data["SubmissionError"] = err.Error()
+			h.renderPartial(c, "submission_panel", data)
+			return
+		}
 		http.Error(c.Writer, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -120,12 +177,24 @@ func (h *Handler) HandleSubmission(c *gin.Context) {
 	ctx := c.Request.Context()
 	match, err := h.findNextMatchForTeam(ctx, input.EventID, input.MatchType, input.TeamID, input.AllianceColor, input.AlliancePosition)
 	if err != nil {
+		if c.GetHeader("HX-Request") == "true" {
+			data := h.buildSubmissionPageData(c, user)
+			data["SubmissionError"] = err.Error()
+			h.renderPartial(c, "submission_panel", data)
+			return
+		}
 		http.Error(c.Writer, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	metrics, err := h.deriveScoringMetrics(ctx, input.EventID, match.ID, input.TeamID)
 	if err != nil {
+		if c.GetHeader("HX-Request") == "true" {
+			data := h.buildSubmissionPageData(c, user)
+			data["SubmissionError"] = err.Error()
+			h.renderPartial(c, "submission_panel", data)
+			return
+		}
 		http.Error(c.Writer, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -156,7 +225,21 @@ func (h *Handler) HandleSubmission(c *gin.Context) {
 	}
 
 	if err := h.db.WithContext(ctx).Create(&submission).Error; err != nil {
+		if c.GetHeader("HX-Request") == "true" {
+			data := h.buildSubmissionPageData(c, user)
+			data["SubmissionError"] = fmt.Sprintf("Failed to queue submission: %v", err)
+			h.renderPartial(c, "submission_panel", data)
+			return
+		}
 		http.Error(c.Writer, fmt.Sprintf("Failed to queue submission: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	if c.GetHeader("HX-Request") == "true" {
+		data := h.buildSubmissionPageData(c, user)
+		matchLabel := formatMatchLabel(input.MatchType, match.MatchNumber)
+		data["SubmissionSuccess"] = fmt.Sprintf("Submission queued for %s. Thanks for scouting!", matchLabel)
+		h.renderPartial(c, "submission_panel", data)
 		return
 	}
 

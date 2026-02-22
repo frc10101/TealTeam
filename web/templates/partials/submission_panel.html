@@ -1,0 +1,17 @@
+{{define "submission_panel"}}
+<div id="submission-panel" class="space-y-4 fade-swap">
+    {{if .SubmissionError}}
+    <div class="rounded-lg border border-red-600 bg-red-900/30 px-4 py-2 text-sm text-red-200">
+        {{.SubmissionError}}
+    </div>
+    {{end}}
+
+    {{if .SubmissionSuccess}}
+    <div class="rounded-lg border border-teal-600 bg-teal-900/30 px-4 py-2 text-sm text-teal-200">
+        {{.SubmissionSuccess}}
+    </div>
+    {{end}}
+
+    {{template "scouting_form" .}}
+</div>
+{{end}}

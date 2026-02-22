@@ -1,0 +1,44 @@
+{{define "event_summary"}}
+<div id="event-summary" class="space-y-3 fade-swap">
+    {{if .EventSummaryError}}
+    <div class="rounded-lg border border-red-600 bg-red-900/30 px-4 py-2 text-sm text-red-200">
+        {{.EventSummaryError}}
+    </div>
+    {{else if .SelectedEventID}}
+    <div class="flex flex-wrap items-start justify-between gap-4">
+        <div>
+            <div class="text-xs uppercase tracking-wider text-gray-500">Active Event</div>
+            <div class="text-lg font-semibold text-gray-100">{{.SelectedEventName}}</div>
+        </div>
+        <div class="text-xs text-gray-500">Event ID {{.SelectedEventID}}</div>
+    </div>
+
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2">
+            <div class="text-xs text-gray-400">Teams</div>
+            <div class="text-sm font-semibold text-gray-100">{{.EventTeamsCount}}</div>
+        </div>
+        <div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2">
+            <div class="text-xs text-gray-400">Matches</div>
+            <div class="text-sm font-semibold text-gray-100">{{.EventMatchesCount}}</div>
+        </div>
+        <div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2">
+            <div class="text-xs text-gray-400">Scouted</div>
+            <div class="text-sm font-semibold text-gray-100">{{.EventScoutedCount}}</div>
+        </div>
+        <div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2">
+            <div class="text-xs text-gray-400">Pending</div>
+            <div class="text-sm font-semibold text-gray-100">{{.EventPendingCount}}</div>
+        </div>
+    </div>
+
+    {{if .EventWarning}}
+    <div class="rounded-lg border border-yellow-600 bg-yellow-900/30 px-4 py-2 text-sm text-yellow-200">
+        {{.EventWarning}}
+    </div>
+    {{end}}
+    {{else}}
+    <div class="text-sm text-gray-400">Select an event to see details.</div>
+    {{end}}
+</div>
+{{end}}

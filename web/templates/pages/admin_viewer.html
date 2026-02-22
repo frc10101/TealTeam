@@ -51,15 +51,15 @@
 							<tbody class="divide-y divide-gray-800">
 								{{if .PendingSubmissions}}
 								{{range .PendingSubmissions}}
-								<tr id="submission-{{.ID}}">
+								<tr id="submission-{{.ID}}" class="fade-swap">
 									<td class="py-3 pr-4 text-gray-200">{{.MatchLabel}}</td>
 									<td class="py-3 pr-4 text-gray-200">Team {{.TeamNumber}}</td>
 									<td class="py-3 pr-4 text-gray-400">{{.ScoutName}}</td>
 									<td class="py-3 pr-4 {{.FlagClass}}">{{.FlagLabel}}</td>
 									<td class="py-3 text-right">
 										<div class="flex justify-end gap-2">
-											<button class="btn btn-sm btn-primary" hx-post="/hx/lead-scout/submissions/{{.ID}}/approve" hx-target="#submission-{{.ID}}" hx-swap="outerHTML">Approve</button>
-											<button class="btn btn-sm btn-danger" hx-post="/hx/lead-scout/submissions/{{.ID}}/decline" hx-target="#submission-{{.ID}}" hx-swap="outerHTML">Decline</button>
+											<button class="btn btn-sm btn-primary" hx-post="/hx/lead-scout/submissions/{{.ID}}/approve" hx-target="#submission-{{.ID}}" hx-swap="outerHTML transition:true">Approve</button>
+											<button class="btn btn-sm btn-danger" hx-post="/hx/lead-scout/submissions/{{.ID}}/decline" hx-target="#submission-{{.ID}}" hx-swap="outerHTML transition:true">Decline</button>
 										</div>
 									</td>
 								</tr>

@@ -7,11 +7,31 @@
     </div>
 
     <div class="card">
+        <div class="card-header accent-yellow">
+            <h2 class="text-xl font-semibold text-gray-100">Event Snapshot</h2>
+        </div>
+        <div class="card-body">
+            <div
+                id="event-summary"
+                hx-get="/hx/events/summary"
+                hx-trigger="load"
+                hx-swap="innerHTML transition:true"
+                hx-indicator="#event-summary-indicator"
+                class="fade-swap"
+            ></div>
+            <div id="event-summary-indicator" class="htmx-indicator mt-3 flex items-center gap-2 text-xs text-gray-400">
+                <span class="loading-spinner"></span>
+                Loading event details...
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
         <div class="card-header accent-teal">
             <h2 class="text-xl font-semibold text-gray-100">Scouting Form</h2>
         </div>
         <div class="card-body">
-            {{template "scouting_form" .}}
+            {{template "submission_panel" .}}
         </div>
     </div>
 
