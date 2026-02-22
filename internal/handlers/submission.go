@@ -96,6 +96,7 @@ func (scoutingSubmission) TableName() string { return "scouting_submissions" }
 type matchInfo struct {
 	ID          int
 	MatchNumber int
+	MatchType   string
 }
 
 func (h *Handler) buildSubmissionPageData(c *gin.Context, user *models.User) map[string]any {
@@ -235,7 +236,7 @@ func (h *Handler) HandleSubmission(c *gin.Context) {
 
 	if c.GetHeader("HX-Request") == "true" {
 		data := h.buildSubmissionPageData(c, user)
-		matchLabel := formatMatchLabel(input.MatchType, match.MatchNumber)
+		matchLabel := formatMatchLabel(match.MatchType, match.MatchNumber)
 		data["SubmissionSuccess"] = fmt.Sprintf("Submission queued for %s. Thanks for scouting!", matchLabel)
 		h.renderPartial(c, "submission_panel", data)
 		return
@@ -316,7 +317,7 @@ func (h *Handler) findNextMatchForTeam(ctx context.Context, eventID int, teamID 
 	var matches []matchInfo
 	if err := h.db.WithContext(ctx).
 		Table("matches").
-		Select("id, match_number").
+		Select("id, match_number, match_type").
 		Where("event_id = ?", eventID).
 		Order("match_number").
 		Find(&matches).Error; err != nil {
