@@ -243,9 +243,9 @@ func SyncTeamForUser(ctx context.Context, db *gorm.DB, teamNumber int) (SyncResu
 				log.Printf("⚠️  team upsert failed (team %d): %v", team.TeamNumber, err)
 				continue
 			}
-			
+
 			uniqueTeams[id] = struct{}{}
-			
+
 			// If this is our target team, save the ID
 			if team.TeamNumber == teamNumber {
 				teamID = id

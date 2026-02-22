@@ -28,9 +28,9 @@ type MatchWithTeams struct {
 type MatchStatus string
 
 const (
-	MatchStatusUpcoming    MatchStatus = "upcoming"
-	MatchStatusInProgress  MatchStatus = "in_progress"
-	MatchStatusCompleted   MatchStatus = "completed"
+	MatchStatusUpcoming   MatchStatus = "upcoming"
+	MatchStatusInProgress MatchStatus = "in_progress"
+	MatchStatusCompleted  MatchStatus = "completed"
 )
 
 // GetMatchesForTeam retrieves all matches at an event, ordered by time
@@ -183,7 +183,6 @@ func (h *Handler) GetMatchesForTeamByStatus(ctx context.Context, eventID int, te
 
 	return current, upcoming, completed, nil
 }
-
 
 // GetEventsForTeam retrieves events that a team is attending
 // Filters by team_number in users table and event_teams registration

@@ -231,18 +231,18 @@ func (h *Handler) HandleSignup(c *gin.Context) {
 
 	if parsedTeamNumber != nil {
 		log.Printf("User %d (%s) signed up with team number: %d", user.ID, email, *parsedTeamNumber)
-		
+
 		// Sync team data from FIRST API for new team member
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
-			
+
 			result, err := frc.SyncTeamForUser(ctx, h.db, *parsedTeamNumber)
 			if err != nil {
 				log.Printf("Failed to sync team %d on signup: %v", *parsedTeamNumber, err)
 				return
 			}
-			log.Printf("Synced team %d on signup: events=%d teams=%d event_teams=%d", 
+			log.Printf("Synced team %d on signup: events=%d teams=%d event_teams=%d",
 				*parsedTeamNumber, result.Events, result.Teams, result.EventTeams)
 		}()
 	}

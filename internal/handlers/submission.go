@@ -356,7 +356,7 @@ func (h *Handler) HandleGetEventTeams(c *gin.Context) {
 			if name == "" {
 				name = strings.TrimSpace(firstTeam.NameFull)
 			}
-			
+
 			result := h.db.WithContext(ctx).Table("teams").
 				Where("team_number = ?", firstTeam.TeamNumber).
 				Assign(map[string]interface{}{
@@ -370,7 +370,7 @@ func (h *Handler) HandleGetEventTeams(c *gin.Context) {
 					"website":     firstTeam.Website,
 				}).
 				FirstOrCreate(&dbTeam)
-			
+
 			if result.Error == nil && dbTeam.ID > 0 {
 				html += fmt.Sprintf(`<option value="%d">%d - %s</option>`, dbTeam.ID, firstTeam.TeamNumber, name)
 			}
