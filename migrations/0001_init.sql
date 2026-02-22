@@ -58,12 +58,12 @@ CREATE TABLE IF NOT EXISTS teams (
     id SERIAL PRIMARY KEY,
     team_number INTEGER NOT NULL,
     name VARCHAR(255) NOT NULL,
-    school VARCHAR(255),
+    school TEXT,
     city VARCHAR(255),
     state VARCHAR(50),
     tba_key VARCHAR(20),
     nickname VARCHAR(255),
-    school_name VARCHAR(255),
+    school_name TEXT,
     country VARCHAR(100),
     rookie_year INTEGER,
     motto TEXT,
@@ -196,10 +196,9 @@ CREATE INDEX IF NOT EXISTS idx_matches_tba_key ON matches(tba_key);
 -- ============================================================
 CREATE TABLE IF NOT EXISTS scouting_data (
     id SERIAL PRIMARY KEY,
-    match_id INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
     team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
     alliance_color VARCHAR(10) NOT NULL,
-    alliance_position INTEGER NOT NULL,
     auto_score INTEGER DEFAULT 0,
     teleop_score INTEGER DEFAULT 0,
     endgame_score INTEGER DEFAULT 0,
@@ -230,12 +229,10 @@ CREATE TABLE IF NOT EXISTS scouting_data (
     scouted_at TIMESTAMP WITH TIME ZONE,
     scouter_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(match_id, team_id),
-    UNIQUE(match_id, alliance_color, alliance_position)
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_scouting_data_match ON scouting_data(match_id);
+CREATE INDEX IF NOT EXISTS idx_scouting_data_event ON scouting_data(event_id);
 CREATE INDEX IF NOT EXISTS idx_scouting_data_team ON scouting_data(team_id);
 CREATE INDEX IF NOT EXISTS idx_scouting_data_alliance ON scouting_data(alliance_color);
 
@@ -244,10 +241,9 @@ CREATE INDEX IF NOT EXISTS idx_scouting_data_alliance ON scouting_data(alliance_
 -- ============================================================
 CREATE TABLE IF NOT EXISTS scouting_submissions (
     id SERIAL PRIMARY KEY,
-    match_id INTEGER NOT NULL REFERENCES matches(id) ON DELETE CASCADE,
+    event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
     team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
     alliance_color VARCHAR(10) NOT NULL,
-    alliance_position INTEGER NOT NULL,
     auto_score INTEGER DEFAULT 0,
     teleop_score INTEGER DEFAULT 0,
     endgame_score INTEGER DEFAULT 0,
@@ -266,12 +262,10 @@ CREATE TABLE IF NOT EXISTS scouting_submissions (
     hang_position VARCHAR(20),
     scouted_at TIMESTAMP WITH TIME ZONE,
     scouter_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(match_id, team_id),
-    UNIQUE(match_id, alliance_color, alliance_position)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_scouting_submissions_match ON scouting_submissions(match_id);
+CREATE INDEX IF NOT EXISTS idx_scouting_submissions_event ON scouting_submissions(event_id);
 CREATE INDEX IF NOT EXISTS idx_scouting_submissions_team ON scouting_submissions(team_id);
 CREATE INDEX IF NOT EXISTS idx_scouting_submissions_scouter ON scouting_submissions(scouter_id);
 CREATE INDEX IF NOT EXISTS idx_scouting_submissions_created_at ON scouting_submissions(created_at);

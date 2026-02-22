@@ -13,7 +13,7 @@
         <div class="text-xs text-gray-500">Event ID {{.SelectedEventID}}</div>
     </div>
 
-    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="grid gap-3 sm:grid-cols-2">
         <div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2">
             <div class="text-xs text-gray-400">Teams</div>
             <div class="text-sm font-semibold text-gray-100">{{.EventTeamsCount}}</div>
@@ -22,15 +22,20 @@
             <div class="text-xs text-gray-400">Matches</div>
             <div class="text-sm font-semibold text-gray-100">{{.EventMatchesCount}}</div>
         </div>
-        <div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2">
-            <div class="text-xs text-gray-400">Scouted</div>
-            <div class="text-sm font-semibold text-gray-100">{{.EventScoutedCount}}</div>
-        </div>
-        <div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2">
-            <div class="text-xs text-gray-400">Pending</div>
-            <div class="text-sm font-semibold text-gray-100">{{.EventPendingCount}}</div>
+    </div>
+
+    {{if .EventTeams}}
+    <div class="rounded-lg border border-gray-700 bg-gray-900 px-4 py-3">
+        <div class="text-xs uppercase tracking-wider text-gray-400 mb-3">Teams at Event</div>
+        <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {{range .EventTeams}}
+            <div class="rounded border border-gray-600 bg-gray-800 px-2 py-1 text-sm text-gray-200">
+                {{.TeamNumber}} - {{.Name}}
+            </div>
+            {{end}}
         </div>
     </div>
+    {{end}}
 
     {{if .EventWarning}}
     <div class="rounded-lg border border-yellow-600 bg-yellow-900/30 px-4 py-2 text-sm text-yellow-200">

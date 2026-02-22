@@ -70,6 +70,72 @@ func (h *Handler) hydrateEventSelectionData(c *gin.Context, user *models.User, d
 	}
 }
 
+func (h *Handler) hydrateEventSummaryData(c *gin.Context, eventID int, data map[string]any) {
+	if !h.hasDB() {
+		return
+	}
+
+	// Fetch event name
+	var event struct {
+		Name string
+	}
+	if err := h.db.WithContext(c.Request.Context()).
+		Table("events").
+		Select("name").
+		Where("id = ?", eventID).
+		Scan(&event).Error; err == nil {
+		data["SelectedEventName"] = event.Name
+		data["SelectedEventID"] = eventID
+	}
+
+	// Count teams in event
+	var teamCount int64
+	if err := h.db.WithContext(c.Request.Context()).
+		Table("event_teams").
+		Where("event_id = ?", eventID).
+		Count(&teamCount).Error; err == nil {
+		data["EventTeamsCount"] = teamCount
+	}
+
+	// Count matches in event
+	var matchCount int64
+	if err := h.db.WithContext(c.Request.Context()).
+		Table("matches").
+		Where("event_id = ?", eventID).
+		Count(&matchCount).Error; err == nil {
+		data["EventMatchesCount"] = matchCount
+	}
+
+	// Fetch teams for the event
+	var teams []struct {
+		TeamNumber int
+		Name       string
+	}
+	if err := h.db.WithContext(c.Request.Context()).
+		Table("event_teams").
+		Joins("JOIN teams ON teams.id = event_teams.team_id").
+		Select("teams.team_number, teams.name").
+		Where("event_teams.event_id = ?", eventID).
+		Order("teams.team_number").
+		Scan(&teams).Error; err == nil {
+		data["EventTeams"] = teams
+	}
+
+	// Check if user's team is in the event
+	user, _ := h.GetSessionUser(c)
+	if user != nil && user.TeamNumber != nil {
+		var userTeamCount int64
+		_ = h.db.WithContext(c.Request.Context()).
+			Table("event_teams").
+			Joins("JOIN teams ON teams.id = event_teams.team_id").
+			Where("event_teams.event_id = ? AND teams.team_number = ?", eventID, *user.TeamNumber).
+			Count(&userTeamCount).Error
+		if userTeamCount == 0 {
+			data["EventWarning"] = "Your team is not listed for this event yet."
+		}
+	}
+}
+
 // HandleSubmissionPage renders the submission page
 func (h *Handler) HandleSubmissionPage(c *gin.Context) {
 	// Require authentication
@@ -149,6 +215,8 @@ func (h *Handler) HandleSelectEvent(c *gin.Context) {
 			"EventUpdated": true,
 		}
 		h.hydrateEventSelectionData(c, user, data)
+		// Load event summary data
+		h.hydrateEventSummaryData(c, selectedEventID, data)
 		h.renderPartial(c, "event_selection", data)
 		return
 	}
@@ -178,23 +246,25 @@ func (h *Handler) HandleAdminViewer(c *gin.Context) {
 		session, err := h.GetSession(c)
 		if err == nil && session.SelectedEventID != nil {
 			data["SelectedEventID"] = *session.SelectedEventID
+			sortKey := c.Query("team_sort")
+			data["TeamRankingSort"] = sortKey
 			if topTeams, userTeam, aroundTeams, err := h.loadRankingSnapshot(c, *session.SelectedEventID, user.TeamNumber); err == nil {
 				data["TopRankedTeams"] = topTeams
 				data["UserRankedTeam"] = userTeam
 				data["AroundRankedTeams"] = aroundTeams
 			}
-			// Load dashboard stats
-			if eventStats, err := h.loadDashboardStats(c, *session.SelectedEventID); err == nil {
-				data["DashboardStats"] = eventStats
+			// Load full team point rankings
+			if teamRankings, err := h.loadTeamPointRankings(c, *session.SelectedEventID, sortKey); err == nil {
+				data["TeamRankings"] = teamRankings
+			}
+			// Load pick list teams for the selected event
+			if teams, err := h.loadPickListTeams(c, *session.SelectedEventID); err == nil {
+				data["PickListTeams"] = teams
 			}
 		}
 		pending, err := h.loadPendingSubmissions(c)
 		if err == nil {
 			data["PendingSubmissions"] = pending
-		}
-		teams, err := h.loadPickListTeams(c)
-		if err == nil {
-			data["PickListTeams"] = teams
 		}
 	}
 
@@ -240,9 +310,8 @@ func (h *Handler) loadDashboardStats(c *gin.Context, eventID int) (map[string]an
 	}
 	if err := h.db.WithContext(c.Request.Context()).
 		Table("scouting_submissions").
-		Select("created_at").
-		Joins("JOIN matches ON matches.id = scouting_submissions.match_id").
-		Where("matches.event_id = ?", eventID).
+		Select("scouting_submissions.created_at").
+		Where("scouting_submissions.event_id = ?", eventID).
 		Order("scouting_submissions.created_at DESC").
 		Limit(1).
 		Scan(&lastSubmission).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {

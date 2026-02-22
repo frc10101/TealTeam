@@ -135,7 +135,7 @@ func (DBMatch) TableName() string { return "matches" }
 
 type DBScoutingData struct {
 	ID                int       `gorm:"column:id;primaryKey"`
-	MatchID           int       `gorm:"column:match_id"`
+	EventID           int       `gorm:"column:event_id"`
 	TeamID            int       `gorm:"column:team_id"`
 	AllianceColor     string    `gorm:"column:alliance_color"`
 	AlliancePosition  int       `gorm:"column:alliance_position"`
@@ -1158,7 +1158,7 @@ func insertMatches(db *gorm.DB, compID int, matches []Match) error {
 			if teamID == 0 {
 				continue
 			}
-			if err := insertMatchTeam(db, dbMatch.ID, teamID, "red", pos+1); err != nil {
+			if err := insertMatchTeam(db, dbMatch.EventID, teamID, "red", pos+1); err != nil {
 				return fmt.Errorf("failed to insert red team: %w", err)
 			}
 		}
@@ -1168,7 +1168,7 @@ func insertMatches(db *gorm.DB, compID int, matches []Match) error {
 			if teamID == 0 {
 				continue
 			}
-			if err := insertMatchTeam(db, dbMatch.ID, teamID, "blue", pos+1); err != nil {
+			if err := insertMatchTeam(db, dbMatch.EventID, teamID, "blue", pos+1); err != nil {
 				return fmt.Errorf("failed to insert blue team: %w", err)
 			}
 		}
@@ -1178,8 +1178,8 @@ func insertMatches(db *gorm.DB, compID int, matches []Match) error {
 	return nil
 }
 
-// insertMatchTeam inserts a team's scouting data for a specific match
-func insertMatchTeam(db *gorm.DB, matchID, teamID int, allianceColor string, position int) error {
+// insertMatchTeam inserts a team's scouting data for a specific event
+func insertMatchTeam(db *gorm.DB, eventID, teamID int, allianceColor string, position int) error {
 	// Generate random scouting data
 	startingPos := startingPositions[rand.Intn(len(startingPositions))]
 	autoTowerLevel := towerLevels[rand.Intn(len(towerLevels))]
@@ -1208,10 +1208,12 @@ func insertMatchTeam(db *gorm.DB, matchID, teamID int, allianceColor string, pos
 	scouterName := fmt.Sprintf("Scouter %d", rand.Intn(10)+1)
 
 	scouting := DBScoutingData{
-		MatchID:           matchID,
+		EventID:           eventID,
 		TeamID:            teamID,
 		AllianceColor:     allianceColor,
 		AlliancePosition:  position,
+					if err := insertMatchTeam(db, dbMatch.EventID, teamID, "red", pos+1); err != nil {
+					if err := insertMatchTeam(db, dbMatch.EventID, teamID, "blue", pos+1); err != nil {
 		AutoScore:         autoScore,
 		TeleopScore:       teleopScore,
 		EndgameScore:      endgameScore,
@@ -1312,42 +1314,7 @@ func printSummary(db *gorm.DB) {
 	}
 
 	for _, match := range sampleMatches {
-
-		// Get teams for this match
-		type teamRow struct {
-			TeamNumber       int
-			AllianceColor    string
-			AlliancePosition int
-		}
-		var teamRows []teamRow
-		if err := db.Model(&DBScoutingData{}).
-			Select("teams.team_number, scouting_data.alliance_color, scouting_data.alliance_position").
-			Joins("JOIN teams ON scouting_data.team_id = teams.id").
-			Joins("JOIN matches ON scouting_data.match_id = matches.id").
-			Where("matches.match_number = ? AND matches.event_id = ?", match.MatchNumber, 1).
-			Order("scouting_data.alliance_color DESC, scouting_data.alliance_position").
-			Scan(&teamRows).Error; err != nil {
-			log.Printf("   Could not fetch teams for match %d: %v", match.MatchNumber, err)
-			continue
-		}
-
-		redTeams := make([]int, 0, 3)
-		blueTeams := make([]int, 0, 3)
-
-		for _, row := range teamRows {
-			if row.AllianceColor == "red" {
-				redTeams = append(redTeams, row.TeamNumber)
-			} else {
-				blueTeams = append(blueTeams, row.TeamNumber)
-			}
-		}
-
-		// Sort for consistent display
-		sort.Ints(redTeams)
-		sort.Ints(blueTeams)
-
-		log.Printf("   Match %2d: Red %v vs Blue %v | Score: %d - %d",
-			match.MatchNumber, redTeams, blueTeams, match.RedScore, match.BlueScore)
+		log.Printf("   Match %2d | Score: %d - %d", match.MatchNumber, match.RedScore, match.BlueScore)
 	}
 
 	// Print team appearance stats
@@ -1362,8 +1329,7 @@ func printSummary(db *gorm.DB) {
 	if err := db.Model(&DBScoutingData{}).
 		Select("teams.team_number as team_number, COUNT(*) as appearances, SUM(CASE WHEN scouting_data.alliance_color = 'red' THEN 1 ELSE 0 END) as red_count, SUM(CASE WHEN scouting_data.alliance_color = 'blue' THEN 1 ELSE 0 END) as blue_count").
 		Joins("JOIN teams ON scouting_data.team_id = teams.id").
-		Joins("JOIN matches ON scouting_data.match_id = matches.id").
-		Where("matches.event_id = ?", 1).
+		Where("scouting_data.event_id = ?", 1).
 		Group("teams.team_number").
 		Order("teams.team_number").
 		Limit(10).

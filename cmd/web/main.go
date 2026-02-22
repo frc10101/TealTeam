@@ -102,6 +102,7 @@ func main() {
 	router.GET("/", h.HandleIndex)
 	router.GET("/submission", h.HandleSubmissionPage)
 	router.GET("/lead-scout", h.HandleAdminViewer)
+	router.GET("/lead-scout/submissions/:id", h.HandleViewSubmission)
 	router.GET("/drive-coach", h.HandleCoachViewer)
 	router.GET("/development/db", h.HandleDBViewer)
 	router.GET("/sign-in", h.HandleSignIn)
@@ -117,6 +118,8 @@ func main() {
 
 	// HTMX fragment routes (return HTML fragments only)
 	router.GET("/hx/development/db/table/:name", h.HandleDBTableContent)
+	router.GET("/hx/events/summary", h.HandleEventSummary)
+	router.GET("/submission/event-teams", h.HandleGetEventTeams)
 	router.POST("/hx/lead-scout/submissions/:id/approve", h.HandleApproveSubmission)
 	router.POST("/hx/lead-scout/submissions/:id/decline", h.HandleDeclineSubmission)
 

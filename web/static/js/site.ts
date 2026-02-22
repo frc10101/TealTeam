@@ -284,6 +284,48 @@ if (pickList) {
     savePickListState(state);
     applyPickListEntry(item, entry);
   });
+
+  // Drag and drop functionality
+  let draggedItem: HTMLElement | null = null;
+
+  pickList.addEventListener('dragstart', (event) => {
+    const target = event.target as HTMLElement;
+    if (target.classList.contains('pick-list-item')) {
+      draggedItem = target;
+      target.style.opacity = '0.4';
+    }
+  });
+
+  pickList.addEventListener('dragend', (event) => {
+    const target = event.target as HTMLElement;
+    if (target.classList.contains('pick-list-item')) {
+      target.style.opacity = '1';
+    }
+  });
+
+  pickList.addEventListener('dragover', (event) => {
+    event.preventDefault();
+  });
+
+  pickList.addEventListener('drop', (event) => {
+    event.preventDefault();
+    const target = event.target as HTMLElement;
+    const dropTarget = target.classList.contains('pick-list-item') 
+      ? target 
+      : target.closest('.pick-list-item') as HTMLElement | null;
+
+    if (draggedItem && dropTarget && draggedItem !== dropTarget) {
+      const allItems = Array.from(pickList.querySelectorAll('.pick-list-item'));
+      const draggedIndex = allItems.indexOf(draggedItem);
+      const dropIndex = allItems.indexOf(dropTarget);
+
+      if (draggedIndex < dropIndex) {
+        dropTarget.parentNode?.insertBefore(draggedItem, dropTarget.nextSibling);
+      } else {
+        dropTarget.parentNode?.insertBefore(draggedItem, dropTarget);
+      }
+    }
+  });
 }
 
 // TODO: Add UI utility functions here

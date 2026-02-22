@@ -164,6 +164,121 @@ func SyncNow(ctx context.Context, db *gorm.DB) (SyncResult, error) {
 	}, nil
 }
 
+// SyncTeamForUser pulls FIRST Events API data for a specific team when they sign in.
+// This syncs events, the specific team, and event_team relationships.
+func SyncTeamForUser(ctx context.Context, db *gorm.DB, teamNumber int) (SyncResult, error) {
+	if db == nil {
+		return SyncResult{}, fmt.Errorf("database unavailable")
+	}
+
+	username := strings.TrimSpace(os.Getenv("FIRST_API_USERNAME"))
+	key := strings.TrimSpace(os.Getenv("FIRST_API_KEY"))
+	if username == "" || key == "" {
+		return SyncResult{}, ErrSyncSkipped
+	}
+
+	season := defaultSeason
+	if seasonEnv := strings.TrimSpace(os.Getenv("FIRST_SEASON")); seasonEnv != "" {
+		if parsed, err := strconv.Atoi(seasonEnv); err == nil {
+			season = parsed
+		}
+	}
+
+	client := NewClient(username, key)
+
+	// Filter events by team number to get events this team is attending
+	filters := url.Values{}
+	filters.Set("teamNumber", strconv.Itoa(teamNumber))
+
+	log.Printf("📡 FIRST team sync starting for team %d (season %d)", teamNumber, season)
+	events, err := client.GetSeasonEvents(ctx, season, filters)
+	if err != nil {
+		return SyncResult{}, fmt.Errorf("events fetch failed: %w", err)
+	}
+
+	if len(events) == 0 {
+		log.Printf("⚠️  No events found for team %d in season %d", teamNumber, season)
+		return SyncResult{
+			Season:     season,
+			Events:     0,
+			Teams:      0,
+			EventTeams: 0,
+		}, nil
+	}
+
+	// Upsert events
+	eventIDs := make(map[string]int)
+	for _, evt := range events {
+		eventCode := eventCodeValue(evt)
+		if eventCode == "" {
+			log.Printf("⚠️  event missing code: %s", evt.Name)
+			continue
+		}
+		id, err := upsertEvent(ctx, db, evt)
+		if err != nil {
+			log.Printf("⚠️  event upsert failed (%s): %v", eventCode, err)
+			continue
+		}
+		eventIDs[eventCode] = id
+	}
+
+	log.Printf("✅ FIRST events synced for team %d: %d", teamNumber, len(eventIDs))
+
+	// For each event, get all teams and create event_team relationships
+	teamID := 0
+	uniqueTeams := make(map[int]struct{})
+	eventTeamCount := 0
+
+	for eventCode, eventID := range eventIDs {
+		teams, err := client.GetEventTeams(ctx, season, eventCode)
+		if err != nil {
+			log.Printf("⚠️  teams fetch failed (%s): %v", eventCode, err)
+			continue
+		}
+
+		// Upsert all teams from this event
+		for _, team := range teams {
+			id, err := upsertTeam(ctx, db, team)
+			if err != nil {
+				log.Printf("⚠️  team upsert failed (team %d): %v", team.TeamNumber, err)
+				continue
+			}
+			
+			uniqueTeams[id] = struct{}{}
+			
+			// If this is our target team, save the ID
+			if team.TeamNumber == teamNumber {
+				teamID = id
+			}
+
+			// Create event_team relationship for all teams
+			if err := upsertEventTeam(ctx, db, eventID, id); err != nil {
+				log.Printf("⚠️  event_teams upsert failed (event %d, team %d): %v", eventID, id, err)
+			} else {
+				eventTeamCount++
+			}
+		}
+	}
+
+	if teamID == 0 {
+		return SyncResult{
+			Season:     season,
+			Events:     len(eventIDs),
+			Teams:      len(uniqueTeams),
+			EventTeams: 0,
+		}, fmt.Errorf("team %d not found in any events", teamNumber)
+	}
+
+	log.Printf("✅ FIRST team sync complete for team %d: events=%d teams=%d event_teams=%d", teamNumber, len(eventIDs), len(uniqueTeams), eventTeamCount)
+
+	return SyncResult{
+		Season:     season,
+		Events:     len(eventIDs),
+		Teams:      1,
+		EventTeams: eventTeamCount,
+	}, nil
+}
+
 type dbEvent struct {
 	ID          int       `gorm:"column:id;primaryKey"`
 	Name        string    `gorm:"column:name"`

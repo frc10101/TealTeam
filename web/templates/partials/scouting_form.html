@@ -16,16 +16,15 @@
                 id="event-id"
                 name="event_id"
                 required
-                hx-get="/hx/events/summary"
-                hx-target="#event-summary"
-                hx-include="#event-id"
+                hx-get="/submission/event-teams"
+                hx-target="#team-id"
+                hx-swap="innerHTML"
                 hx-trigger="change"
-                hx-indicator="#event-summary-indicator"
                 class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
-                <option value="" disabled {{if not .SelectedEventID}}selected{{end}}>Select event</option>
+                <option value="" disabled selected>Select event</option>
                 {{if .Events}}
                     {{range .Events}}
-                        <option value="{{.ID}}" {{if eq .ID $.SelectedEventID}}selected{{end}}>{{.Name}}</option>
+                        <option value="{{.ID}}">{{.Name}}</option>
                     {{end}}
                 {{else}}
                     <option value="" disabled>No events available</option>
@@ -36,14 +35,7 @@
         <div>
             <label for="team-id" class="block text-sm font-medium text-gray-300 mb-2">Team</label>
             <select id="team-id" name="team_id" required class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
-                <option value="" disabled selected>Select team</option>
-                {{if .Teams}}
-                    {{range .Teams}}
-                        <option value="{{.ID}}">{{.TeamNumber}} - {{.Name}}</option>
-                    {{end}}
-                {{else}}
-                    <option value="" disabled>No teams available</option>
-                {{end}}
+                <option value="" disabled selected>Select event first</option>
             </select>
         </div>
 
@@ -55,6 +47,7 @@
                 <option value="blue">Blue</option>
             </select>
         </div>
+
 
         <div>
             <label for="starting-position" class="block text-sm font-medium text-gray-300 mb-2">Starting Position</label>

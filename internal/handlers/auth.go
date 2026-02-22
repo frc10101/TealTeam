@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/frc10101/TealTeam/internal/frc"
 	"github.com/frc10101/TealTeam/internal/models"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -126,6 +128,18 @@ func (h *Handler) HandleLogin(c *gin.Context) {
 		SameSite: http.SameSiteLaxMode,
 	})
 
+	// Sync team data if user has a team number
+	if user.TeamNumber != nil && *user.TeamNumber > 0 {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer cancel()
+			_, err := frc.SyncTeamForUser(ctx, h.db, *user.TeamNumber)
+			if err != nil {
+				log.Printf("Failed to sync team data for user %d (team %d): %v", user.ID, *user.TeamNumber, err)
+			}
+		}()
+	}
+
 	// Send success response with redirect
 	h.sendAuthResponse(c, true, "Login successful", "/")
 }
@@ -217,6 +231,20 @@ func (h *Handler) HandleSignup(c *gin.Context) {
 
 	if parsedTeamNumber != nil {
 		log.Printf("User %d (%s) signed up with team number: %d", user.ID, email, *parsedTeamNumber)
+		
+		// Sync team data from FIRST API for new team member
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			
+			result, err := frc.SyncTeamForUser(ctx, h.db, *parsedTeamNumber)
+			if err != nil {
+				log.Printf("Failed to sync team %d on signup: %v", *parsedTeamNumber, err)
+				return
+			}
+			log.Printf("Synced team %d on signup: events=%d teams=%d event_teams=%d", 
+				*parsedTeamNumber, result.Events, result.Teams, result.EventTeams)
+		}()
 	}
 
 	sessionID, err := generateSessionID()
@@ -247,6 +275,18 @@ func (h *Handler) HandleSignup(c *gin.Context) {
 		Secure:   false,
 		SameSite: http.SameSiteLaxMode,
 	})
+
+	// Sync team data if user has a team number
+	if parsedTeamNumber != nil && *parsedTeamNumber > 0 {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer cancel()
+			_, err := frc.SyncTeamForUser(ctx, h.db, *parsedTeamNumber)
+			if err != nil {
+				log.Printf("Failed to sync team data for user %d (team %d): %v", user.ID, *parsedTeamNumber, err)
+			}
+		}()
+	}
 
 	h.sendAuthResponse(c, true, "Account created successfully!", "/")
 }
