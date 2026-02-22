@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/frc10101/TealTeam/internal/db"
+	"github.com/frc10101/TealTeam/internal/frc"
 	"github.com/frc10101/TealTeam/internal/handlers"
 	"github.com/gin-gonic/gin"
 )
@@ -74,6 +75,8 @@ func main() {
 		if err := db.ApplyMigrations(database, "migrations"); err != nil {
 			log.Fatalf("Migration failed: %v", err)
 		}
+
+		frc.SyncOnBoot(database)
 	}
 	defer func() {
 		if database != nil {
@@ -99,6 +102,7 @@ func main() {
 	router.GET("/", h.HandleIndex)
 	router.GET("/submission", h.HandleSubmissionPage)
 	router.GET("/lead-scout", h.HandleAdminViewer)
+	router.GET("/drive-coach", h.HandleCoachViewer)
 	router.GET("/development/db", h.HandleDBViewer)
 	router.GET("/sign-in", h.HandleSignIn)
 	router.GET("/sign-up", h.HandleSignUp)
@@ -109,6 +113,7 @@ func main() {
 	router.POST("/api/auth/signup", h.HandleSignup)
 	router.POST("/api/auth/logout", h.HandleLogout)
 	router.POST("/api/events/select", h.HandleSelectEvent)
+	router.POST("/api/frc/sync", h.HandleFRCSync)
 
 	// HTMX fragment routes (return HTML fragments only)
 	router.GET("/hx/development/db/table/:name", h.HandleDBTableContent)

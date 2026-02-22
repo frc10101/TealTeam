@@ -194,7 +194,7 @@ func (h *Handler) HandleApproveSubmission(c *gin.Context) {
 		MatchID:          submission.MatchID,
 		TeamID:           submission.TeamID,
 		AllianceColor:    submission.AllianceColor,
-		AlliancePosition: submission.AlliancePosition,
+		AlliancePosition: submission.AlliancePosition, // Copied from submission (default 0)
 		AutoScore:        submission.AutoScore,
 		TeleopScore:      submission.TeleopScore,
 		EndgameScore:     submission.EndgameScore,

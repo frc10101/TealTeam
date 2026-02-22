@@ -30,6 +30,9 @@
                         {{if and .User (or .User.IsAdmin .User.IsLeadScout)}}
                         <a href="/lead-scout" class="text-gray-300 hover:text-teal-300 transition-colors text-sm font-medium">Lead Scout Panel</a>
                         {{end}}
+                        {{if and .User (or .User.IsAdmin .User.IsCoach)}}
+                        <a href="/drive-coach" class="text-gray-300 hover:text-teal-300 transition-colors text-sm font-medium">Drive Coach Panel</a>
+                        {{end}}
                     </div>
                 </div>
                 <div class="flex items-center gap-4">
@@ -66,6 +69,9 @@
                 <a href="/submission" class="block px-2 py-2 text-gray-300 hover:text-teal-300 hover:bg-gray-800 rounded transition-colors text-sm font-medium">Scouting Submission</a>
                 {{if and .User (or .User.IsAdmin .User.IsLeadScout)}}
                 <a href="/lead-scout" class="block px-2 py-2 text-gray-300 hover:text-teal-300 hover:bg-gray-800 rounded transition-colors text-sm font-medium">Lead Scout Panel</a>
+                {{end}}
+                {{if and .User (or .User.IsAdmin .User.IsCoach)}}
+                <a href="/drive-coach" class="block px-2 py-2 text-gray-300 hover:text-teal-300 hover:bg-gray-800 rounded transition-colors text-sm font-medium">Drive Coach Panel</a>
                 {{end}}
                 {{if .User}}
                 <div class="mt-2 pt-2 border-t border-gray-700">

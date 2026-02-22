@@ -16,8 +16,6 @@ type scoutingFormInput struct {
 	EventID          int
 	TeamID           int
 	AllianceColor    string
-	AlliancePosition int
-	MatchType        string
 	Notes            string
 	StartingPosition string
 	AutoPathData     string
@@ -175,7 +173,7 @@ func (h *Handler) HandleSubmission(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	match, err := h.findNextMatchForTeam(ctx, input.EventID, input.MatchType, input.TeamID, input.AllianceColor, input.AlliancePosition)
+	match, err := h.findNextMatchForTeam(ctx, input.EventID, input.TeamID, input.AllianceColor)
 	if err != nil {
 		if c.GetHeader("HX-Request") == "true" {
 			data := h.buildSubmissionPageData(c, user)
@@ -203,7 +201,7 @@ func (h *Handler) HandleSubmission(c *gin.Context) {
 		MatchID:          match.ID,
 		TeamID:           input.TeamID,
 		AllianceColor:    input.AllianceColor,
-		AlliancePosition: input.AlliancePosition,
+		AlliancePosition: 0, // Not collected from form, set to default
 		AutoScore:        metrics.AutoScore,
 		TeleopScore:      metrics.TeleopScore,
 		EndgameScore:     metrics.EndgameScore,
@@ -257,16 +255,10 @@ func parseScoutingForm(c *gin.Context) (scoutingFormInput, error) {
 	if err != nil {
 		return input, err
 	}
-	alliancePosition, err := parseRequiredInt(c, "alliance_position")
-	if err != nil {
-		return input, err
-	}
 
 	input.EventID = eventID
 	input.TeamID = teamID
-	input.AlliancePosition = alliancePosition
 	input.AllianceColor = strings.ToLower(strings.TrimSpace(c.PostForm("alliance_color")))
-	input.MatchType = strings.ToLower(strings.TrimSpace(c.PostForm("match_type")))
 	input.Notes = strings.TrimSpace(c.PostForm("notes"))
 	input.StartingPosition = strings.ToLower(strings.TrimSpace(c.PostForm("starting_position")))
 	input.AutoPathData = strings.TrimSpace(c.PostForm("auto_path_data"))
@@ -282,9 +274,6 @@ func parseScoutingForm(c *gin.Context) (scoutingFormInput, error) {
 
 	if input.AllianceColor == "" {
 		return input, fmt.Errorf("alliance_color is required")
-	}
-	if input.MatchType == "" {
-		return input, fmt.Errorf("match_type is required")
 	}
 	if input.StartingPosition == "" {
 		return input, fmt.Errorf("starting_position is required")
@@ -305,12 +294,12 @@ func parseRequiredInt(c *gin.Context, field string) (int, error) {
 	return parsed, nil
 }
 
-func (h *Handler) findNextMatchForTeam(ctx context.Context, eventID int, matchType string, teamID int, allianceColor string, alliancePosition int) (*matchInfo, error) {
+func (h *Handler) findNextMatchForTeam(ctx context.Context, eventID int, teamID int, allianceColor string) (*matchInfo, error) {
 	var scoutedCount int64
 	if err := h.db.WithContext(ctx).
 		Table("scouting_data").
 		Joins("JOIN matches ON matches.id = scouting_data.match_id").
-		Where("scouting_data.team_id = ? AND matches.event_id = ? AND matches.match_type = ?", teamID, eventID, matchType).
+		Where("scouting_data.team_id = ? AND matches.event_id = ?", teamID, eventID).
 		Count(&scoutedCount).Error; err != nil {
 		return nil, fmt.Errorf("failed to check existing submissions: %w", err)
 	}
@@ -318,7 +307,7 @@ func (h *Handler) findNextMatchForTeam(ctx context.Context, eventID int, matchTy
 	if err := h.db.WithContext(ctx).
 		Table("scouting_submissions").
 		Joins("JOIN matches ON matches.id = scouting_submissions.match_id").
-		Where("scouting_submissions.team_id = ? AND matches.event_id = ? AND matches.match_type = ?", teamID, eventID, matchType).
+		Where("scouting_submissions.team_id = ? AND matches.event_id = ?", teamID, eventID).
 		Count(&pendingCount).Error; err != nil {
 		return nil, fmt.Errorf("failed to check pending submissions: %w", err)
 	}
@@ -328,7 +317,7 @@ func (h *Handler) findNextMatchForTeam(ctx context.Context, eventID int, matchTy
 	if err := h.db.WithContext(ctx).
 		Table("matches").
 		Select("id, match_number").
-		Where("event_id = ? AND match_type = ?", eventID, matchType).
+		Where("event_id = ?", eventID).
 		Order("match_number").
 		Find(&matches).Error; err != nil {
 		return nil, fmt.Errorf("failed to load matches: %w", err)
@@ -360,25 +349,6 @@ func (h *Handler) findNextMatchForTeam(ctx context.Context, eventID int, matchTy
 			Where("match_id = ? AND team_id = ?", match.ID, teamID).
 			Count(&existingCount).Error; err != nil {
 			return nil, fmt.Errorf("failed to validate team match: %w", err)
-		}
-		if existingCount > 0 {
-			continue
-		}
-
-		if err := h.db.WithContext(ctx).
-			Table("scouting_data").
-			Where("match_id = ? AND alliance_color = ? AND alliance_position = ?", match.ID, allianceColor, alliancePosition).
-			Count(&existingCount).Error; err != nil {
-			return nil, fmt.Errorf("failed to validate alliance slot: %w", err)
-		}
-		if existingCount > 0 {
-			continue
-		}
-		if err := h.db.WithContext(ctx).
-			Table("scouting_submissions").
-			Where("match_id = ? AND alliance_color = ? AND alliance_position = ?", match.ID, allianceColor, alliancePosition).
-			Count(&existingCount).Error; err != nil {
-			return nil, fmt.Errorf("failed to validate alliance slot: %w", err)
 		}
 		if existingCount > 0 {
 			continue

@@ -160,6 +160,31 @@ go run ./cmd/web -env=prod
 
 ---
 
+## 🔄 FIRST Events API Sync
+
+On server startup, the app can populate `events`, `teams`, and `event_teams` from the FIRST Events API. If credentials are missing, sync is skipped.
+
+### Required
+- `FIRST_API_USERNAME`
+- `FIRST_API_KEY`
+
+### Optional
+- `FIRST_SEASON` (default: 2026)
+- `FIRST_SYNC_ON_BOOT` (default: true; set to `false` to skip)
+- `FIRST_EVENT_CODE` (sync a single event)
+- `FIRST_TEAM_NUMBER` (events for a specific team)
+- `FIRST_COUNTRY` (default: `USA` when no other filters are set)
+
+### On-Demand Refresh (Admin/Lead Scout)
+
+Trigger a manual refresh (requires an authenticated admin/lead scout session):
+
+```bash
+curl -X POST http://localhost:8080/api/frc/sync
+```
+
+---
+
 ## 🏭 Build Process
 
 ### Development Build
