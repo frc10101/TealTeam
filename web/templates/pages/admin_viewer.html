@@ -9,19 +9,19 @@
 		<div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
 			<div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-center">
 				<div class="text-xs uppercase tracking-wider text-gray-400">Event</div>
-				<div class="text-sm font-semibold text-gray-100">Week 1</div>
+				<div class="text-sm font-semibold text-gray-100">{{.DashboardStats.EventLabel}}</div>
 			</div>
 			<div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-center">
 				<div class="text-xs uppercase tracking-wider text-gray-400">Submissions</div>
-				<div class="text-sm font-semibold text-teal-300">18 pending</div>
+				<div class="text-sm font-semibold text-teal-300">{{len .PendingSubmissions}} pending</div>
 			</div>
 			<div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-center">
 				<div class="text-xs uppercase tracking-wider text-gray-400">Matches</div>
-				<div class="text-sm font-semibold text-gray-100">32 tracked</div>
+				<div class="text-sm font-semibold text-gray-100">{{.DashboardStats.MatchCount}} tracked</div>
 			</div>
 			<div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-center">
 				<div class="text-xs uppercase tracking-wider text-gray-400">Data Sync</div>
-				<div class="text-sm font-semibold text-yellow-300">2m ago</div>
+				<div class="text-sm font-semibold text-yellow-300">{{.DashboardStats.LastSyncLabel}}</div>
 			</div>
 		</div>
 	</div>
