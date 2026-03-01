@@ -1,26 +1,24 @@
-# Render Blueprint - Infrastructure as Code
-# https://render.com/docs/blueprint-spec
-
 services:
-  # Web Service
   - type: web
     name: tealteam
     runtime: docker
-    repo: https://github.com/NotMaxwell/TealTeam # Update with your repo
-    branch: main
-    plan: free # or starter, standard, etc.
-    healthCheckPath: /
+    # ... existing config ...
     envVars:
       - key: PORT
         value: 8080
+      - key: GIN_MODE
+        value: release
+      - key: ENVIRONMENT
+        value: production
+      - key: TRUST_PROXY
+        value: true
       - key: DATABASE_URL
         fromDatabase:
           name: tealteam-db
           property: connectionString
-
-databases:
-  # PostgreSQL Database
-  - name: tealteam-db
-    plan: free # free tier: 1GB storage, expires after 90 days
-    databaseName: tealteam
-    user: tealteam
+      - key: FIRST_API_USERNAME
+        sync: false
+      - key: FIRST_API_KEY
+        sync: false
+      - key: TBA_AUTH_KEY
+        sync: false
