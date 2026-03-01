@@ -6,7 +6,7 @@ services:
   - type: web
     name: tealteam
     runtime: docker
-    repo: https://github.com/yourusername/TealTeam # Update with your repo
+    repo: https://github.com/NotMaxwell/TealTeam # Update with your repo
     branch: main
     plan: free # or starter, standard, etc.
     healthCheckPath: /
