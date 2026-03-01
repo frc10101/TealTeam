@@ -65,3 +65,4 @@ render-build.log
 # Coverage
 coverage.out
 coverage.html
+build/
