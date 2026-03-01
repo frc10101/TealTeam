@@ -5,7 +5,8 @@
 	<div class="card-header accent-teal">
 		<h2 class="text-lg font-semibold text-gray-100">Event Summary</h2>
 	</div>
-	<div class="card-body">
+	<div class="card-body space-y-4">
+		<!-- Primary Stats: Rank, Record, Matches, Qual Average, DQ Count -->
 		<div class="grid grid-cols-2 md:grid-cols-5 gap-3">
 			<!-- TBA Rank -->
 			{{if .TeamStats.Rank}}
@@ -27,6 +28,33 @@
 			</div>
 			{{end}}
 			
+			<!-- Matches Played -->
+			{{if gt .TeamStats.MatchesPlayed 0}}
+			<div class="rounded-lg border border-gray-700 bg-gray-900 px-4 py-3">
+				<div class="text-xs text-gray-400 uppercase">Matches</div>
+				<div class="text-lg font-semibold text-gray-100">{{.TeamStats.MatchesPlayed}}</div>
+			</div>
+			{{end}}
+			
+			<!-- Qual Average -->
+			{{if .TeamStats.QualAverage}}
+			<div class="rounded-lg border border-blue-700/50 bg-blue-900/20 px-4 py-3">
+				<div class="text-xs text-blue-400 uppercase">Qual Avg</div>
+				<div class="text-lg font-semibold text-blue-300">{{printf "%.1f" .TeamStats.QualAverage}}</div>
+			</div>
+			{{end}}
+			
+			<!-- DQ Count -->
+			{{if gt .TeamStats.DQCount 0}}
+			<div class="rounded-lg border border-red-700/50 bg-red-900/20 px-4 py-3">
+				<div class="text-xs text-red-400 uppercase">DQs</div>
+				<div class="text-lg font-semibold text-red-300">{{.TeamStats.DQCount}}</div>
+			</div>
+			{{end}}
+		</div>
+
+		<!-- OPR Stats: OPR, DPR, CCWM -->
+		<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
 			<!-- OPR -->
 			{{if .TeamStats.OPR}}
 			<div class="rounded-lg border border-teal-700/50 bg-teal-900/20 px-4 py-3">
@@ -51,6 +79,60 @@
 			</div>
 			{{end}}
 		</div>
+
+		<!-- Component OPRs: Auto OPR, Teleop OPR, Endgame OPR -->
+		{{if or .TeamStats.AutoOPR .TeamStats.TeleopOPR .TeamStats.EndgameOPR}}
+		<div class="grid grid-cols-3 gap-3">
+			{{if .TeamStats.AutoOPR}}
+			<div class="rounded-lg border border-yellow-700/50 bg-yellow-900/20 px-4 py-3">
+				<div class="text-xs text-yellow-400 uppercase">Auto OPR</div>
+				<div class="text-lg font-semibold text-yellow-300">{{printf "%.1f" .TeamStats.AutoOPR}}</div>
+			</div>
+			{{end}}
+			{{if .TeamStats.TeleopOPR}}
+			<div class="rounded-lg border border-blue-700/50 bg-blue-900/20 px-4 py-3">
+				<div class="text-xs text-blue-400 uppercase">Teleop OPR</div>
+				<div class="text-lg font-semibold text-blue-300">{{printf "%.1f" .TeamStats.TeleopOPR}}</div>
+			</div>
+			{{end}}
+			{{if .TeamStats.EndgameOPR}}
+			<div class="rounded-lg border border-purple-700/50 bg-purple-900/20 px-4 py-3">
+				<div class="text-xs text-purple-400 uppercase">Endgame OPR</div>
+				<div class="text-lg font-semibold text-purple-300">{{printf "%.1f" .TeamStats.EndgameOPR}}</div>
+			</div>
+			{{end}}
+		</div>
+		{{end}}
+
+		<!-- District Points: Qual Points, Elim Points, Award Points, Alliance Points -->
+		{{if or .TeamStats.QualPoints .TeamStats.ElimPoints .TeamStats.AwardPoints .TeamStats.AlliancePoints}}
+		<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+			{{if .TeamStats.QualPoints}}
+			<div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2">
+				<div class="text-xs text-gray-400 uppercase">Qual Points</div>
+				<div class="font-semibold text-gray-100">{{.TeamStats.QualPoints}}</div>
+			</div>
+			{{end}}
+			{{if .TeamStats.ElimPoints}}
+			<div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2">
+				<div class="text-xs text-gray-400 uppercase">Elim Points</div>
+				<div class="font-semibold text-gray-100">{{.TeamStats.ElimPoints}}</div>
+			</div>
+			{{end}}
+			{{if .TeamStats.AwardPoints}}
+			<div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2">
+				<div class="text-xs text-gray-400 uppercase">Award Points</div>
+				<div class="font-semibold text-gray-100">{{.TeamStats.AwardPoints}}</div>
+			</div>
+			{{end}}
+			{{if .TeamStats.AlliancePoints}}
+			<div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2">
+				<div class="text-xs text-gray-400 uppercase">Alliance Points</div>
+				<div class="font-semibold text-gray-100">{{.TeamStats.AlliancePoints}}</div>
+			</div>
+			{{end}}
+		</div>
+		{{end}}
 	</div>
 </div>
 {{end}}
