@@ -36,10 +36,26 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-4">
+                    <form action="/teams" method="get" class="hidden md:flex items-center gap-2">
+                        <label for="nav-team-search" class="sr-only">Search team</label>
+                        <input
+                            id="nav-team-search"
+                            name="team"
+                            type="number"
+                            min="1"
+                            inputmode="numeric"
+                            placeholder="Team #"
+                            class="w-28 rounded-lg border border-gray-700 bg-gray-900 px-3 py-1.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        />
+                        <button type="submit" class="btn btn-secondary btn-sm">Search</button>
+                    </form>
                     {{if .User}}
                     <!-- Logged in user -->
                     <div class="hidden sm:flex items-center gap-4">
                         <span class="text-gray-400 text-sm">{{.User.Name}}</span>
+                        <a href="/account" class="text-sm font-medium text-gray-300 hover:text-teal-300 transition-colors px-3 py-1.5 rounded-lg border border-gray-700 hover:border-teal-500">
+                            Account
+                        </a>
                         <button 
                             hx-post="/api/auth/logout"
                             hx-swap="none"
@@ -65,6 +81,21 @@
             </div>
             <!-- Mobile menu -->
             <div id="mobile-menu" class="hidden sm:hidden pb-4">
+                <form action="/teams" method="get" class="px-2 py-2">
+                    <label for="mobile-team-search" class="sr-only">Search team</label>
+                    <div class="flex gap-2">
+                        <input
+                            id="mobile-team-search"
+                            name="team"
+                            type="number"
+                            min="1"
+                            inputmode="numeric"
+                            placeholder="Team #"
+                            class="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                        />
+                        <button type="submit" class="btn btn-secondary btn-sm">Search</button>
+                    </div>
+                </form>
                 <a href="/" class="block px-2 py-2 text-gray-300 hover:text-teal-300 hover:bg-gray-800 rounded transition-colors text-sm font-medium">Home</a>
                 <a href="/submission" class="block px-2 py-2 text-gray-300 hover:text-teal-300 hover:bg-gray-800 rounded transition-colors text-sm font-medium">Scouting Submission</a>
                 {{if and .User (or .User.IsAdmin .User.IsLeadScout)}}
@@ -76,6 +107,7 @@
                 {{if .User}}
                 <div class="mt-2 pt-2 border-t border-gray-700">
                     <span class="block px-2 py-2 text-gray-400 text-sm">{{.User.Name}}</span>
+                    <a href="/account" class="block px-2 py-2 text-gray-300 hover:text-teal-300 hover:bg-gray-800 rounded transition-colors text-sm font-medium">Account</a>
                     <button 
                         hx-post="/api/auth/logout"
                         hx-swap="none"

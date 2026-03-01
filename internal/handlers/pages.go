@@ -1,15 +1,10 @@
 package handlers
 
 import (
-	"database/sql"
-	"errors"
-	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/frc10101/TealTeam/internal/models"
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // HandleIndex renders the home page
@@ -39,6 +34,12 @@ func (h *Handler) hydrateEventSelectionData(c *gin.Context, user *models.User, d
 		return
 	}
 
+	// Get event IDs available to this user (filtered by team registration)
+	eventIDs, err := h.GetAvailableEventsForUser(c.Request.Context(), user)
+	if err != nil || len(eventIDs) == 0 {
+		return
+	}
+
 	var events []struct {
 		ID   int
 		Name string
@@ -47,6 +48,7 @@ func (h *Handler) hydrateEventSelectionData(c *gin.Context, user *models.User, d
 	if err := h.db.WithContext(c.Request.Context()).
 		Table("events").
 		Select("id, name").
+		Where("id IN ?", eventIDs).
 		Order("start_date").
 		Scan(&events).Error; err == nil {
 		data["Events"] = events
@@ -269,89 +271,6 @@ func (h *Handler) HandleAdminViewer(c *gin.Context) {
 	}
 
 	h.render(c, "admin_viewer", data)
-}
-
-func (h *Handler) loadDashboardStats(c *gin.Context, eventID int) (map[string]any, error) {
-	stats := make(map[string]any)
-
-	// Load event
-	var event struct {
-		Name string
-		Week *int
-	}
-	if err := h.db.WithContext(c.Request.Context()).
-		Table("events").
-		Select("name, week").
-		Where("id = ?", eventID).
-		Scan(&event).Error; err != nil {
-		return nil, err
-	}
-
-	// Display week if available, otherwise use event name
-	eventLabel := event.Name
-	if event.Week != nil {
-		eventLabel = fmt.Sprintf("Week %d", *event.Week)
-	}
-	stats["EventLabel"] = eventLabel
-
-	// Count total matches for this event
-	var matchCount int64
-	if err := h.db.WithContext(c.Request.Context()).
-		Table("matches").
-		Where("event_id = ?", eventID).
-		Count(&matchCount).Error; err != nil {
-		return nil, err
-	}
-	stats["MatchCount"] = matchCount
-
-	// Get most recent submission time to calculate "last sync"
-	var lastSubmission struct {
-		CreatedAt sql.NullTime
-	}
-	if err := h.db.WithContext(c.Request.Context()).
-		Table("scouting_submissions").
-		Select("scouting_submissions.created_at").
-		Where("scouting_submissions.event_id = ?", eventID).
-		Order("scouting_submissions.created_at DESC").
-		Limit(1).
-		Scan(&lastSubmission).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, err
-	}
-
-	// Calculate time since last submission
-	lastSyncLabel := "No submissions yet"
-	if lastSubmission.CreatedAt.Valid {
-		timeSince := time.Since(lastSubmission.CreatedAt.Time)
-		lastSyncLabel = h.formatTimeSince(timeSince)
-	}
-	stats["LastSyncLabel"] = lastSyncLabel
-
-	return stats, nil
-}
-
-func (h *Handler) formatTimeSince(d time.Duration) string {
-	if d < time.Minute {
-		return "just now"
-	}
-	if d < time.Hour {
-		minutes := int(d.Minutes())
-		if minutes == 1 {
-			return "1m ago"
-		}
-		return fmt.Sprintf("%dm ago", minutes)
-	}
-	if d < 24*time.Hour {
-		hours := int(d.Hours())
-		if hours == 1 {
-			return "1h ago"
-		}
-		return fmt.Sprintf("%dh ago", hours)
-	}
-	days := int(d.Hours() / 24)
-	if days == 1 {
-		return "1d ago"
-	}
-	return fmt.Sprintf("%dd ago", days)
 }
 
 func (h *Handler) HandleSignIn(c *gin.Context) {

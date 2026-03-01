@@ -10,7 +10,6 @@
 | Match Type | Qualification, Playoff | Round type |
 | Notes | Free text | Qualitative notes |
 | Starting Position | Left, Right, Center | Pre-match setup |
-| Auto Path Data | Visual path map | Autonomous movement sketch |
 | Defense Rating | Low, Mid, High | Defensive capability |
 | Bump | Yes (default to no) | Robot mobility type |
 | Trench | Yes (default to no) | Robot mobility type |

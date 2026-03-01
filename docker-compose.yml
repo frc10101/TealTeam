@@ -27,19 +27,54 @@ services:
     container_name: tealteam_web
     restart: unless-stopped
     env_file:
-      - .env.example
+      - .env
     environment:
       PORT: 8080
       DATABASE_URL: postgres://user:password@db:5432/yourdb?sslmode=disable
+      # Explicitly pass environment variables from .env
+      FIRST_API_USERNAME: ${FIRST_API_USERNAME}
+      FIRST_API_KEY: ${FIRST_API_KEY}
+      FIRST_SEASON: ${FIRST_SEASON}
+      FIRST_SYNC_ON_BOOT: ${FIRST_SYNC_ON_BOOT}
+      FIRST_EVENT_CODE: ${FIRST_EVENT_CODE}
+      FIRST_TEAM_NUMBER: ${FIRST_TEAM_NUMBER}
+      FIRST_COUNTRY: ${FIRST_COUNTRY}
+      TBA_AUTH_KEY: ${TBA_AUTH_KEY}
     ports:
       - "8080:8080"
     depends_on:
       db:
         condition: service_healthy
-    # Note: Removed volume mount - CSS/JS are built inside Docker
-    # For template hot-reload during development, uncomment:
-    # volumes:
-    #   - ./web/templates:/app/web/templates
+    # Note: Volume mount enabled for template hot-reload during development
+    volumes:
+      - ./web/templates:/app/web/templates
+
+  # Test service - runs Go tests
+  test:
+    build:
+      context: .
+      target: builder
+    container_name: tealteam_test
+    working_dir: /app
+    env_file:
+      - .env
+    environment:
+      CGO_ENABLED: 0
+      DATABASE_URL: postgres://user:password@db:5432/yourdb?sslmode=disable
+      FIRST_API_USERNAME: ${FIRST_API_USERNAME}
+      FIRST_API_KEY: ${FIRST_API_KEY}
+      FIRST_SEASON: ${FIRST_SEASON}
+      FIRST_SYNC_ON_BOOT: ${FIRST_SYNC_ON_BOOT}
+      FIRST_EVENT_CODE: ${FIRST_EVENT_CODE}
+      FIRST_TEAM_NUMBER: ${FIRST_TEAM_NUMBER}
+      FIRST_COUNTRY: ${FIRST_COUNTRY}
+      TBA_AUTH_KEY: ${TBA_AUTH_KEY}
+    command: go test -v -cover ./...
+    volumes:
+      - .:/app
+    depends_on:
+      db:
+        condition: service_healthy
 
   # Optional: Adminer for database management
   adminer:

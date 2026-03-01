@@ -9,7 +9,6 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- ============================================================
 DROP TABLE IF EXISTS zebra_data CASCADE;
 DROP TABLE IF EXISTS awards CASCADE;
-DROP TABLE IF EXISTS auto_paths CASCADE;
 DROP TABLE IF EXISTS team_event_stats CASCADE;
 DROP TABLE IF EXISTS scouting_submissions CASCADE;
 DROP TABLE IF EXISTS scouting_data CASCADE;
@@ -205,8 +204,6 @@ CREATE TABLE IF NOT EXISTS scouting_data (
     notes TEXT,
     scouter_name VARCHAR(255),
     starting_position VARCHAR(20),
-    auto_path_data JSONB,
-    auto_path_image_url TEXT,
     auto_tower_level VARCHAR(20),
     auto_hand INTEGER DEFAULT 0,
     scoring_rating INTEGER CHECK (scoring_rating >= 1 AND scoring_rating <= 5),
@@ -249,7 +246,6 @@ CREATE TABLE IF NOT EXISTS scouting_submissions (
     endgame_score INTEGER DEFAULT 0,
     notes TEXT,
     starting_position VARCHAR(20),
-    auto_path_data JSONB,
     defense_rating VARCHAR(20),
     traversal VARCHAR(20),
     throughput VARCHAR(20),
@@ -302,24 +298,6 @@ CREATE TABLE IF NOT EXISTS team_event_stats (
 
 CREATE INDEX IF NOT EXISTS idx_team_event_stats_team ON team_event_stats(team_id);
 CREATE INDEX IF NOT EXISTS idx_team_event_stats_event ON team_event_stats(event_id);
-
--- ============================================================
--- AUTO PATHS
--- ============================================================
-CREATE TABLE IF NOT EXISTS auto_paths (
-    id SERIAL PRIMARY KEY,
-    team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
-    name VARCHAR(255),
-    description TEXT,
-    path_data JSONB NOT NULL,
-    starting_position VARCHAR(20),
-    times_used INTEGER DEFAULT 0,
-    avg_success_rate DECIMAL(5, 2),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_auto_paths_team ON auto_paths(team_id);
 
 -- ============================================================
 -- AWARDS
@@ -391,11 +369,5 @@ CREATE TRIGGER update_scouting_data_updated_at
 DROP TRIGGER IF EXISTS update_team_event_stats_updated_at ON team_event_stats;
 CREATE TRIGGER update_team_event_stats_updated_at
     BEFORE UPDATE ON team_event_stats
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
-
-DROP TRIGGER IF EXISTS update_auto_paths_updated_at ON auto_paths;
-CREATE TRIGGER update_auto_paths_updated_at
-    BEFORE UPDATE ON auto_paths
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();

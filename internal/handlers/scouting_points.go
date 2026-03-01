@@ -40,9 +40,10 @@ var defaultScoutingPointConfig = scoutingPointConfig{
 		"passing":   2,
 	},
 	HangLevel: map[string]int{
-		"l1": 2,
-		"l2": 4,
-		"l3": 6,
+		"none": 0,
+		"l1":   2,
+		"l2":   4,
+		"l3":   6,
 	},
 	AutoHang: map[string]int{
 		"yes": 3,

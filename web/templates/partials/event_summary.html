@@ -30,7 +30,7 @@
         <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {{range .EventTeams}}
             <div class="rounded border border-gray-600 bg-gray-800 px-2 py-1 text-sm text-gray-200">
-                {{.TeamNumber}} - {{.Name}}
+                <a href="/teams?team={{.TeamNumber}}" class="text-teal-300 hover:text-teal-200">{{.TeamNumber}}</a> - {{.Name}}
             </div>
             {{end}}
         </div>

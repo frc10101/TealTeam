@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/frc10101/TealTeam/internal/models"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -166,6 +167,7 @@ func SyncNow(ctx context.Context, db *gorm.DB) (SyncResult, error) {
 
 // SyncTeamForUser pulls FIRST Events API data for a specific team when they sign in.
 // This syncs events, the specific team, and event_team relationships.
+// Also fetches TBA statistics for all events the team is attending.
 func SyncTeamForUser(ctx context.Context, db *gorm.DB, teamNumber int) (SyncResult, error) {
 	if db == nil {
 		return SyncResult{}, fmt.Errorf("database unavailable")
@@ -271,12 +273,175 @@ func SyncTeamForUser(ctx context.Context, db *gorm.DB, teamNumber int) (SyncResu
 
 	log.Printf("✅ FIRST team sync complete for team %d: events=%d teams=%d event_teams=%d", teamNumber, len(eventIDs), len(uniqueTeams), eventTeamCount)
 
+	// Sync TBA stats for all events the team is attending (done in background)
+	// Use background context instead of the passed context (which may be cancelled)
+	go syncTeamTBAStatsForUser(db, teamID, eventIDs)
+
 	return SyncResult{
 		Season:     season,
 		Events:     len(eventIDs),
 		Teams:      1,
 		EventTeams: eventTeamCount,
 	}, nil
+}
+
+// syncTeamTBAStatsForUser syncs TBA statistics for all events a team is attending
+// This is called as a background task when a user signs up/logs in with a team
+// Uses its own background context to avoid cancellation from HTTP request context
+func syncTeamTBAStatsForUser(db *gorm.DB, teamID int, eventIDs map[string]int) {
+	// Create background context that won't be cancelled when HTTP request completes
+	ctx := context.Background()
+
+	tbaKey := strings.TrimSpace(os.Getenv("TBA_AUTH_KEY"))
+	if tbaKey == "" {
+		log.Printf("ℹ️  TBA_AUTH_KEY not configured, skipping TBA stats sync for team %d", teamID)
+		return
+	}
+
+	tbaClient := NewTBAClient(tbaKey)
+
+	// Sync TBA stats for each event
+	for eventCode, eventID := range eventIDs {
+		// Get event details to find TBA key
+		var event models.Event
+		if err := db.WithContext(ctx).
+			Table("events").
+			Where("id = ?", eventID).
+			First(&event).Error; err != nil {
+			log.Printf("⚠️  Failed to fetch event details for event %d: %v", eventID, err)
+			continue
+		}
+
+		if event.TBAKey == nil || *event.TBAKey == "" {
+			log.Printf("⚠️  Event %d (%s) has no TBA key, skipping stats sync", eventID, eventCode)
+			continue
+		}
+
+		// Set a reasonable timeout for this operation
+		syncCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+
+		// Fetch OPR data
+		oprData, err := tbaClient.GetEventOPRs(syncCtx, *event.TBAKey)
+		if err != nil {
+			log.Printf("⚠️  Failed to fetch OPR data for event %d: %v", eventID, err)
+			cancel()
+			continue
+		}
+
+		// Fetch component OPR data
+		componentData, err := tbaClient.GetEventComponentOPRs(syncCtx, *event.TBAKey)
+		if err != nil {
+			log.Printf("⚠️  Failed to fetch component OPR data for event %d: %v", eventID, err)
+			// Non-critical, continue
+		}
+
+		// Fetch rankings
+		rankings, err := tbaClient.GetEventRankings(syncCtx, *event.TBAKey)
+		if err != nil {
+			log.Printf("⚠️  Failed to fetch rankings for event %d: %v", eventID, err)
+			cancel()
+			continue
+		}
+
+		// Build lookup maps
+		rankingsByTeamKey := make(map[string]RankingInfo)
+		for _, ranking := range rankings {
+			rankingsByTeamKey[ranking.TeamKey] = ranking
+		}
+
+		autoOPRMap := make(map[string]float64)
+		teleopOPRMap := make(map[string]float64)
+		endgameOPRMap := make(map[string]float64)
+		if componentData != nil {
+			autoOPRMap = componentData.AutoOPRs
+			teleopOPRMap = componentData.TeleopOPRs
+			endgameOPRMap = componentData.EndgameOPRs
+		}
+
+		// Get all teams at this event and update their stats
+		var eventTeams []struct {
+			TeamID     int
+			TBAKey     *string
+			TeamNumber int
+		}
+
+		if err := db.WithContext(syncCtx).
+			Table("event_teams").
+			Select("teams.id as team_id, teams.tba_key, teams.team_number").
+			Joins("JOIN teams ON teams.id = event_teams.team_id").
+			Where("event_teams.event_id = ?", eventID).
+			Scan(&eventTeams).Error; err != nil {
+			log.Printf("⚠️  Failed to fetch event teams for event %d: %v", eventID, err)
+			cancel()
+			continue
+		}
+
+		statsUpdated := 0
+		for _, et := range eventTeams {
+			stats := models.TeamEventStats{
+				TeamID:  et.TeamID,
+				EventID: eventID,
+			}
+
+			tbaKey := et.TBAKey
+			if tbaKey == nil {
+				tbaKey = toPtr(fmt.Sprintf("frc%d", et.TeamNumber))
+			}
+
+			// Set OPR stats
+			if opr, ok := oprData.OPRs[*tbaKey]; ok {
+				stats.OPR = &opr
+			}
+			if dpr, ok := oprData.DPRs[*tbaKey]; ok {
+				stats.DPR = &dpr
+			}
+			if ccwm, ok := oprData.CCWMs[*tbaKey]; ok {
+				stats.CCWM = &ccwm
+			}
+
+			// Set component OPR stats
+			if autoOPR, ok := autoOPRMap[*tbaKey]; ok {
+				stats.AutoOPR = &autoOPR
+			}
+			if teleopOPR, ok := teleopOPRMap[*tbaKey]; ok {
+				stats.TeleopOPR = &teleopOPR
+			}
+			if endgameOPR, ok := endgameOPRMap[*tbaKey]; ok {
+				stats.EndgameOPR = &endgameOPR
+			}
+
+			// Set ranking stats
+			if ranking, ok := rankingsByTeamKey[*tbaKey]; ok {
+				stats.Rank = &ranking.Rank
+				stats.MatchesPlayed = ranking.MatchesPlayed
+				stats.QualAverage = toPtr(ranking.QualAverage)
+				stats.Wins = ranking.Record.Wins
+				stats.Losses = ranking.Record.Losses
+				stats.Ties = ranking.Record.Ties
+				stats.DQCount = ranking.Dq
+				stats.QualPoints = toPtr(int64(ranking.QualPoints))
+				stats.ElimPoints = toPtr(int64(ranking.ElimPoints))
+				stats.AwardPoints = toPtr(int64(ranking.AwardPoints))
+				stats.AlliancePoints = toPtr(int64(ranking.AlliancePoints))
+				stats.TotalPoints = toPtr(int64(ranking.TotalPoints))
+			}
+
+			// Upsert the stats
+			if err := db.WithContext(syncCtx).
+				Clauses(clause.OnConflict{
+					Columns:   []clause.Column{{Name: "team_id"}, {Name: "event_id"}},
+					DoUpdates: clause.AssignmentColumns([]string{"opr", "dpr", "ccwm", "auto_opr", "teleop_opr", "endgame_opr", "rank", "matches_played", "qual_average", "wins", "losses", "ties", "dq_count", "qual_points", "elim_points", "award_points", "alliance_points", "total_points", "updated_at"}),
+				}).
+				Create(&stats).Error; err != nil {
+				log.Printf("⚠️  Failed to upsert team stats (team %d, event %d): %v", et.TeamID, eventID, err)
+			} else {
+				statsUpdated++
+			}
+		}
+
+		log.Printf("✅ Synced TBA stats for %d teams at event %d", statsUpdated, eventID)
+		cancel()
+	}
 }
 
 type dbEvent struct {
@@ -335,19 +500,26 @@ func upsertEvent(ctx context.Context, db *gorm.DB, evt Event) (int, error) {
 
 	location := joinNonEmpty([]string{evt.Venue, evt.City, evt.StateProv, evt.Country}, ", ")
 
+	// Extract year from date for TBA key format
+	year := startDate.Year()
+
+	// Construct TBA key: {year}{event_code_lowercase}
+	// Example: 2026mabil, 2026week0, etc.
+	tbaKey := fmt.Sprintf("%d%s", year, strings.ToLower(eventCode))
+
 	record := dbEvent{
 		Name:        evt.Name,
 		Location:    location,
 		StartDate:   startDate,
 		EndDate:     endDate,
-		TBAKey:      eventCode,
+		TBAKey:      tbaKey,
 		EventType:   evt.Type,
 		DistrictKey: evt.DistrictCode,
 		Week:        evt.WeekNumber,
 	}
 
 	result := db.WithContext(ctx).
-		Where("tba_key = ?", eventCode).
+		Where("tba_key = ?", tbaKey).
 		Assign(record).
 		FirstOrCreate(&record)
 	return record.ID, result.Error

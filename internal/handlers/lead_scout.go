@@ -57,18 +57,17 @@ type teamPointSummary struct {
 
 func (h *Handler) loadPendingSubmissions(c *gin.Context) ([]pendingSubmissionRow, error) {
 	var rows []struct {
-		ID           int
-		EventName    string
-		TeamNumber   int
-		TeamName     string
-		ScoutName    sql.NullString
-		AutoPathData sql.NullString
-		Notes        sql.NullString
+		ID         int
+		EventName  string
+		TeamNumber int
+		TeamName   string
+		ScoutName  sql.NullString
+		Notes      sql.NullString
 	}
 
 	if err := h.db.WithContext(c.Request.Context()).
 		Table("scouting_submissions").
-		Select("scouting_submissions.id, events.name as event_name, teams.team_number, teams.name as team_name, users.name as scout_name, CAST(scouting_submissions.auto_path_data AS text) as auto_path_data, scouting_submissions.notes").
+		Select("scouting_submissions.id, events.name as event_name, teams.team_number, teams.name as team_name, users.name as scout_name, scouting_submissions.notes").
 		Joins("JOIN events ON events.id = scouting_submissions.event_id").
 		Joins("JOIN teams ON teams.id = scouting_submissions.team_id").
 		Joins("LEFT JOIN users ON users.id = scouting_submissions.scouter_id").
@@ -86,10 +85,7 @@ func (h *Handler) loadPendingSubmissions(c *gin.Context) ([]pendingSubmissionRow
 
 		flagLabel := "Clean"
 		flagClass := "text-teal-300"
-		if strings.TrimSpace(row.AutoPathData.String) == "" {
-			flagLabel = "Missing auto note"
-			flagClass = "text-yellow-300"
-		} else if strings.TrimSpace(row.Notes.String) == "" {
+		if strings.TrimSpace(row.Notes.String) == "" {
 			flagLabel = "Missing notes"
 			flagClass = "text-yellow-300"
 		}
@@ -106,18 +102,6 @@ func (h *Handler) loadPendingSubmissions(c *gin.Context) ([]pendingSubmissionRow
 	}
 
 	return submissions, nil
-}
-
-func formatMatchLabel(matchType string, matchNumber int) string {
-	normalized := strings.ToLower(strings.TrimSpace(matchType))
-	switch normalized {
-	case "qualification":
-		return fmt.Sprintf("Q%d", matchNumber)
-	case "playoff":
-		return fmt.Sprintf("P%d", matchNumber)
-	default:
-		return fmt.Sprintf("M%d", matchNumber)
-	}
 }
 
 func (h *Handler) loadPickListTeams(c *gin.Context, eventID int) ([]pickListTeam, error) {
@@ -347,7 +331,6 @@ func (h *Handler) HandleApproveSubmission(c *gin.Context) {
 		EndgameScore:     submission.EndgameScore,
 		Notes:            submission.Notes,
 		StartingPosition: submission.StartingPosition,
-		AutoPathData:     submission.AutoPathData,
 		DefenseRating:    submission.DefenseRating,
 		Traversal:        submission.Traversal,
 		Throughput:       submission.Throughput,
@@ -427,7 +410,6 @@ type submissionDetailRow struct {
 	EndgameScore     int
 	Notes            string
 	StartingPosition string
-	AutoPathData     string
 	DefenseRating    string
 	Traversal        string
 	Throughput       string
@@ -470,7 +452,6 @@ func (h *Handler) HandleViewSubmission(c *gin.Context) {
 		EndgameScore     int
 		Notes            string
 		StartingPosition string
-		AutoPathData     sql.NullString
 		DefenseRating    string
 		Traversal        string
 		Throughput       string
@@ -497,7 +478,6 @@ func (h *Handler) HandleViewSubmission(c *gin.Context) {
 			scouting_submissions.endgame_score,
 			scouting_submissions.notes,
 			scouting_submissions.starting_position,
-			CAST(scouting_submissions.auto_path_data AS text) as auto_path_data,
 			scouting_submissions.defense_rating,
 			scouting_submissions.traversal,
 			scouting_submissions.throughput,
@@ -533,10 +513,7 @@ func (h *Handler) HandleViewSubmission(c *gin.Context) {
 
 	flagLabel := "Clean"
 	flagClass := "text-teal-300"
-	if strings.TrimSpace(submission.AutoPathData.String) == "" {
-		flagLabel = "Missing auto note"
-		flagClass = "text-yellow-300"
-	} else if strings.TrimSpace(submission.Notes) == "" {
+	if strings.TrimSpace(submission.Notes) == "" {
 		flagLabel = "Missing notes"
 		flagClass = "text-yellow-300"
 	}
@@ -553,7 +530,6 @@ func (h *Handler) HandleViewSubmission(c *gin.Context) {
 		EndgameScore:     submission.EndgameScore,
 		Notes:            submission.Notes,
 		StartingPosition: submission.StartingPosition,
-		AutoPathData:     submission.AutoPathData.String,
 		DefenseRating:    submission.DefenseRating,
 		Traversal:        submission.Traversal,
 		Throughput:       submission.Throughput,

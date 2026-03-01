@@ -5,7 +5,6 @@ import (
 	"log"
 	"math/rand"
 	"os"
-	"sort"
 	"time"
 
 	appdb "github.com/frc10101/TealTeam/internal/db"
@@ -144,7 +143,6 @@ type DBScoutingData struct {
 	EndgameScore      int       `gorm:"column:endgame_score"`
 	ScouterName       string    `gorm:"column:scouter_name"`
 	StartingPosition  string    `gorm:"column:starting_position"`
-	AutoPathData      string    `gorm:"column:auto_path_data;type:jsonb"`
 	AutoTowerLevel    string    `gorm:"column:auto_tower_level"`
 	AutoHand          int       `gorm:"column:auto_hand"`
 	ScoringRating     int       `gorm:"column:scoring_rating"`
@@ -202,14 +200,6 @@ type DBAward struct {
 }
 
 func (DBAward) TableName() string { return "awards" }
-
-type DBAutoPath struct {
-	ID        int       `gorm:"column:id;primaryKey"`
-	TeamID    int       `gorm:"column:team_id"`
-	CreatedAt time.Time `gorm:"column:created_at"`
-}
-
-func (DBAutoPath) TableName() string { return "auto_paths" }
 
 type DBZebraData struct {
 	ID        int       `gorm:"column:id;primaryKey"`
@@ -340,7 +330,6 @@ func clearData(db *gorm.DB) error {
 
 	deleteAll(&DBZebraData{}, "zebra_data")
 	deleteAll(&DBAward{}, "awards")
-	deleteAll(&DBAutoPath{}, "auto_paths")
 	deleteAll(&DBTeamEventStats{}, "team_event_stats")
 	deleteAll(&DBScoutingData{}, "scouting_data")
 	deleteAll(&DBMatch{}, "matches")
@@ -1202,9 +1191,6 @@ func insertMatchTeam(db *gorm.DB, eventID, teamID int, allianceColor string, pos
 	endgameScore := rand.Intn(25)
 	penaltiesCaused := rand.Intn(3)
 
-	// Generate auto path data as JSON
-	autoPathData := generateAutoPathJSON(startingPos)
-
 	scouterName := fmt.Sprintf("Scouter %d", rand.Intn(10)+1)
 
 	scouting := DBScoutingData{
@@ -1212,14 +1198,11 @@ func insertMatchTeam(db *gorm.DB, eventID, teamID int, allianceColor string, pos
 		TeamID:            teamID,
 		AllianceColor:     allianceColor,
 		AlliancePosition:  position,
-					if err := insertMatchTeam(db, dbMatch.EventID, teamID, "red", pos+1); err != nil {
-					if err := insertMatchTeam(db, dbMatch.EventID, teamID, "blue", pos+1); err != nil {
 		AutoScore:         autoScore,
 		TeleopScore:       teleopScore,
 		EndgameScore:      endgameScore,
 		ScouterName:       scouterName,
 		StartingPosition:  startingPos,
-		AutoPathData:      autoPathData,
 		AutoTowerLevel:    autoTowerLevel,
 		AutoHand:          autoHand,
 		ScoringRating:     scoringRating,
@@ -1240,50 +1223,6 @@ func insertMatchTeam(db *gorm.DB, eventID, teamID int, allianceColor string, pos
 
 	return err
 }
-
-// generateAutoPathJSON creates a simple auto path as JSON
-func generateAutoPathJSON(startingPos string) string {
-	// Generate a path with 5-10 waypoints
-	numPoints := 5 + rand.Intn(6)
-
-	// Starting coordinates based on position
-	var startX, startY float64
-	switch startingPos {
-	case "left":
-		startX, startY = 1.5, 4.0
-	case "center":
-		startX, startY = 8.0, 4.0
-	case "right":
-		startX, startY = 14.5, 4.0
-	}
-
-	path := fmt.Sprintf(`{"points": [{"x": %.2f, "y": %.2f, "t": 0}`, startX, startY)
-
-	currentX, currentY := startX, startY
-	for i := 1; i < numPoints; i++ {
-		// Move randomly but generally forward
-		currentX += rand.Float64()*2.0 - 0.5
-		currentY += rand.Float64()*1.5 - 0.75
-		// Keep within field bounds (roughly 16m x 8m)
-		if currentX < 0 {
-			currentX = 0
-		}
-		if currentX > 16 {
-			currentX = 16
-		}
-		if currentY < 0 {
-			currentY = 0
-		}
-		if currentY > 8 {
-			currentY = 8
-		}
-		path += fmt.Sprintf(`, {"x": %.2f, "y": %.2f, "t": %.1f}`, currentX, currentY, float64(i)*0.5)
-	}
-
-	path += `]}`
-	return path
-}
-
 func printSummary(db *gorm.DB) {
 	log.Println("\n📊 Seed Summary:")
 

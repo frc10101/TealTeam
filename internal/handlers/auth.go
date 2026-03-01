@@ -403,3 +403,109 @@ func (h *Handler) CleanupExpiredSessions() error {
 
 	return nil
 }
+
+// HandleAccountPage displays the user's account information page
+func (h *Handler) HandleAccountPage(c *gin.Context) {
+	user, err := h.GetSessionUser(c)
+	if err != nil {
+		c.Redirect(http.StatusSeeOther, "/sign-in")
+		return
+	}
+
+	h.render(c, "account", gin.H{
+		"Title": "Account Settings",
+		"User":  user,
+	})
+}
+
+// HandleChangePassword processes password change requests
+func (h *Handler) HandleChangePassword(c *gin.Context) {
+	user, err := h.GetSessionUser(c)
+	if err != nil {
+		h.sendPasswordChangeResponse(c, false, "Please log in to change your password")
+		return
+	}
+
+	currentPassword := c.PostForm("current-password")
+	newPassword := c.PostForm("new-password")
+	confirmPassword := c.PostForm("confirm-password")
+
+	// Validate input
+	if currentPassword == "" || newPassword == "" || confirmPassword == "" {
+		h.sendPasswordChangeResponse(c, false, "All fields are required")
+		return
+	}
+
+	// Validate password length
+	if len(newPassword) < 8 {
+		h.sendPasswordChangeResponse(c, false, "New password must be at least 8 characters long")
+		return
+	}
+
+	// Check if passwords match
+	if newPassword != confirmPassword {
+		h.sendPasswordChangeResponse(c, false, "New passwords do not match")
+		return
+	}
+
+	// Check if new password is the same as current password
+	if currentPassword == newPassword {
+		h.sendPasswordChangeResponse(c, false, "New password must be different from your current password")
+		return
+	}
+
+	// Verify current password
+	if !CheckPasswordHash(currentPassword, user.PasswordHash) {
+		h.sendPasswordChangeResponse(c, false, "Current password is incorrect")
+		return
+	}
+
+	// Hash new password
+	newPasswordHash, err := HashPassword(newPassword)
+	if err != nil {
+		log.Printf("Failed to hash password: %v", err)
+		h.sendPasswordChangeResponse(c, false, "Failed to update password. Please try again.")
+		return
+	}
+
+	// Update password in database
+	if err := h.db.Model(&models.User{}).Where("id = ?", user.ID).Update("password_hash", newPasswordHash).Error; err != nil {
+		log.Printf("Failed to update password for user %d: %v", user.ID, err)
+		h.sendPasswordChangeResponse(c, false, "Failed to update password. Please try again.")
+		return
+	}
+
+	log.Printf("Password changed successfully for user %d (%s)", user.ID, user.Email)
+	h.sendPasswordChangeResponse(c, true, "Password changed successfully!")
+}
+
+// sendPasswordChangeResponse sends a formatted response for password change operations
+func (h *Handler) sendPasswordChangeResponse(c *gin.Context, success bool, message string) {
+	c.Header("Content-Type", "text/html; charset=utf-8")
+
+	if !success {
+		// Return error HTML
+		fmt.Fprintf(c.Writer, `<div class="bg-red-900/20 border border-red-500 text-red-300 px-4 py-3 rounded" role="alert">
+			<div class="flex items-center gap-2">
+				<svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+				</svg>
+				<span class="block sm:inline font-medium">%s</span>
+			</div>
+		</div>`, message)
+	} else {
+		// Return success HTML and clear the form
+		fmt.Fprintf(c.Writer, `<div class="bg-green-900/20 border border-green-500 text-green-300 px-4 py-3 rounded" role="alert">
+			<div class="flex items-center gap-2">
+				<svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+				</svg>
+				<span class="block sm:inline font-medium">%s</span>
+			</div>
+		</div>
+		<script>
+			// Clear the form after successful password change
+			document.getElementById('change-password-form').reset();
+		</script>`, message)
+	}
+}

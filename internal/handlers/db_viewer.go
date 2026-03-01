@@ -152,12 +152,31 @@ func (h *Handler) getTableData(ctx context.Context, tableName string, offset, li
 		return nil, fmt.Errorf("invalid table name")
 	}
 
+	// Define sensitive columns that should not be displayed in the database viewer
+	sensitiveColumns := map[string][]string{
+		"users": {"password_hash"},
+	}
+
 	// Get column info
 	columns, err := h.getColumnInfo(ctx, tableName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get columns: %w", err)
 	}
-	data["Columns"] = columns
+
+	// Filter out sensitive columns from display
+	var displayColumns []ColumnInfo
+	excludedSet := make(map[string]bool)
+	if excluded, ok := sensitiveColumns[tableName]; ok {
+		for _, col := range excluded {
+			excludedSet[col] = true
+		}
+	}
+	for _, col := range columns {
+		if !excludedSet[col.Name] {
+			displayColumns = append(displayColumns, col)
+		}
+	}
+	data["Columns"] = displayColumns
 
 	// Get total row count
 	var totalRows int64
@@ -178,9 +197,9 @@ func (h *Handler) getTableData(ctx context.Context, tableName string, offset, li
 
 	var rowData [][]any
 	for _, row := range rowMaps {
-		rowValues := make([]any, len(columns))
-		for i, col := range columns {
-			rowValues[i] = formatValue(row[col.Name])
+		rowValues := make([]any, 0, len(displayColumns))
+		for _, col := range displayColumns {
+			rowValues = append(rowValues, formatValue(row[col.Name]))
 		}
 		rowData = append(rowData, rowValues)
 	}

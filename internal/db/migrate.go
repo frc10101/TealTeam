@@ -40,9 +40,6 @@ func ApplyMigrations(database *gorm.DB, dir string) error {
 	sort.Strings(files)
 
 	for _, file := range files {
-		if file != "0001_init.sql" {
-			continue
-		}
 		fullPath := filepath.Join(dir, file)
 
 		var count int64

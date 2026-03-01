@@ -19,7 +19,6 @@ type scoutingFormInput struct {
 	AllianceColor    string
 	Notes            string
 	StartingPosition string
-	AutoPathData     string
 	DefenseRating    string
 	Traversal        string
 	ShootingSpeed    string
@@ -41,7 +40,6 @@ type scoutingData struct {
 	EndgameScore     int       `gorm:"column:endgame_score"`
 	Notes            string    `gorm:"column:notes"`
 	StartingPosition string    `gorm:"column:starting_position"`
-	AutoPathData     string    `gorm:"column:auto_path_data;type:jsonb"`
 	DefenseRating    string    `gorm:"column:defense_rating"`
 	Traversal        string    `gorm:"column:traversal"`
 	Throughput       string    `gorm:"column:throughput"`
@@ -68,7 +66,6 @@ type scoutingSubmission struct {
 	EndgameScore     int       `gorm:"column:endgame_score"`
 	Notes            string    `gorm:"column:notes"`
 	StartingPosition string    `gorm:"column:starting_position"`
-	AutoPathData     string    `gorm:"column:auto_path_data;type:jsonb"`
 	DefenseRating    string    `gorm:"column:defense_rating"`
 	Traversal        string    `gorm:"column:traversal"`
 	Throughput       string    `gorm:"column:throughput"`
@@ -102,41 +99,20 @@ func (h *Handler) buildSubmissionPageData(c *gin.Context, user *models.User) map
 		// Don't load teams on initial page load - they'll be fetched via HTMX when event is selected
 		// This prevents showing teams when no event has been selected yet
 
-		// Filter events based on user's team
-		var events []struct {
-			ID        int
-			Name      string
-			StartDate *time.Time
-		}
-
+		// Filter events based on user's team registration
 		ctx := c.Request.Context()
-
-		// If user has a team number, first try to load events for their team
-		if user.TeamNumber != nil && *user.TeamNumber > 0 {
-			query := h.db.WithContext(ctx).Table("events").
-				Select("DISTINCT events.id, events.name, events.start_date").
-				Joins("JOIN event_teams ON event_teams.event_id = events.id").
-				Joins("JOIN teams ON teams.id = event_teams.team_id").
-				Where("teams.team_number = ?", *user.TeamNumber).
-				Order("events.start_date")
-
-			if err := query.Scan(&events).Error; err == nil && len(events) > 0 {
-				data["Events"] = events
-			} else {
-				// Fallback: if team has no events, show all events
-				fallbackQuery := h.db.WithContext(ctx).Table("events").
-					Select("id, name").
-					Order("start_date")
-				if err := fallbackQuery.Scan(&events).Error; err == nil {
-					data["Events"] = events
-				}
+		eventIDs, err := h.GetAvailableEventsForUser(ctx, user)
+		if err == nil && len(eventIDs) > 0 {
+			var events []struct {
+				ID        int
+				Name      string
+				StartDate *time.Time
 			}
-		} else {
-			// No team number set, show all events
-			query := h.db.WithContext(ctx).Table("events").
-				Select("id, name").
-				Order("start_date")
-			if err := query.Scan(&events).Error; err == nil {
+			if err := h.db.WithContext(ctx).Table("events").
+				Select("id, name, start_date").
+				Where("id IN ?", eventIDs).
+				Order("start_date").
+				Scan(&events).Error; err == nil {
 				data["Events"] = events
 			}
 		}
@@ -186,7 +162,6 @@ func (h *Handler) HandleSubmission(c *gin.Context) {
 		EndgameScore:     0,
 		Notes:            input.Notes,
 		StartingPosition: input.StartingPosition,
-		AutoPathData:     input.AutoPathData,
 		DefenseRating:    input.DefenseRating,
 		Traversal:        input.Traversal,
 		Throughput:       "",
@@ -239,7 +214,6 @@ func parseScoutingForm(c *gin.Context) (scoutingFormInput, error) {
 	input.AllianceColor = strings.ToLower(strings.TrimSpace(c.PostForm("alliance_color")))
 	input.Notes = strings.TrimSpace(c.PostForm("notes"))
 	input.StartingPosition = strings.ToLower(strings.TrimSpace(c.PostForm("starting_position")))
-	input.AutoPathData = strings.TrimSpace(c.PostForm("auto_path_data"))
 	input.DefenseRating = strings.ToLower(strings.TrimSpace(c.PostForm("defense_rating")))
 	input.Traversal = strings.ToLower(strings.TrimSpace(c.PostForm("traversal")))
 	input.ShootingSpeed = strings.ToLower(strings.TrimSpace(c.PostForm("shooting_speed")))
