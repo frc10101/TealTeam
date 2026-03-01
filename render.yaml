@@ -1,8 +1,13 @@
+databases:
+  - name: tealteam-db
+    version: 16
+    plan: free
+
 services:
   - type: web
     name: tealteam
     runtime: docker
-    # ... existing config ...
+    preDeployCommand: echo "Migrations will run on application startup"
     envVars:
       - key: PORT
         value: 8080
