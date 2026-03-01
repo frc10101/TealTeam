@@ -2,16 +2,31 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 // DefaultTimeout is the default context timeout for database operations
 const DefaultTimeout = 5 * time.Second
+
+// customLogger wraps the default logger to skip ErrRecordNotFound logs
+type customLogger struct {
+	logger.Interface
+}
+
+func (cl *customLogger) Trace(ctx context.Context, begin time.Time, fc func() (string, int64), err error) {
+	// Skip logging ErrRecordNotFound errors
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return
+	}
+	cl.Interface.Trace(ctx, begin, fc, err)
+}
 
 // Connect establishes a connection to the PostgreSQL database using GORM
 func Connect() (*gorm.DB, error) {
@@ -20,7 +35,9 @@ func Connect() (*gorm.DB, error) {
 		return nil, fmt.Errorf("DATABASE_URL environment variable is not set")
 	}
 
-	gormDB, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	gormDB, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+		Logger: &customLogger{Interface: logger.Default},
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}

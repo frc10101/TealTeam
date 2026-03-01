@@ -35,6 +35,13 @@ COPY cmd ./cmd
 COPY internal ./internal
 COPY migrations ./migrations
 
+# Copy environment file for tests if present, otherwise use example
+COPY .env* ./
+
+# Test stage - Run all tests to ensure code quality
+# Tests use environment variables from .env file
+RUN go test -v ./...
+
 # Build the Go binary
 RUN CGO_ENABLED=0 GOOS=linux go build -o /server ./cmd/web
 

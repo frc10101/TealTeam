@@ -1,9 +1,26 @@
 {{define "scouting_form"}}
-<form action="/submission" method="post" class="space-y-6">
+<form
+    action="/submission"
+    method="post"
+    hx-post="/submission"
+    hx-target="#submission-panel"
+    hx-swap="outerHTML transition:true"
+    hx-indicator="#submission-spinner"
+    class="space-y-6"
+    id="scouting-form"
+    data-history-form="scouting">
     <div class="grid gap-6 md:grid-cols-2">
         <div>
             <label for="event-id" class="block text-sm font-medium text-gray-300 mb-2">Event</label>
-            <select id="event-id" name="event_id" required class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+            <select
+                id="event-id"
+                name="event_id"
+                required
+                hx-get="/submission/event-teams"
+                hx-target="#team-id"
+                hx-swap="innerHTML"
+                hx-trigger="change"
+                class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
                 <option value="" disabled selected>Select event</option>
                 {{if .Events}}
                     {{range .Events}}
@@ -18,14 +35,7 @@
         <div>
             <label for="team-id" class="block text-sm font-medium text-gray-300 mb-2">Team</label>
             <select id="team-id" name="team_id" required class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
-                <option value="" disabled selected>Select team</option>
-                {{if .Teams}}
-                    {{range .Teams}}
-                        <option value="{{.ID}}">{{.TeamNumber}} - {{.Name}}</option>
-                    {{end}}
-                {{else}}
-                    <option value="" disabled>No teams available</option>
-                {{end}}
+                <option value="" disabled selected>Select event first</option>
             </select>
         </div>
 
@@ -38,24 +48,6 @@
             </select>
         </div>
 
-        <div>
-            <label for="alliance-position" class="block text-sm font-medium text-gray-300 mb-2">Alliance Position</label>
-            <select id="alliance-position" name="alliance_position" required class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
-                <option value="" disabled selected>Select position</option>
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-            </select>
-        </div>
-
-        <div>
-            <label for="match-type" class="block text-sm font-medium text-gray-300 mb-2">Match Type</label>
-            <select id="match-type" name="match_type" required class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
-                <option value="" disabled selected>Select match type</option>
-                <option value="qualification">Qualification</option>
-                <option value="playoff">Playoff</option>
-            </select>
-        </div>
 
         <div>
             <label for="starting-position" class="block text-sm font-medium text-gray-300 mb-2">Starting Position</label>
@@ -120,6 +112,7 @@
             <label for="hang-level" class="block text-sm font-medium text-gray-300 mb-2">Hang Level</label>
             <select id="hang-level" name="hang_level" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
                 <option value="" disabled selected>Select level</option>
+                <option value="none">None</option>
                 <option value="l1">L1</option>
                 <option value="l2">L2</option>
                 <option value="l3">L3</option>
@@ -152,16 +145,15 @@
     </div>
 
     <div>
-        <label for="auto-path-data" class="block text-sm font-medium text-gray-300 mb-2">Auto Path Data</label>
-        <textarea id="auto-path-data" name="auto_path_data" rows="3" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors" placeholder="Describe the path or paste JSON"></textarea>
-    </div>
-
-    <div>
         <label for="defendability" class="block text-sm font-medium text-gray-300 mb-2">Defendability</label>
         <textarea id="defendability" name="defendability" rows="3" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors" placeholder="How would we defend against them?"></textarea>
     </div>
 
-    <div class="flex justify-end">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <div id="submission-spinner" class="htmx-indicator flex items-center gap-2 text-xs text-gray-400">
+            <span class="loading-spinner"></span>
+            Saving submission...
+        </div>
         <button type="submit" class="px-6 py-2 rounded-lg text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 focus:ring-offset-gray-900 transition-colors">
             Submit Scouting Data
         </button>

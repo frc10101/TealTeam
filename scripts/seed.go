@@ -5,7 +5,6 @@ import (
 	"log"
 	"math/rand"
 	"os"
-	"sort"
 	"time"
 
 	appdb "github.com/frc10101/TealTeam/internal/db"
@@ -135,7 +134,7 @@ func (DBMatch) TableName() string { return "matches" }
 
 type DBScoutingData struct {
 	ID                int       `gorm:"column:id;primaryKey"`
-	MatchID           int       `gorm:"column:match_id"`
+	EventID           int       `gorm:"column:event_id"`
 	TeamID            int       `gorm:"column:team_id"`
 	AllianceColor     string    `gorm:"column:alliance_color"`
 	AlliancePosition  int       `gorm:"column:alliance_position"`
@@ -144,7 +143,6 @@ type DBScoutingData struct {
 	EndgameScore      int       `gorm:"column:endgame_score"`
 	ScouterName       string    `gorm:"column:scouter_name"`
 	StartingPosition  string    `gorm:"column:starting_position"`
-	AutoPathData      string    `gorm:"column:auto_path_data;type:jsonb"`
 	AutoTowerLevel    string    `gorm:"column:auto_tower_level"`
 	AutoHand          int       `gorm:"column:auto_hand"`
 	ScoringRating     int       `gorm:"column:scoring_rating"`
@@ -202,14 +200,6 @@ type DBAward struct {
 }
 
 func (DBAward) TableName() string { return "awards" }
-
-type DBAutoPath struct {
-	ID        int       `gorm:"column:id;primaryKey"`
-	TeamID    int       `gorm:"column:team_id"`
-	CreatedAt time.Time `gorm:"column:created_at"`
-}
-
-func (DBAutoPath) TableName() string { return "auto_paths" }
 
 type DBZebraData struct {
 	ID        int       `gorm:"column:id;primaryKey"`
@@ -340,7 +330,6 @@ func clearData(db *gorm.DB) error {
 
 	deleteAll(&DBZebraData{}, "zebra_data")
 	deleteAll(&DBAward{}, "awards")
-	deleteAll(&DBAutoPath{}, "auto_paths")
 	deleteAll(&DBTeamEventStats{}, "team_event_stats")
 	deleteAll(&DBScoutingData{}, "scouting_data")
 	deleteAll(&DBMatch{}, "matches")
@@ -1158,7 +1147,7 @@ func insertMatches(db *gorm.DB, compID int, matches []Match) error {
 			if teamID == 0 {
 				continue
 			}
-			if err := insertMatchTeam(db, dbMatch.ID, teamID, "red", pos+1); err != nil {
+			if err := insertMatchTeam(db, dbMatch.EventID, teamID, "red", pos+1); err != nil {
 				return fmt.Errorf("failed to insert red team: %w", err)
 			}
 		}
@@ -1168,7 +1157,7 @@ func insertMatches(db *gorm.DB, compID int, matches []Match) error {
 			if teamID == 0 {
 				continue
 			}
-			if err := insertMatchTeam(db, dbMatch.ID, teamID, "blue", pos+1); err != nil {
+			if err := insertMatchTeam(db, dbMatch.EventID, teamID, "blue", pos+1); err != nil {
 				return fmt.Errorf("failed to insert blue team: %w", err)
 			}
 		}
@@ -1178,8 +1167,8 @@ func insertMatches(db *gorm.DB, compID int, matches []Match) error {
 	return nil
 }
 
-// insertMatchTeam inserts a team's scouting data for a specific match
-func insertMatchTeam(db *gorm.DB, matchID, teamID int, allianceColor string, position int) error {
+// insertMatchTeam inserts a team's scouting data for a specific event
+func insertMatchTeam(db *gorm.DB, eventID, teamID int, allianceColor string, position int) error {
 	// Generate random scouting data
 	startingPos := startingPositions[rand.Intn(len(startingPositions))]
 	autoTowerLevel := towerLevels[rand.Intn(len(towerLevels))]
@@ -1202,13 +1191,10 @@ func insertMatchTeam(db *gorm.DB, matchID, teamID int, allianceColor string, pos
 	endgameScore := rand.Intn(25)
 	penaltiesCaused := rand.Intn(3)
 
-	// Generate auto path data as JSON
-	autoPathData := generateAutoPathJSON(startingPos)
-
 	scouterName := fmt.Sprintf("Scouter %d", rand.Intn(10)+1)
 
 	scouting := DBScoutingData{
-		MatchID:           matchID,
+		EventID:           eventID,
 		TeamID:            teamID,
 		AllianceColor:     allianceColor,
 		AlliancePosition:  position,
@@ -1217,7 +1203,6 @@ func insertMatchTeam(db *gorm.DB, matchID, teamID int, allianceColor string, pos
 		EndgameScore:      endgameScore,
 		ScouterName:       scouterName,
 		StartingPosition:  startingPos,
-		AutoPathData:      autoPathData,
 		AutoTowerLevel:    autoTowerLevel,
 		AutoHand:          autoHand,
 		ScoringRating:     scoringRating,
@@ -1238,50 +1223,6 @@ func insertMatchTeam(db *gorm.DB, matchID, teamID int, allianceColor string, pos
 
 	return err
 }
-
-// generateAutoPathJSON creates a simple auto path as JSON
-func generateAutoPathJSON(startingPos string) string {
-	// Generate a path with 5-10 waypoints
-	numPoints := 5 + rand.Intn(6)
-
-	// Starting coordinates based on position
-	var startX, startY float64
-	switch startingPos {
-	case "left":
-		startX, startY = 1.5, 4.0
-	case "center":
-		startX, startY = 8.0, 4.0
-	case "right":
-		startX, startY = 14.5, 4.0
-	}
-
-	path := fmt.Sprintf(`{"points": [{"x": %.2f, "y": %.2f, "t": 0}`, startX, startY)
-
-	currentX, currentY := startX, startY
-	for i := 1; i < numPoints; i++ {
-		// Move randomly but generally forward
-		currentX += rand.Float64()*2.0 - 0.5
-		currentY += rand.Float64()*1.5 - 0.75
-		// Keep within field bounds (roughly 16m x 8m)
-		if currentX < 0 {
-			currentX = 0
-		}
-		if currentX > 16 {
-			currentX = 16
-		}
-		if currentY < 0 {
-			currentY = 0
-		}
-		if currentY > 8 {
-			currentY = 8
-		}
-		path += fmt.Sprintf(`, {"x": %.2f, "y": %.2f, "t": %.1f}`, currentX, currentY, float64(i)*0.5)
-	}
-
-	path += `]}`
-	return path
-}
-
 func printSummary(db *gorm.DB) {
 	log.Println("\n📊 Seed Summary:")
 
@@ -1312,42 +1253,7 @@ func printSummary(db *gorm.DB) {
 	}
 
 	for _, match := range sampleMatches {
-
-		// Get teams for this match
-		type teamRow struct {
-			TeamNumber       int
-			AllianceColor    string
-			AlliancePosition int
-		}
-		var teamRows []teamRow
-		if err := db.Model(&DBScoutingData{}).
-			Select("teams.team_number, scouting_data.alliance_color, scouting_data.alliance_position").
-			Joins("JOIN teams ON scouting_data.team_id = teams.id").
-			Joins("JOIN matches ON scouting_data.match_id = matches.id").
-			Where("matches.match_number = ? AND matches.event_id = ?", match.MatchNumber, 1).
-			Order("scouting_data.alliance_color DESC, scouting_data.alliance_position").
-			Scan(&teamRows).Error; err != nil {
-			log.Printf("   Could not fetch teams for match %d: %v", match.MatchNumber, err)
-			continue
-		}
-
-		redTeams := make([]int, 0, 3)
-		blueTeams := make([]int, 0, 3)
-
-		for _, row := range teamRows {
-			if row.AllianceColor == "red" {
-				redTeams = append(redTeams, row.TeamNumber)
-			} else {
-				blueTeams = append(blueTeams, row.TeamNumber)
-			}
-		}
-
-		// Sort for consistent display
-		sort.Ints(redTeams)
-		sort.Ints(blueTeams)
-
-		log.Printf("   Match %2d: Red %v vs Blue %v | Score: %d - %d",
-			match.MatchNumber, redTeams, blueTeams, match.RedScore, match.BlueScore)
+		log.Printf("   Match %2d | Score: %d - %d", match.MatchNumber, match.RedScore, match.BlueScore)
 	}
 
 	// Print team appearance stats
@@ -1362,8 +1268,7 @@ func printSummary(db *gorm.DB) {
 	if err := db.Model(&DBScoutingData{}).
 		Select("teams.team_number as team_number, COUNT(*) as appearances, SUM(CASE WHEN scouting_data.alliance_color = 'red' THEN 1 ELSE 0 END) as red_count, SUM(CASE WHEN scouting_data.alliance_color = 'blue' THEN 1 ELSE 0 END) as blue_count").
 		Joins("JOIN teams ON scouting_data.team_id = teams.id").
-		Joins("JOIN matches ON scouting_data.match_id = matches.id").
-		Where("matches.event_id = ?", 1).
+		Where("scouting_data.event_id = ?", 1).
 		Group("teams.team_number").
 		Order("teams.team_number").
 		Limit(10).

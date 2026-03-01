@@ -7,8 +7,10 @@ import (
 	"os"
 
 	"github.com/frc10101/TealTeam/internal/db"
+	"github.com/frc10101/TealTeam/internal/frc"
 	"github.com/frc10101/TealTeam/internal/handlers"
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 )
 
 // Database configuration for different environments
@@ -18,6 +20,9 @@ var dbConfigs = map[string]string{
 }
 
 func main() {
+	// Load .env file for local development (ignored if file doesn't exist)
+	_ = godotenv.Load()
+
 	// Parse command line flags
 	env := flag.String("env", "test", "Environment to use: 'test' (local Docker) or 'prod' (Render)")
 	flag.Parse()
@@ -74,6 +79,18 @@ func main() {
 		if err := db.ApplyMigrations(database, "migrations"); err != nil {
 			log.Fatalf("Migration failed: %v", err)
 		}
+
+		frc.SyncOnBoot(database)
+
+		// Start background team stats syncer
+		syncConfig := frc.LoadSyncConfig()
+		if syncConfig.TBAAuthKey == "" {
+			log.Println("⚠️  TBA_AUTH_KEY not configured, team stats sync disabled")
+		} else {
+			syncer := frc.NewTeamStatsSyncer(database, syncConfig)
+			syncer.Start()
+			defer syncer.Stop()
+		}
 	}
 	defer func() {
 		if database != nil {
@@ -98,18 +115,32 @@ func main() {
 	// Full page routes (render with layout)
 	router.GET("/", h.HandleIndex)
 	router.GET("/submission", h.HandleSubmissionPage)
+	router.GET("/lead-scout", h.HandleAdminViewer)
+	router.GET("/lead-scout/submissions/:id", h.HandleViewSubmission)
+	router.GET("/drive-coach", h.HandleCoachViewer)
 	router.GET("/development/db", h.HandleDBViewer)
 	router.GET("/sign-in", h.HandleSignIn)
 	router.GET("/sign-up", h.HandleSignUp)
+	router.GET("/teams", h.HandleTeamPage)
+	router.GET("/account", h.HandleAccountPage)
 	router.POST("/submission", h.HandleSubmission)
 
 	// Authentication API routes
 	router.POST("/api/auth/login", h.HandleLogin)
 	router.POST("/api/auth/signup", h.HandleSignup)
 	router.POST("/api/auth/logout", h.HandleLogout)
+	router.POST("/api/account/change-password", h.HandleChangePassword)
+	router.POST("/api/events/select", h.HandleSelectEvent)
+	router.POST("/api/frc/sync", h.HandleFRCSync)
 
 	// HTMX fragment routes (return HTML fragments only)
 	router.GET("/hx/development/db/table/:name", h.HandleDBTableContent)
+	router.GET("/hx/events/summary", h.HandleEventSummary)
+	router.GET("/submission/event-teams", h.HandleGetEventTeams)
+	router.GET("/hx/teams/search", h.HandleTeamSearch)
+	router.GET("/hx/teams/data", h.HandleTeamEventData)
+	router.POST("/hx/lead-scout/submissions/:id/approve", h.HandleApproveSubmission)
+	router.POST("/hx/lead-scout/submissions/:id/decline", h.HandleDeclineSubmission)
 
 	// TODO: Add more routes here
 	// Full pages: router.GET("/yourpage", h.HandleYourPage)

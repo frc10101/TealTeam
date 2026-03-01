@@ -18,13 +18,14 @@
             </div>
             <div class="card-body">
                 <!-- Form response messages will appear here -->
-                <div id="form-response"></div>
+                <div id="form-response" class="fade-swap"></div>
 
                 <!-- Sign In Form -->
                 <form 
                     hx-post="/api/auth/login" 
                     hx-target="#form-response"
-                    hx-swap="innerHTML"
+                    hx-swap="innerHTML transition:true"
+                    hx-indicator="#signin-indicator"
                     class="space-y-6 mt-4">
                     
                     <div>
@@ -79,6 +80,10 @@
                         class="w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 focus:ring-offset-gray-900 transition-colors">
                         Sign in
                     </button>
+                    <div id="signin-indicator" class="htmx-indicator flex items-center justify-center gap-2 text-xs text-gray-400">
+                        <span class="loading-spinner"></span>
+                        Signing in...
+                    </div>
                 </form>
 
                 <!-- Sign Up Link -->

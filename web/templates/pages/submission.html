@@ -11,7 +11,18 @@
             <h2 class="text-xl font-semibold text-gray-100">Scouting Form</h2>
         </div>
         <div class="card-body">
-            {{template "scouting_form" .}}
+            {{template "submission_panel" .}}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header accent-yellow">
+            <h2 class="text-xl font-semibold text-gray-100">Recent Submissions</h2>
+        </div>
+        <div class="card-body">
+            <div class="text-sm text-gray-400">Your last five submissions (stored on this device).</div>
+            <ul id="submission-history" class="mt-4 space-y-2 text-sm text-gray-200"></ul>
+            <div id="submission-history-empty" class="mt-3 text-sm text-gray-500">No recent submissions yet.</div>
         </div>
     </div>
 </div>

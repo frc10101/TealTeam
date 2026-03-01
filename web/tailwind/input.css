@@ -259,6 +259,31 @@
   .htmx-request.htmx-indicator {
     @apply opacity-100;
   }
+
+  /* HTMX swap transitions */
+  .fade-swap {
+    @apply transition-opacity duration-200;
+  }
+
+  .fade-swap.htmx-swapping {
+    @apply opacity-0;
+  }
+
+  .fade-swap.htmx-settling {
+    @apply opacity-100;
+  }
+
+  .rise-swap {
+    @apply transform transition-all duration-200;
+  }
+
+  .rise-swap.htmx-swapping {
+    @apply opacity-0 translate-y-1;
+  }
+
+  .rise-swap.htmx-settling {
+    @apply opacity-100 translate-y-0;
+  }
 }
 
 /*

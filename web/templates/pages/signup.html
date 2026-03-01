@@ -16,13 +16,14 @@
                 </h3>
             </div>
             <div class="card-body">
-                <div id="form-response"></div>
+                <div id="form-response" class="fade-swap"></div>
 
                 <!-- Sign Up Form -->
                  <form
                     hx-post="/api/auth/signup"
                     hx-target="#form-response"
-                    hx-swap="innerHTML"
+                          hx-swap="innerHTML transition:true"
+                          hx-indicator="#signup-indicator"
                     class="space-y-6 mt-4">
 
                     <div>
@@ -56,20 +57,40 @@
                         <label for="team-number" class="block text-sm font-medium text-gray-700 mb-2">
                             Team Number
                         </label>
-                        <div class="flex gap-2">
-                            <input 
-                                id="team-number" 
-                                name="team-number" 
-                                type="number" 
-                                min="1" 
-                                class="flex-1 px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors"
-                                placeholder="e.g. 1710">
-                            <button 
-                                type="button" 
-                                onclick="document.getElementById('team-number').value = ''; document.getElementById('team-number').removeAttribute('required');" 
-                                class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-500 transition-colors whitespace-nowrap">
-                                No team
-                            </button>
+                        <input 
+                            id="team-number" 
+                            name="team-number" 
+                            type="number" 
+                            min="1" 
+                            class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors"
+                            placeholder="e.g. 1710">
+                    </div>
+
+                    <div class="flex items-start gap-3">
+                        <input
+                            id="lead-scout"
+                            name="lead-scout"
+                            type="checkbox"
+                            class="mt-1 h-4 w-4 bg-white border border-gray-300 rounded text-teal-600 focus:ring-teal-500">
+                        <div>
+                            <label for="lead-scout" class="block text-sm font-medium text-gray-300">
+                                Lead scout account
+                            </label>
+                            <p class="text-xs text-gray-500">Enable lead scout tools in the top banner.</p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-start gap-3">
+                        <input
+                            id="coach"
+                            name="coach"
+                            type="checkbox"
+                            class="mt-1 h-4 w-4 bg-white border border-gray-300 rounded text-teal-600 focus:ring-teal-500">
+                        <div>
+                            <label for="coach" class="block text-sm font-medium text-gray-300">
+                                Drive coach account
+                            </label>
+                            <p class="text-xs text-gray-500">Enable coaching tools in the top banner.</p>
                         </div>
                     </div>
 
@@ -106,6 +127,10 @@
                         class="w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 focus:ring-offset-gray-900 transition-colors">
                         Create account
                     </button>
+                    <div id="signup-indicator" class="htmx-indicator flex items-center justify-center gap-2 text-xs text-gray-400">
+                        <span class="loading-spinner"></span>
+                        Creating account...
+                    </div>
                 </form>
 
                 <!-- Sign In Link -->

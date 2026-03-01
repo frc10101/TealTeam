@@ -1,0 +1,142 @@
+{{define "content"}}
+<div class="space-y-8">
+	<!-- Page Header -->
+	<div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+		<div>
+			<h1 class="text-3xl font-bold text-gray-100">{{.Title}}</h1>
+			<p class="mt-2 text-gray-400">{{.Description}}</p>
+		</div>
+		<div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+			<div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-center">
+				<div class="text-xs uppercase tracking-wider text-gray-400">Event</div>
+				<div class="text-sm font-semibold text-gray-100">Week 1</div>
+			</div>
+			<div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-center">
+				<div class="text-xs uppercase tracking-wider text-gray-400">Matches</div>
+				<div class="text-sm font-semibold text-teal-300">4 upcoming</div>
+			</div>
+			<div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-center">
+				<div class="text-xs uppercase tracking-wider text-gray-400">Team Rank</div>
+				<div class="text-sm font-semibold text-gray-100">13th</div>
+			</div>
+			<div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-center">
+				<div class="text-xs uppercase tracking-wider text-gray-400">Cycle Time</div>
+				<div class="text-sm font-semibold text-yellow-300">2.3s avg</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Main Content -->
+	<div class="grid gap-6 lg:grid-cols-3">
+		<div class="lg:col-span-2 space-y-6">
+			<!-- Strategy Card -->
+			<div class="card">
+				<div class="card-header accent-teal">
+					<div class="flex items-center justify-between">
+						<h2 class="text-lg font-semibold text-gray-100">Match Strategy</h2>
+						<span class="text-xs text-gray-400">Next match planning</span>
+					</div>
+				</div>
+				<div class="card-body">
+					<div class="space-y-4">
+						<div class="rounded-lg border border-gray-700 bg-gray-900 px-4 py-3">
+							<div class="text-sm font-semibold text-gray-200 mb-2">Upcoming Matches</div>
+							<div class="space-y-2 text-sm text-gray-400">
+								<div class="flex justify-between items-center">
+									<span>Q12: vs Team 1323, 2910</span>
+									<span class="text-yellow-300">In 45 min</span>
+								</div>
+								<div class="flex justify-between items-center">
+									<span>Q13: vs Team 254, 118</span>
+									<span class="text-gray-500">Later today</span>
+								</div>
+								<div class="flex justify-between items-center">
+									<span>Q14: vs Team 4099, 971</span>
+									<span class="text-gray-500">Tomorrow</span>
+								</div>
+							</div>
+						</div>
+						<div class="flex gap-3">
+							<button class="btn btn-primary btn-sm">View match breakdown</button>
+							<button class="btn btn-secondary btn-sm">Add strategy note</button>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Performance Metrics -->
+			<div class="card">
+				<div class="card-header accent-yellow">
+					<div class="flex items-center justify-between">
+						<h2 class="text-lg font-semibold text-gray-100">Performance Metrics</h2>
+						<span class="text-xs text-gray-400">Event average</span>
+					</div>
+				</div>
+				<div class="card-body">
+					<div class="grid gap-4 sm:grid-cols-3">
+						<div class="rounded-lg border border-gray-700 bg-gray-900 px-4 py-3">
+							<div class="text-xs text-gray-400">Avg Cycle Time</div>
+							<div class="text-lg font-semibold text-gray-100">2.3 seconds</div>
+						</div>
+						<div class="rounded-lg border border-gray-700 bg-gray-900 px-4 py-3">
+							<div class="text-xs text-gray-400">Game Pieces/Match</div>
+							<div class="text-lg font-semibold text-gray-100">8.2</div>
+						</div>
+						<div class="rounded-lg border border-gray-700 bg-gray-900 px-4 py-3">
+							<div class="text-xs text-gray-400">Reliability</div>
+							<div class="text-lg font-semibold text-teal-300">94%</div>
+						</div>
+					</div>
+					<div class="mt-4 flex gap-3">
+						<button class="btn btn-secondary btn-sm">View trends</button>
+						<button class="btn btn-secondary btn-sm">Export report</button>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Alliance & Pit Info -->
+		<div class="space-y-6">
+			<div class="card">
+				<div class="card-header accent-red">
+					<h2 class="text-lg font-semibold text-gray-100">Alliance Composition</h2>
+				</div>
+				<div class="card-body space-y-3">
+					<div class="text-sm text-gray-400">Current alliance strength ranking</div>
+					<div class="space-y-2">
+						<div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2">
+							<div class="text-sm font-semibold text-gray-200">Team 2468 (You)</div>
+							<div class="text-xs text-gray-400">Role: Balanced scorer</div>
+							<div class="text-xs text-teal-300 mt-1">Strength: 8.4 / 10</div>
+						</div>
+						<div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2">
+							<div class="text-sm font-semibold text-gray-200">Team 1323</div>
+							<div class="text-xs text-gray-400">Role: Defender</div>
+							<div class="text-xs text-yellow-300 mt-1">Strength: 7.1 / 10</div>
+						</div>
+						<div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2">
+							<div class="text-sm font-semibold text-gray-200">Team 2910</div>
+							<div class="text-xs text-gray-400">Role: Climber</div>
+							<div class="text-xs text-teal-300 mt-1">Strength: 8.8 / 10</div>
+						</div>
+					</div>
+					<button class="btn btn-secondary btn-sm w-full mt-3">View all matchups</button>
+				</div>
+			</div>
+
+			<!-- Quick Notes -->
+			<div class="card">
+				<div class="card-header accent-teal">
+					<h2 class="text-lg font-semibold text-gray-100">Strategy Notes</h2>
+				</div>
+				<div class="card-body">
+					<textarea 
+						class="w-full h-24 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm text-gray-300 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-none"
+						placeholder="Add coach notes for upcoming matches..."></textarea>
+					<button class="btn btn-primary btn-sm mt-3 w-full">Save notes</button>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+{{end}}

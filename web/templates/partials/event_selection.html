@@ -1,0 +1,50 @@
+{{define "event_selection"}}
+<div id="event-selection-panel" class="space-y-3 fade-swap">
+    {{if .User}}
+    <form
+        action="/api/events/select"
+        method="post"
+        hx-post="/api/events/select"
+        hx-target="#event-selection-panel"
+        hx-swap="outerHTML transition:true"
+        hx-indicator="#event-selection-indicator"
+        hx-trigger="change, submit"
+        class="flex flex-col gap-4 sm:flex-row sm:items-end">
+        <div class="flex-1">
+            <label for="event-selection" class="block text-sm font-medium text-gray-300 mb-2">Current Event</label>
+            <select id="event-selection" name="event_id" required class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled {{if not .SelectedEventID}}selected{{end}}>Select event</option>
+                {{if .Events}}
+                    {{range .Events}}
+                        <option value="{{.ID}}" {{if eq .ID $.SelectedEventID}}selected{{end}}>{{.Name}}</option>
+                    {{end}}
+                {{else}}
+                    <option value="" disabled>No events available</option>
+                {{end}}
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Set Event</button>
+    </form>
+
+    <div class="flex flex-wrap items-center gap-3 text-xs text-gray-400">
+        <div id="event-selection-indicator" class="htmx-indicator flex items-center gap-2">
+            <span class="loading-spinner"></span>
+            Saving selection...
+        </div>
+        {{if .EventUpdated}}
+        <span class="text-teal-300">Event saved.</span>
+        {{end}}
+    </div>
+
+    {{if .EventError}}
+    <div class="rounded-lg border border-red-600 bg-red-900/30 px-4 py-2 text-sm text-red-200">
+        {{.EventError}}
+    </div>
+    {{end}}
+
+    {{template "event_summary" .}}
+    {{else}}
+    <div class="text-sm text-gray-400">Sign in to choose your active event.</div>
+    {{end}}
+</div>
+{{end}}

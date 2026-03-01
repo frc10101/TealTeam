@@ -1,5 +1,5 @@
 {{define "db_table_content"}}
-<div class="space-y-4">
+<div class="space-y-4 fade-swap">
     <!-- Table Header -->
     <div class="card">
         <div class="card-header flex justify-between items-center">
@@ -11,7 +11,8 @@
                 <button 
                     hx-get="/hx/development/db/table/{{.SelectedTable}}"
                     hx-target="#table-content"
-                    hx-swap="innerHTML"
+                    hx-swap="innerHTML transition:true"
+                    hx-indicator="#table-content-indicator"
                     class="btn btn-secondary text-sm"
                 >
                     <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -107,7 +108,8 @@
                 <button 
                     hx-get="/hx/development/db/table/{{.SelectedTable}}?offset={{.Offset | subtract .Limit}}&limit={{.Limit}}"
                     hx-target="#table-content"
-                    hx-swap="innerHTML"
+                    hx-swap="innerHTML transition:true"
+                    hx-indicator="#table-content-indicator"
                     class="btn btn-secondary text-sm"
                 >
                     Previous
@@ -117,7 +119,8 @@
                 <button 
                     hx-get="/hx/development/db/table/{{.SelectedTable}}?offset={{.Offset | add .Limit}}&limit={{.Limit}}"
                     hx-target="#table-content"
-                    hx-swap="innerHTML"
+                    hx-swap="innerHTML transition:true"
+                    hx-indicator="#table-content-indicator"
                     class="btn btn-secondary text-sm"
                 >
                     Next

@@ -1,15 +1,18 @@
 package handlers
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/frc10101/TealTeam/internal/frc"
 	"github.com/frc10101/TealTeam/internal/models"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -125,6 +128,18 @@ func (h *Handler) HandleLogin(c *gin.Context) {
 		SameSite: http.SameSiteLaxMode,
 	})
 
+	// Sync team data if user has a team number
+	if user.TeamNumber != nil && *user.TeamNumber > 0 {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer cancel()
+			_, err := frc.SyncTeamForUser(ctx, h.db, *user.TeamNumber)
+			if err != nil {
+				log.Printf("Failed to sync team data for user %d (team %d): %v", user.ID, *user.TeamNumber, err)
+			}
+		}()
+	}
+
 	// Send success response with redirect
 	h.sendAuthResponse(c, true, "Login successful", "/")
 }
@@ -136,6 +151,8 @@ func (h *Handler) HandleSignup(c *gin.Context) {
 	password := c.PostForm("password")
 	confirmPassword := c.PostForm("confirm-password")
 	teamNumber := strings.TrimSpace(c.PostForm("team-number"))
+	leadScout := strings.TrimSpace(c.PostForm("lead-scout")) != ""
+	coach := strings.TrimSpace(c.PostForm("coach")) != ""
 
 	if name == "" || email == "" || password == "" || confirmPassword == "" {
 		h.sendAuthResponse(c, false, "All fields are required", "")
@@ -181,11 +198,23 @@ func (h *Handler) HandleSignup(c *gin.Context) {
 		return
 	}
 
+	var parsedTeamNumber *int
+	if teamNumber != "" {
+		if value, err := strconv.Atoi(teamNumber); err == nil {
+			parsedTeamNumber = &value
+		} else {
+			log.Printf("Invalid team number provided by %s: %s", email, teamNumber)
+		}
+	}
+
 	user := models.User{
 		Name:         name,
 		Email:        email,
 		PasswordHash: passwordHash,
+		TeamNumber:   parsedTeamNumber,
 		Role:         "user",
+		IsLeadScout:  leadScout,
+		IsCoach:      coach,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
@@ -200,8 +229,22 @@ func (h *Handler) HandleSignup(c *gin.Context) {
 		return
 	}
 
-	if teamNumber != "" {
-		log.Printf("User %d (%s) signed up with team number: %s", user.ID, email, teamNumber)
+	if parsedTeamNumber != nil {
+		log.Printf("User %d (%s) signed up with team number: %d", user.ID, email, *parsedTeamNumber)
+
+		// Sync team data from FIRST API for new team member
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			result, err := frc.SyncTeamForUser(ctx, h.db, *parsedTeamNumber)
+			if err != nil {
+				log.Printf("Failed to sync team %d on signup: %v", *parsedTeamNumber, err)
+				return
+			}
+			log.Printf("Synced team %d on signup: events=%d teams=%d event_teams=%d",
+				*parsedTeamNumber, result.Events, result.Teams, result.EventTeams)
+		}()
 	}
 
 	sessionID, err := generateSessionID()
@@ -233,6 +276,18 @@ func (h *Handler) HandleSignup(c *gin.Context) {
 		SameSite: http.SameSiteLaxMode,
 	})
 
+	// Sync team data if user has a team number
+	if parsedTeamNumber != nil && *parsedTeamNumber > 0 {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer cancel()
+			_, err := frc.SyncTeamForUser(ctx, h.db, *parsedTeamNumber)
+			if err != nil {
+				log.Printf("Failed to sync team data for user %d (team %d): %v", user.ID, *parsedTeamNumber, err)
+			}
+		}()
+	}
+
 	h.sendAuthResponse(c, true, "Account created successfully!", "/")
 }
 
@@ -258,7 +313,7 @@ func (h *Handler) HandleLogout(c *gin.Context) {
 	h.sendAuthResponse(c, true, "Logged out successfully", "/sign-in")
 }
 
-func (h *Handler) GetSessionUser(c *gin.Context) (*models.User, error) {
+func (h *Handler) GetSession(c *gin.Context) (*models.Session, error) {
 	if !h.hasDB() {
 		return nil, fmt.Errorf("database unavailable")
 	}
@@ -281,9 +336,21 @@ func (h *Handler) GetSessionUser(c *gin.Context) (*models.User, error) {
 		return nil, fmt.Errorf("session expired")
 	}
 
+	return &session, nil
+}
+
+func (h *Handler) GetSessionUser(c *gin.Context) (*models.User, error) {
+	session, err := h.GetSession(c)
+	if err != nil {
+		return nil, err
+	}
+
 	var user models.User
-	if err := h.db.Where("id = ?", session.UserID).First(&user).Error; err != nil {
-		return nil, fmt.Errorf("user not found: %w", err)
+	err = h.db.Where("id = ?", session.UserID).First(&user).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, fmt.Errorf("user not found")
+	} else if err != nil {
+		return nil, fmt.Errorf("database error: %w", err)
 	}
 
 	return &user, nil
@@ -335,4 +402,110 @@ func (h *Handler) CleanupExpiredSessions() error {
 	}
 
 	return nil
+}
+
+// HandleAccountPage displays the user's account information page
+func (h *Handler) HandleAccountPage(c *gin.Context) {
+	user, err := h.GetSessionUser(c)
+	if err != nil {
+		c.Redirect(http.StatusSeeOther, "/sign-in")
+		return
+	}
+
+	h.render(c, "account", gin.H{
+		"Title": "Account Settings",
+		"User":  user,
+	})
+}
+
+// HandleChangePassword processes password change requests
+func (h *Handler) HandleChangePassword(c *gin.Context) {
+	user, err := h.GetSessionUser(c)
+	if err != nil {
+		h.sendPasswordChangeResponse(c, false, "Please log in to change your password")
+		return
+	}
+
+	currentPassword := c.PostForm("current-password")
+	newPassword := c.PostForm("new-password")
+	confirmPassword := c.PostForm("confirm-password")
+
+	// Validate input
+	if currentPassword == "" || newPassword == "" || confirmPassword == "" {
+		h.sendPasswordChangeResponse(c, false, "All fields are required")
+		return
+	}
+
+	// Validate password length
+	if len(newPassword) < 8 {
+		h.sendPasswordChangeResponse(c, false, "New password must be at least 8 characters long")
+		return
+	}
+
+	// Check if passwords match
+	if newPassword != confirmPassword {
+		h.sendPasswordChangeResponse(c, false, "New passwords do not match")
+		return
+	}
+
+	// Check if new password is the same as current password
+	if currentPassword == newPassword {
+		h.sendPasswordChangeResponse(c, false, "New password must be different from your current password")
+		return
+	}
+
+	// Verify current password
+	if !CheckPasswordHash(currentPassword, user.PasswordHash) {
+		h.sendPasswordChangeResponse(c, false, "Current password is incorrect")
+		return
+	}
+
+	// Hash new password
+	newPasswordHash, err := HashPassword(newPassword)
+	if err != nil {
+		log.Printf("Failed to hash password: %v", err)
+		h.sendPasswordChangeResponse(c, false, "Failed to update password. Please try again.")
+		return
+	}
+
+	// Update password in database
+	if err := h.db.Model(&models.User{}).Where("id = ?", user.ID).Update("password_hash", newPasswordHash).Error; err != nil {
+		log.Printf("Failed to update password for user %d: %v", user.ID, err)
+		h.sendPasswordChangeResponse(c, false, "Failed to update password. Please try again.")
+		return
+	}
+
+	log.Printf("Password changed successfully for user %d (%s)", user.ID, user.Email)
+	h.sendPasswordChangeResponse(c, true, "Password changed successfully!")
+}
+
+// sendPasswordChangeResponse sends a formatted response for password change operations
+func (h *Handler) sendPasswordChangeResponse(c *gin.Context, success bool, message string) {
+	c.Header("Content-Type", "text/html; charset=utf-8")
+
+	if !success {
+		// Return error HTML
+		fmt.Fprintf(c.Writer, `<div class="bg-red-900/20 border border-red-500 text-red-300 px-4 py-3 rounded" role="alert">
+			<div class="flex items-center gap-2">
+				<svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+				</svg>
+				<span class="block sm:inline font-medium">%s</span>
+			</div>
+		</div>`, message)
+	} else {
+		// Return success HTML and clear the form
+		fmt.Fprintf(c.Writer, `<div class="bg-green-900/20 border border-green-500 text-green-300 px-4 py-3 rounded" role="alert">
+			<div class="flex items-center gap-2">
+				<svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+				</svg>
+				<span class="block sm:inline font-medium">%s</span>
+			</div>
+		</div>
+		<script>
+			// Clear the form after successful password change
+			document.getElementById('change-password-form').reset();
+		</script>`, message)
+	}
 }
