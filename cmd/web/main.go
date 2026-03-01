@@ -102,11 +102,18 @@ func main() {
 
 	fmt.Printf("\n📋 Environment: %s\n", *env)
 
+	// Set Gin mode based on environment
+	if *env == "prod" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
 	// Initialize handlers
 	h := handlers.New(database)
 
 	// Create Gin router
 	router := gin.New()
+	// Trust Render's proxy headers for proper client IP detection
+	router.TrustedPlatform = "X-Forwarded-For"
 	router.Use(gin.Logger(), gin.Recovery())
 
 	// Static files
