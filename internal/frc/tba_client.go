@@ -61,8 +61,8 @@ func (c *TBAClient) getJSON(ctx context.Context, path string, query url.Values, 
 
 // OPRData contains OPR, DPR, and CCWM statistics for all teams at an event.
 type OPRData struct {
-	OPRs map[string]float64 `json:"oprs"`
-	DPRs map[string]float64 `json:"dprs"`
+	OPRs  map[string]float64 `json:"oprs"`
+	DPRs  map[string]float64 `json:"dprs"`
 	CCWMs map[string]float64 `json:"ccwms"`
 }
 
@@ -173,24 +173,24 @@ func (c *TBAClient) GetEventComponentOPRs(ctx context.Context, eventKey string) 
 
 // RankingInfo contains ranking information for a team at an event.
 type RankingInfo struct {
-	TeamKey      string `json:"team_key"`
-	Rank         int    `json:"rank"`
-	MatchesPlayed int   `json:"matches_played"`
-	QualAverage  *float64 `json:"qual_average"`
-	ExtraStats   []float64 `json:"extra_stats"`
-	SortOrders   []float64 `json:"sort_orders"`
-	Record       struct {
+	TeamKey       string    `json:"team_key"`
+	Rank          int       `json:"rank"`
+	MatchesPlayed int       `json:"matches_played"`
+	QualAverage   *float64  `json:"qual_average"`
+	ExtraStats    []float64 `json:"extra_stats"`
+	SortOrders    []float64 `json:"sort_orders"`
+	Record        struct {
 		Wins   int `json:"wins"`
 		Losses int `json:"losses"`
 		Ties   int `json:"ties"`
 	} `json:"record"`
-	Dq         int `json:"dq"`
-	QualPoints *int `json:"qual_points"`
-	ElimPoints *int `json:"elim_points"`
-	AwardPoints *int `json:"award_points"`
+	Dq             int  `json:"dq"`
+	QualPoints     *int `json:"qual_points"`
+	ElimPoints     *int `json:"elim_points"`
+	AwardPoints    *int `json:"award_points"`
 	AlliancePoints *int `json:"alliance_points"`
-	TiePoints *int `json:"tie_points"`
-	TotalPoints *int `json:"total_points"`
+	TiePoints      *int `json:"tie_points"`
+	TotalPoints    *int `json:"total_points"`
 }
 
 // EffectiveQualAverage returns qual_average or falls back to first sort order (year-specific ranking score).
@@ -270,15 +270,15 @@ func (c *TBAClient) GetEventRankings(ctx context.Context, eventKey string) ([]Ra
 
 // EventInfo contains event metadata.
 type EventInfo struct {
-	Key       string     `json:"key"`
-	Name      string     `json:"name"`
-	EventCode string     `json:"event_code"`
-	Year      int        `json:"year"`
-	StartDate string     `json:"start_date"`
-	EndDate   string     `json:"end_date"`
-	Timezone  string     `json:"timezone"`
-	Official  bool       `json:"official"`
-	Playoff   string     `json:"playoff"`
+	Key       string `json:"key"`
+	Name      string `json:"name"`
+	EventCode string `json:"event_code"`
+	Year      int    `json:"year"`
+	StartDate string `json:"start_date"`
+	EndDate   string `json:"end_date"`
+	Timezone  string `json:"timezone"`
+	Official  bool   `json:"official"`
+	Playoff   string `json:"playoff"`
 }
 
 // GetEvent fetches detailed event information.
@@ -293,12 +293,12 @@ func (c *TBAClient) GetEvent(ctx context.Context, eventKey string) (*EventInfo, 
 
 // MatchInfo contains match information including timing.
 type MatchInfo struct {
-	Key          string    `json:"key"`
-	EventKey     string    `json:"event_key"`
-	CompLevel    string    `json:"comp_level"`
-	SetNumber    int       `json:"set_number"`
-	MatchNumber  int       `json:"match_number"`
-	Alliances    struct {
+	Key         string `json:"key"`
+	EventKey    string `json:"event_key"`
+	CompLevel   string `json:"comp_level"`
+	SetNumber   int    `json:"set_number"`
+	MatchNumber int    `json:"match_number"`
+	Alliances   struct {
 		Red struct {
 			Teams []string `json:"team_keys"`
 			Score int      `json:"score"`
@@ -308,9 +308,9 @@ type MatchInfo struct {
 			Score int      `json:"score"`
 		} `json:"blue"`
 	} `json:"alliances"`
-	ActualTime int64  `json:"actual_time"`
-	PredictedTime int64  `json:"predicted_time"`
-	ScheduledTime int64  `json:"scheduled_time"`
+	ActualTime     int64       `json:"actual_time"`
+	PredictedTime  int64       `json:"predicted_time"`
+	ScheduledTime  int64       `json:"scheduled_time"`
 	ScoreBreakdown interface{} `json:"score_breakdown"`
 }
 
