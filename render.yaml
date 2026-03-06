@@ -1,6 +1,6 @@
 databases:
   - name: tealteam-db
-    version: 16
+    databaseName: tealteam_db
     plan: free
 
 services:
