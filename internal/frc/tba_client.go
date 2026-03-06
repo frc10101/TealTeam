@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -74,11 +76,89 @@ func (c *TBAClient) GetEventOPRs(ctx context.Context, eventKey string) (*OPRData
 	return &data, nil
 }
 
-// ComponentOPRData contains component OPR breakdown per team.
+// ComponentOPRData contains dynamic component OPR breakdown per team.
+// TBA returns a map of component-name -> map[teamKey]value.
 type ComponentOPRData struct {
-	AutoOPRs   map[string]float64 `json:"auto_opr"`
-	TeleopOPRs map[string]float64 `json:"teleop_opr"`
-	EndgameOPRs map[string]float64 `json:"endgame_opr"`
+	Components map[string]map[string]float64
+}
+
+func (d *ComponentOPRData) UnmarshalJSON(data []byte) error {
+	var raw map[string]map[string]float64
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	d.Components = raw
+	return nil
+}
+
+func (d *ComponentOPRData) componentMap(preferredNames []string, containsAll []string) map[string]float64 {
+	if d == nil || len(d.Components) == 0 {
+		return nil
+	}
+
+	lookup := make(map[string]map[string]float64, len(d.Components))
+	for name, values := range d.Components {
+		lookup[strings.ToLower(strings.TrimSpace(name))] = values
+	}
+
+	for _, name := range preferredNames {
+		if values, ok := lookup[strings.ToLower(strings.TrimSpace(name))]; ok {
+			return values
+		}
+	}
+
+	// Fallback for new seasons: pick the largest component map that matches tokens.
+	var best map[string]float64
+	bestSize := -1
+	for name, values := range lookup {
+		match := true
+		for _, token := range containsAll {
+			if !strings.Contains(name, token) {
+				match = false
+				break
+			}
+		}
+		if match && len(values) > bestSize {
+			best = values
+			bestSize = len(values)
+		}
+	}
+
+	return best
+}
+
+// TeamPhaseOPRs returns best-effort auto/teleop/endgame point contributions for a team.
+func (d *ComponentOPRData) TeamPhaseOPRs(teamKey string) (auto *float64, teleop *float64, endgame *float64) {
+	autoMap := d.componentMap(
+		[]string{"totalAutoPoints", "autoPoints", "Hub Auto Points"},
+		[]string{"auto", "points"},
+	)
+	teleopMap := d.componentMap(
+		[]string{"totalTeleopPoints", "teleopPoints", "Hub Teleop Points"},
+		[]string{"teleop", "points"},
+	)
+	endgameMap := d.componentMap(
+		[]string{"endGameTowerPoints", "endgamePoints", "Hub Endgame Points"},
+		[]string{"endgame", "points"},
+	)
+
+	if autoMap != nil {
+		if v, ok := autoMap[teamKey]; ok {
+			auto = &v
+		}
+	}
+	if teleopMap != nil {
+		if v, ok := teleopMap[teamKey]; ok {
+			teleop = &v
+		}
+	}
+	if endgameMap != nil {
+		if v, ok := endgameMap[teamKey]; ok {
+			endgame = &v
+		}
+	}
+
+	return auto, teleop, endgame
 }
 
 // GetEventComponentOPRs fetches component OPR breakdown for an event.
@@ -96,19 +176,84 @@ type RankingInfo struct {
 	TeamKey      string `json:"team_key"`
 	Rank         int    `json:"rank"`
 	MatchesPlayed int   `json:"matches_played"`
-	QualAverage  float64 `json:"qual_average"`
+	QualAverage  *float64 `json:"qual_average"`
+	ExtraStats   []float64 `json:"extra_stats"`
+	SortOrders   []float64 `json:"sort_orders"`
 	Record       struct {
 		Wins   int `json:"wins"`
 		Losses int `json:"losses"`
 		Ties   int `json:"ties"`
 	} `json:"record"`
 	Dq         int `json:"dq"`
-	QualPoints int `json:"qual_points"`
-	ElimPoints int `json:"elim_points"`
-	AwardPoints int `json:"award_points"`
-	AlliancePoints int `json:"alliance_points"`
-	TiePoints int `json:"tie_points"`
-	TotalPoints int `json:"total_points"`
+	QualPoints *int `json:"qual_points"`
+	ElimPoints *int `json:"elim_points"`
+	AwardPoints *int `json:"award_points"`
+	AlliancePoints *int `json:"alliance_points"`
+	TiePoints *int `json:"tie_points"`
+	TotalPoints *int `json:"total_points"`
+}
+
+// EffectiveQualAverage returns qual_average or falls back to first sort order (year-specific ranking score).
+func (r RankingInfo) EffectiveQualAverage() *float64 {
+	if r.QualAverage != nil {
+		return r.QualAverage
+	}
+	if len(r.SortOrders) > 0 {
+		v := r.SortOrders[0]
+		return &v
+	}
+	return nil
+}
+
+// EffectiveAvgMatchPoints returns average match points from sort_orders[1] if available.
+func (r RankingInfo) EffectiveAvgMatchPoints() *float64 {
+	if len(r.SortOrders) > 1 {
+		v := r.SortOrders[1]
+		return &v
+	}
+	return nil
+}
+
+// EffectiveTotalPoints returns total points, falling back to first extra stat (often total ranking points).
+func (r RankingInfo) EffectiveTotalPoints() *int64 {
+	if r.TotalPoints != nil {
+		v := int64(*r.TotalPoints)
+		return &v
+	}
+	if len(r.ExtraStats) > 0 {
+		v := int64(math.Round(r.ExtraStats[0]))
+		return &v
+	}
+	return nil
+}
+
+// EffectiveQualPoints returns qual points or falls back to effective total points when only extra_stats are provided.
+func (r RankingInfo) EffectiveQualPoints() *int64 {
+	if r.QualPoints != nil {
+		v := int64(*r.QualPoints)
+		return &v
+	}
+	return r.EffectiveTotalPoints()
+}
+
+func optionalIntToInt64Ptr(v *int) *int64 {
+	if v == nil {
+		return nil
+	}
+	out := int64(*v)
+	return &out
+}
+
+func (r RankingInfo) EffectiveElimPoints() *int64 {
+	return optionalIntToInt64Ptr(r.ElimPoints)
+}
+
+func (r RankingInfo) EffectiveAwardPoints() *int64 {
+	return optionalIntToInt64Ptr(r.AwardPoints)
+}
+
+func (r RankingInfo) EffectiveAlliancePoints() *int64 {
+	return optionalIntToInt64Ptr(r.AlliancePoints)
 }
 
 // EventRankings fetches rankings for an event.

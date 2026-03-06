@@ -284,6 +284,29 @@
   .rise-swap.htmx-settling {
     @apply opacity-100 translate-y-0;
   }
+
+  /* Info Icon for tooltips */
+  .stat-info {
+    @apply relative inline-flex items-center justify-center w-5 h-5 ml-2 text-[10px] leading-none font-bold rounded-full border-2 cursor-help transition-all duration-150;
+  }
+
+  /* Hover state for info icon */
+  .stat-info:hover {
+    @apply bg-opacity-30 scale-110;
+  }
+
+  /* Tooltip on hover */
+  .stat-info::after {
+    content: attr(title);
+    @apply absolute left-full ml-2 px-3 py-2 text-xs font-normal whitespace-nowrap bg-gray-800 text-gray-100 rounded-lg shadow-lg pointer-events-none opacity-0 transition-opacity duration-200 z-50;
+    width: max-content;
+    max-width: 250px;
+    white-space: normal;
+  }
+
+  .stat-info:hover::after {
+    @apply opacity-100;
+  }
 }
 
 /*

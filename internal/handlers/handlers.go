@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"fmt"
 	"html/template"
 	"log"
+	"log/slog"
 	"net/http"
 	"path/filepath"
 
@@ -13,15 +15,17 @@ import (
 // Handler holds dependencies for HTTP handlers
 type Handler struct {
 	db        *gorm.DB
+	log       *slog.Logger
 	templates map[string]*template.Template
 	partials  *template.Template
 }
 
 // New creates a new Handler with the given database connection
 func New(db *gorm.DB) *Handler {
+	logger := slog.Default()
 	templates := make(map[string]*template.Template)
 
-	// Template functions for pagination
+	// Template functions for pagination and formatting
 	funcMap := template.FuncMap{
 		"add": func(a, b int) int {
 			return a + b
@@ -34,6 +38,18 @@ func New(db *gorm.DB) *Handler {
 				return 0
 			}
 			return a / b
+		},
+		"float1": func(ptr *float64) string {
+			if ptr == nil {
+				return "—"
+			}
+			return fmt.Sprintf("%.1f", *ptr)
+		},
+		"float2": func(ptr *float64) string {
+			if ptr == nil {
+				return "—"
+			}
+			return fmt.Sprintf("%.2f", *ptr)
 		},
 	}
 
@@ -65,6 +81,7 @@ func New(db *gorm.DB) *Handler {
 
 	return &Handler{
 		db:        db,
+		log:       logger,
 		templates: templates,
 		partials:  partials,
 	}
@@ -74,14 +91,14 @@ func New(db *gorm.DB) *Handler {
 func (h *Handler) render(c *gin.Context, page string, data any) {
 	tmpl, ok := h.templates[page]
 	if !ok {
-		log.Printf("Template not found: %s", page)
+		h.log.Error("template not found", "page", page)
 		http.Error(c.Writer, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
 	c.Header("Content-Type", "text/html; charset=utf-8")
 	if err := tmpl.ExecuteTemplate(c.Writer, "base", data); err != nil {
-		log.Printf("Template error: %v", err)
+		h.log.Error("template execution failed", "page", page, "error", err)
 		http.Error(c.Writer, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
@@ -90,7 +107,7 @@ func (h *Handler) render(c *gin.Context, page string, data any) {
 func (h *Handler) renderPartial(c *gin.Context, name string, data any) {
 	c.Header("Content-Type", "text/html; charset=utf-8")
 	if err := h.partials.ExecuteTemplate(c.Writer, name, data); err != nil {
-		log.Printf("Template error: %v", err)
+		h.log.Error("partial template execution failed", "partial", name, "error", err)
 		http.Error(c.Writer, "Internal Server Error", http.StatusInternalServerError)
 	}
 }

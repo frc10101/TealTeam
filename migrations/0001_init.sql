@@ -1,5 +1,5 @@
 -- Migration: 0001_init.sql
--- Description: Consolidated schema for test database
+-- Description: Consolidated schema initialization for database
 
 -- Enable UUID extension (optional)
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -198,19 +198,9 @@ CREATE TABLE IF NOT EXISTS scouting_data (
     event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
     team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
     alliance_color VARCHAR(10) NOT NULL,
-    auto_score INTEGER DEFAULT 0,
-    teleop_score INTEGER DEFAULT 0,
-    endgame_score INTEGER DEFAULT 0,
     notes TEXT,
-    scouter_name VARCHAR(255),
     starting_position VARCHAR(20),
-    auto_tower_level VARCHAR(20),
-    auto_hand INTEGER DEFAULT 0,
-    scoring_rating INTEGER CHECK (scoring_rating >= 1 AND scoring_rating <= 5),
-    endgame_tower_level VARCHAR(20),
-    endgame_hang INTEGER DEFAULT 0,
     defense_rating VARCHAR(20),
-    throughput VARCHAR(20),
     scoring_strategy VARCHAR(50),
     shooting_speed VARCHAR(20),
     capacity VARCHAR(20),
@@ -219,10 +209,6 @@ CREATE TABLE IF NOT EXISTS scouting_data (
     hang_level VARCHAR(10),
     auto_hang VARCHAR(10),
     hang_position VARCHAR(20),
-    hub_auto_count INTEGER DEFAULT 0,
-    hub_teleop_count INTEGER DEFAULT 0,
-    hub_endgame_count INTEGER DEFAULT 0,
-    penalties_caused INTEGER DEFAULT 0,
     scouted_at TIMESTAMP WITH TIME ZONE,
     scouter_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -241,14 +227,10 @@ CREATE TABLE IF NOT EXISTS scouting_submissions (
     event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
     team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
     alliance_color VARCHAR(10) NOT NULL,
-    auto_score INTEGER DEFAULT 0,
-    teleop_score INTEGER DEFAULT 0,
-    endgame_score INTEGER DEFAULT 0,
     notes TEXT,
     starting_position VARCHAR(20),
     defense_rating VARCHAR(20),
     traversal VARCHAR(20),
-    throughput VARCHAR(20),
     scoring_strategy VARCHAR(50),
     shooting_speed VARCHAR(20),
     capacity VARCHAR(20),

@@ -125,15 +125,15 @@ func TestGetEventComponentOPRs(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, `{
-			"auto_opr": {
+			"totalAutoPoints": {
 				"frc7405": 15.5,
 				"frc5881": 18.3
 			},
-			"teleop_opr": {
+			"totalTeleopPoints": {
 				"frc7405": 22.1,
 				"frc5881": 25.4
 			},
-			"endgame_opr": {
+			"endGameTowerPoints": {
 				"frc7405": 8.5,
 				"frc5881": 9.1
 			}
@@ -149,20 +149,19 @@ func TestGetEventComponentOPRs(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(data.AutoOPRs) != 2 {
-		t.Errorf("expected 2 auto OPR entries, got %d", len(data.AutoOPRs))
+	if len(data.Components) != 3 {
+		t.Errorf("expected 3 component maps, got %d", len(data.Components))
 	}
 
-	if opr, ok := data.AutoOPRs["frc7405"]; !ok || opr != 15.5 {
-		t.Errorf("expected auto OPR for frc7405 to be 15.5, got %v", opr)
+	auto, teleop, endgame := data.TeamPhaseOPRs("frc7405")
+	if auto == nil || *auto != 15.5 {
+		t.Errorf("expected auto value 15.5, got %v", auto)
 	}
-
-	if len(data.TeleopOPRs) != 2 {
-		t.Errorf("expected 2 teleop OPR entries, got %d", len(data.TeleopOPRs))
+	if teleop == nil || *teleop != 22.1 {
+		t.Errorf("expected teleop value 22.1, got %v", teleop)
 	}
-
-	if len(data.EndgameOPRs) != 2 {
-		t.Errorf("expected 2 endgame OPR entries, got %d", len(data.EndgameOPRs))
+	if endgame == nil || *endgame != 8.5 {
+		t.Errorf("expected endgame value 8.5, got %v", endgame)
 	}
 }
 
@@ -180,27 +179,27 @@ func TestGetEventRankings(t *testing.T) {
 					"team_key": "frc7405",
 					"rank": 1,
 					"matches_played": 10,
-					"qual_average": 95.5,
+					"qual_average": null,
+					"sort_orders": [95.5, 171.2],
+					"extra_stats": [180],
 					"record": {
 						"wins": 9,
 						"losses": 1,
 						"ties": 0
-					},
-					"qual_points": 150,
-					"total_points": 180
+					}
 				},
 				{
 					"team_key": "frc5881",
 					"rank": 2,
 					"matches_played": 10,
 					"qual_average": 88.2,
+					"sort_orders": [88.2, 154.5],
+					"extra_stats": [165],
 					"record": {
 						"wins": 8,
 						"losses": 2,
 						"ties": 0
-					},
-					"qual_points": 140,
-					"total_points": 165
+					}
 				}
 			]
 		}`)
@@ -229,8 +228,14 @@ func TestGetEventRankings(t *testing.T) {
 	if ranking1.Record.Wins != 9 {
 		t.Errorf("expected 9 wins, got %d", ranking1.Record.Wins)
 	}
-	if ranking1.QualAverage != 95.5 {
-		t.Errorf("expected qual average 95.5, got %v", ranking1.QualAverage)
+	if ranking1.QualAverage != nil {
+		t.Errorf("expected nil qual average, got %v", ranking1.QualAverage)
+	}
+	if v := ranking1.EffectiveQualAverage(); v == nil || *v != 95.5 {
+		t.Errorf("expected effective qual average 95.5, got %v", v)
+	}
+	if pts := ranking1.EffectiveTotalPoints(); pts == nil || *pts != 180 {
+		t.Errorf("expected effective total points 180, got %v", pts)
 	}
 
 	ranking2 := rankings[1]

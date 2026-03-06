@@ -19,6 +19,18 @@
         </div>
     </div>
 
+    <!-- Match Schedule (auto-refreshes every 30 seconds) -->
+    <div
+        id="match-schedule-container"
+        hx-get="/hx/matches/schedule"
+        hx-trigger="load, every 30s, eventSelected from:body"
+        hx-swap="innerHTML"
+        class="fade-swap">
+        <div class="flex justify-center py-8">
+            <span class="loading-spinner"></span>
+        </div>
+    </div>
+
     <!-- Features Grid -->
     <div class="grid md:grid-cols-3 gap-6">
         <div class="card">
