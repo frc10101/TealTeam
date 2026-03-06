@@ -3,12 +3,13 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 
 	"github.com/frc10101/TealTeam/internal/db"
 	"github.com/frc10101/TealTeam/internal/frc"
 	"github.com/frc10101/TealTeam/internal/handlers"
+	"github.com/frc10101/TealTeam/internal/logging"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 )
@@ -29,8 +30,12 @@ func main() {
 
 	// Validate environment
 	if *env != "test" && *env != "prod" {
-		log.Fatalf("Invalid environment '%s'. Use 'test' or 'prod'", *env)
+		slog.Error("invalid environment", "env", *env)
+		os.Exit(1)
 	}
+
+	// Initialize structured logging (JSON in prod, text in dev)
+	logger := logging.Setup(*env)
 
 	// Load configuration
 	port := os.Getenv("PORT")
@@ -47,7 +52,7 @@ func main() {
 		if databaseURL == "" {
 			databaseURL = dbConfigs["test"]
 		}
-		log.Println("🧪 Running in TEST mode (local Docker database)")
+		slog.Info("running in TEST mode", "database", "local-docker")
 	case "prod":
 		// Check for Render's database URL first, then fall back to DATABASE_URL
 		databaseURL = os.Getenv("RENDER_DATABASE_URL")
@@ -55,9 +60,10 @@ func main() {
 			databaseURL = os.Getenv("DATABASE_URL")
 		}
 		if databaseURL == "" {
-			log.Fatal("❌ Production mode requires RENDER_DATABASE_URL or DATABASE_URL environment variable")
+			slog.Error("production mode requires RENDER_DATABASE_URL or DATABASE_URL environment variable")
+			os.Exit(1)
 		}
-		log.Println("🚀 Running in PRODUCTION mode (Render database)")
+		slog.Info("running in PRODUCTION mode", "database", "render")
 	}
 
 	// Set DATABASE_URL for db.Connect() to use
@@ -66,18 +72,19 @@ func main() {
 	// Initialize database
 	database, err := db.Connect()
 	if err != nil {
-		log.Printf("Warning: Database connection failed: %v", err)
-		log.Println("Running without database support")
+		slog.Warn("database connection failed, running without database", "error", err)
 		database = nil
 	} else {
-		log.Println("✅ Database connected successfully")
+		slog.Info("database connected successfully")
 		if *env == "test" {
 			if err := db.ResetMigrations(database); err != nil {
-				log.Fatalf("Migration reset failed: %v", err)
+				slog.Error("migration reset failed", "error", err)
+				os.Exit(1)
 			}
 		}
 		if err := db.ApplyMigrations(database, "migrations"); err != nil {
-			log.Fatalf("Migration failed: %v", err)
+			slog.Error("migration failed", "error", err)
+			os.Exit(1)
 		}
 
 		frc.SyncOnBoot(database)
@@ -85,7 +92,7 @@ func main() {
 		// Start background team stats syncer
 		syncConfig := frc.LoadSyncConfig()
 		if syncConfig.TBAAuthKey == "" {
-			log.Println("⚠️  TBA_AUTH_KEY not configured, team stats sync disabled")
+			slog.Warn("TBA_AUTH_KEY not configured, team stats sync disabled")
 		} else {
 			syncer := frc.NewTeamStatsSyncer(database, syncConfig)
 			syncer.Start()
@@ -100,7 +107,7 @@ func main() {
 		}
 	}()
 
-	fmt.Printf("\n📋 Environment: %s\n", *env)
+	slog.Info("starting server", "env", *env, "port", port)
 
 	// Set Gin mode based on environment
 	if *env == "prod" {
@@ -114,7 +121,7 @@ func main() {
 	router := gin.New()
 	// Trust Render's proxy headers for proper client IP detection
 	router.TrustedPlatform = "X-Forwarded-For"
-	router.Use(gin.Logger(), gin.Recovery())
+	router.Use(logging.RequestLogger(logger), logging.Recovery(logger))
 
 	// Static files
 	router.Static("/static", "./web/static")
@@ -146,6 +153,7 @@ func main() {
 	router.GET("/submission/event-teams", h.HandleGetEventTeams)
 	router.GET("/hx/teams/search", h.HandleTeamSearch)
 	router.GET("/hx/teams/data", h.HandleTeamEventData)
+	router.GET("/hx/matches/schedule", h.HandleMatchSchedule)
 	router.POST("/hx/lead-scout/submissions/:id/approve", h.HandleApproveSubmission)
 	router.POST("/hx/lead-scout/submissions/:id/decline", h.HandleDeclineSubmission)
 
@@ -154,8 +162,9 @@ func main() {
 	// HTMX fragments: router.GET("/hx/yourfeature/fragment", h.HandleYourFragment)
 
 	// Start server
-	log.Printf("Server starting on http://localhost:%s", port)
+	slog.Info("server listening", "addr", fmt.Sprintf("http://localhost:%s", port))
 	if err := router.Run(":" + port); err != nil {
-		log.Fatal(err)
+		slog.Error("server failed", "error", err)
+		os.Exit(1)
 	}
 }

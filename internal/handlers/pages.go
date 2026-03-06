@@ -219,6 +219,8 @@ func (h *Handler) HandleSelectEvent(c *gin.Context) {
 		h.hydrateEventSelectionData(c, user, data)
 		// Load event summary data
 		h.hydrateEventSummaryData(c, selectedEventID, data)
+		// Trigger match schedule reload via HTMX event
+		c.Header("HX-Trigger", "eventSelected")
 		h.renderPartial(c, "event_selection", data)
 		return
 	}
@@ -250,11 +252,6 @@ func (h *Handler) HandleAdminViewer(c *gin.Context) {
 			data["SelectedEventID"] = *session.SelectedEventID
 			sortKey := c.Query("team_sort")
 			data["TeamRankingSort"] = sortKey
-			if topTeams, userTeam, aroundTeams, err := h.loadRankingSnapshot(c, *session.SelectedEventID, user.TeamNumber); err == nil {
-				data["TopRankedTeams"] = topTeams
-				data["UserRankedTeam"] = userTeam
-				data["AroundRankedTeams"] = aroundTeams
-			}
 			// Load full team point rankings
 			if teamRankings, err := h.loadTeamPointRankings(c, *session.SelectedEventID, sortKey); err == nil {
 				data["TeamRankings"] = teamRankings

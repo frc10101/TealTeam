@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/frc10101/TealTeam/internal/frc"
 	"github.com/frc10101/TealTeam/internal/models"
 	"github.com/gin-gonic/gin"
 )
@@ -85,9 +86,58 @@ func (h *Handler) hydrateTeamLookupData(c *gin.Context, user *models.User, teamN
 	data["TeamNumber"] = team.TeamNumber
 	data["TeamName"] = team.Name
 
-	h.hydrateEventSelectionData(c, user, data)
+	// Populate events that this specific team is participating in
+	h.hydrateTeamEventsData(c, teamNumber, data)
 
 	return http.StatusOK, ""
+}
+
+// hydrateTeamEventsData fetches events for a specific team
+// If events are not found locally, it calls the FIRST API to fetch them and sync to database
+func (h *Handler) hydrateTeamEventsData(c *gin.Context, teamNumber int, data map[string]any) {
+	if !h.hasDB() {
+		return
+	}
+
+	// Try to get events from database for this team
+	eventIDs, err := h.GetEventsForTeam(c.Request.Context(), teamNumber)
+	if err != nil || len(eventIDs) == 0 {
+		// No events locally, try to sync from FIRST API
+		syncErr := h.syncAndLoadTeamEvents(c, teamNumber)
+		if syncErr != nil {
+			// Sync failed, just continue without events
+			data["Events"] = []struct {
+				ID   int
+				Name string
+			}{}
+			return
+		}
+		// After sync, try to get events again
+		eventIDs, _ = h.GetEventsForTeam(c.Request.Context(), teamNumber)
+	}
+
+	// Fetch event details
+	if len(eventIDs) > 0 {
+		var events []struct {
+			ID   int
+			Name string
+		}
+		if err := h.db.WithContext(c.Request.Context()).
+			Table("events").
+			Select("id, name").
+			Where("id IN ?", eventIDs).
+			Order("start_date").
+			Scan(&events).Error; err == nil {
+			data["Events"] = events
+		}
+	}
+}
+
+// syncAndLoadTeamEvents syncs events for a specific team from FIRST API
+func (h *Handler) syncAndLoadTeamEvents(c *gin.Context, teamNumber int) error {
+	ctx := c.Request.Context()
+	_, err := frc.SyncTeamForUser(ctx, h.db, teamNumber)
+	return err
 }
 
 // HandleTeamEventData returns HTMX fragment with team data for a specific event
@@ -176,9 +226,6 @@ func (h *Handler) hydrateTeamEventData(c *gin.Context, teamID int, eventID int, 
 
 		// Calculate averages
 		if len(scoutingData) > 0 {
-			var totalAuto, totalTeleop, totalEndgame int
-			var totalHubAuto, totalHubTeleop, totalHubEndgame int
-			var totalPenalties int
 			startingPositions := make(map[string]int)
 			defenseRatings := make(map[string]int)
 			traversals := make(map[string]int)
@@ -189,14 +236,6 @@ func (h *Handler) hydrateTeamEventData(c *gin.Context, teamID int, eventID int, 
 			allianceColors := make(map[string]int)
 
 			for _, sd := range scoutingData {
-				totalAuto += sd.AutoScore
-				totalTeleop += sd.TeleopScore
-				totalEndgame += sd.EndgameScore
-				totalHubAuto += sd.HubAutoCount
-				totalHubTeleop += sd.HubTeleopCount
-				totalHubEndgame += sd.HubEndgameCount
-				totalPenalties += sd.PenaltiesCaused
-
 				if sd.StartingPosition != nil && *sd.StartingPosition != "" {
 					startingPositions[*sd.StartingPosition]++
 				}
@@ -221,16 +260,6 @@ func (h *Handler) hydrateTeamEventData(c *gin.Context, teamID int, eventID int, 
 				// Alliance color distribution
 				allianceColors[sd.AllianceColor]++
 			}
-
-			count := len(scoutingData)
-			data["AvgAutoScore"] = float64(totalAuto) / float64(count)
-			data["AvgTeleopScore"] = float64(totalTeleop) / float64(count)
-			data["AvgEndgameScore"] = float64(totalEndgame) / float64(count)
-			data["AvgTotalScore"] = float64(totalAuto+totalTeleop+totalEndgame) / float64(count)
-			data["AvgHubAuto"] = float64(totalHubAuto) / float64(count)
-			data["AvgHubTeleop"] = float64(totalHubTeleop) / float64(count)
-			data["AvgHubEndgame"] = float64(totalHubEndgame) / float64(count)
-			data["AvgPenalties"] = float64(totalPenalties) / float64(count)
 
 			// Alliance color stats
 			data["AllianceColorStats"] = allianceColors
@@ -311,23 +340,20 @@ func (h *Handler) hydrateTeamEventData(c *gin.Context, teamID int, eventID int, 
 			data["Capacity"] = latestData.Capacity
 			data["Defendability"] = latestData.Defendability
 			data["ScoringStrategy"] = latestData.ScoringStrategy
-			data["Throughput"] = latestData.Throughput
 
 			// Collect all notes from the competition
 			type NoteEntry struct {
-				Note        string
-				ScouterName string
-				ScoutedAt   *time.Time
-				MatchIndex  int
+				Note       string
+				ScoutedAt  *time.Time
+				MatchIndex int
 			}
 			var notes []NoteEntry
 			for i, sd := range scoutingData {
 				if sd.Notes != nil && *sd.Notes != "" {
 					notes = append(notes, NoteEntry{
-						Note:        *sd.Notes,
-						ScouterName: valueOrNA(sd.ScouterName),
-						ScoutedAt:   sd.ScoutedAt,
-						MatchIndex:  i + 1,
+						Note:       *sd.Notes,
+						ScoutedAt:  sd.ScoutedAt,
+						MatchIndex: i + 1,
 					})
 				}
 			}

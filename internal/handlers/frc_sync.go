@@ -31,9 +31,11 @@ func (h *Handler) HandleFRCSync(c *gin.Context) {
 			http.Error(c.Writer, "FIRST API credentials missing", http.StatusBadRequest)
 			return
 		}
+		h.log.Error("FRC sync failed", "error", err)
 		http.Error(c.Writer, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	h.log.Info("FRC sync completed", "events", result.Events, "teams", result.Teams, "event_teams", result.EventTeams)
 	c.JSON(http.StatusOK, result)
 }

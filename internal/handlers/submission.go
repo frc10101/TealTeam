@@ -35,14 +35,10 @@ type scoutingData struct {
 	EventID          int       `gorm:"column:event_id"`
 	TeamID           int       `gorm:"column:team_id"`
 	AllianceColor    string    `gorm:"column:alliance_color"`
-	AutoScore        int       `gorm:"column:auto_score"`
-	TeleopScore      int       `gorm:"column:teleop_score"`
-	EndgameScore     int       `gorm:"column:endgame_score"`
 	Notes            string    `gorm:"column:notes"`
 	StartingPosition string    `gorm:"column:starting_position"`
 	DefenseRating    string    `gorm:"column:defense_rating"`
 	Traversal        string    `gorm:"column:traversal"`
-	Throughput       string    `gorm:"column:throughput"`
 	ScoringStrategy  string    `gorm:"column:scoring_strategy"`
 	ShootingSpeed    string    `gorm:"column:shooting_speed"`
 	Capacity         string    `gorm:"column:capacity"`
@@ -61,14 +57,10 @@ type scoutingSubmission struct {
 	EventID          int       `gorm:"column:event_id"`
 	TeamID           int       `gorm:"column:team_id"`
 	AllianceColor    string    `gorm:"column:alliance_color"`
-	AutoScore        int       `gorm:"column:auto_score"`
-	TeleopScore      int       `gorm:"column:teleop_score"`
-	EndgameScore     int       `gorm:"column:endgame_score"`
 	Notes            string    `gorm:"column:notes"`
 	StartingPosition string    `gorm:"column:starting_position"`
 	DefenseRating    string    `gorm:"column:defense_rating"`
 	Traversal        string    `gorm:"column:traversal"`
-	Throughput       string    `gorm:"column:throughput"`
 	ScoringStrategy  string    `gorm:"column:scoring_strategy"`
 	ShootingSpeed    string    `gorm:"column:shooting_speed"`
 	Capacity         string    `gorm:"column:capacity"`
@@ -157,14 +149,10 @@ func (h *Handler) HandleSubmission(c *gin.Context) {
 		EventID:          input.EventID,
 		TeamID:           input.TeamID,
 		AllianceColor:    input.AllianceColor,
-		AutoScore:        0,
-		TeleopScore:      0,
-		EndgameScore:     0,
 		Notes:            input.Notes,
 		StartingPosition: input.StartingPosition,
 		DefenseRating:    input.DefenseRating,
 		Traversal:        input.Traversal,
-		Throughput:       "",
 		ScoringStrategy:  input.TeleopStrategy,
 		ShootingSpeed:    input.ShootingSpeed,
 		Capacity:         input.Capacity,
@@ -177,6 +165,7 @@ func (h *Handler) HandleSubmission(c *gin.Context) {
 	}
 
 	if err := h.db.WithContext(ctx).Create(&submission).Error; err != nil {
+		h.log.Error("failed to create scouting submission", "event_id", input.EventID, "team_id", input.TeamID, "scouter_id", user.ID, "error", err)
 		if c.GetHeader("HX-Request") == "true" {
 			data := h.buildSubmissionPageData(c, user)
 			data["SubmissionError"] = fmt.Sprintf("Failed to queue submission: %v", err)

@@ -120,16 +120,6 @@ func (s *TeamStatsSyncer) SyncTeamStatsForEvent(ctx context.Context, eventID int
 		rankingsByTeamKey[ranking.TeamKey] = ranking
 	}
 
-	// Build lookup for component OPRs
-	autoOPRMap := make(map[string]float64)
-	teleopOPRMap := make(map[string]float64)
-	endgameOPRMap := make(map[string]float64)
-	if componentData != nil {
-		autoOPRMap = componentData.AutoOPRs
-		teleopOPRMap = componentData.TeleopOPRs
-		endgameOPRMap = componentData.EndgameOPRs
-	}
-
 	// Get all teams at this event
 	var eventTeams []struct {
 		TeamID     int
@@ -170,38 +160,36 @@ func (s *TeamStatsSyncer) SyncTeamStatsForEvent(ctx context.Context, eventID int
 			stats.CCWM = &ccwm
 		}
 
-		// Set component OPR stats
-		if autoOPR, ok := autoOPRMap[*tbaKey]; ok {
-			stats.AutoOPR = &autoOPR
-		}
-		if teleopOPR, ok := teleopOPRMap[*tbaKey]; ok {
-			stats.TeleopOPR = &teleopOPR
-		}
-		if endgameOPR, ok := endgameOPRMap[*tbaKey]; ok {
-			stats.EndgameOPR = &endgameOPR
+		// Set component OPR stats from dynamic COPRs payload.
+		if componentData != nil {
+			autoOPR, teleopOPR, endgameOPR := componentData.TeamPhaseOPRs(*tbaKey)
+			stats.AutoOPR = autoOPR
+			stats.TeleopOPR = teleopOPR
+			stats.EndgameOPR = endgameOPR
 		}
 
 		// Set ranking stats
 		if ranking, ok := rankingsByTeamKey[*tbaKey]; ok {
 			stats.Rank = &ranking.Rank
 			stats.MatchesPlayed = ranking.MatchesPlayed
-			stats.QualAverage = toPtr(ranking.QualAverage)
+			stats.QualAverage = ranking.EffectiveQualAverage()
+			stats.AvgMatchPoints = ranking.EffectiveAvgMatchPoints()
 			stats.Wins = ranking.Record.Wins
 			stats.Losses = ranking.Record.Losses
 			stats.Ties = ranking.Record.Ties
 			stats.DQCount = ranking.Dq
-			stats.QualPoints = toPtr(int64(ranking.QualPoints))
-			stats.ElimPoints = toPtr(int64(ranking.ElimPoints))
-			stats.AwardPoints = toPtr(int64(ranking.AwardPoints))
-			stats.AlliancePoints = toPtr(int64(ranking.AlliancePoints))
-			stats.TotalPoints = toPtr(int64(ranking.TotalPoints))
+			stats.QualPoints = ranking.EffectiveQualPoints()
+			stats.ElimPoints = ranking.EffectiveElimPoints()
+			stats.AwardPoints = ranking.EffectiveAwardPoints()
+			stats.AlliancePoints = ranking.EffectiveAlliancePoints()
+			stats.TotalPoints = ranking.EffectiveTotalPoints()
 		}
 
 		// Upsert the stats row
 		if err := s.db.WithContext(ctx).
 			Clauses(clause.OnConflict{
 				Columns:   []clause.Column{{Name: "team_id"}, {Name: "event_id"}},
-				DoUpdates: clause.AssignmentColumns([]string{"opr", "dpr", "ccwm", "auto_opr", "teleop_opr", "endgame_opr", "rank", "matches_played", "qual_average", "wins", "losses", "ties", "dq_count", "qual_points", "elim_points", "award_points", "alliance_points", "total_points", "updated_at"}),
+				DoUpdates: clause.AssignmentColumns([]string{"opr", "dpr", "ccwm", "auto_opr", "teleop_opr", "endgame_opr", "rank", "matches_played", "qual_average", "avg_match_points", "wins", "losses", "ties", "dq_count", "qual_points", "elim_points", "award_points", "alliance_points", "total_points", "updated_at"}),
 			}).
 			Create(&stats).Error; err != nil {
 			log.Printf("⚠️  Failed to upsert team stats (team %d, event %d): %v", et.TeamID, eventID, err)

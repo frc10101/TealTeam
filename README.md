@@ -563,6 +563,19 @@ CMD ["./server"]
 - [HTMX documentation](https://htmx.org/docs/)
 - [Tailwind CSS documentation](https://tailwindcss.com/docs)
 - [PostgreSQL documentation](https://www.postgresql.org/docs/)
+- [The Blue Alliance API Documentation](https://www.thebluealliance.com/apidocs)
+
+## ⚠️ The Blue Alliance Integration Notes
+
+This application syncs team statistics and match data from The Blue Alliance (TBA) API v3. 
+
+**Important**: TBA's response schema varies by FRC season. For example, 2026+ seasons use dynamic component naming for OPR calculations and nullable ranking fields. The application handles these variations through:
+
+1. **Dynamic Component OPR Parsing** - Matches TBA's component map structure instead of expecting fixed field names
+2. **Effective Ranking Helpers** - Falls back to `sort_orders` and `extra_stats` arrays when direct fields are null
+3. **Match Persistence** - Automatically syncs match schedules and results to the database
+
+For technical details and troubleshooting TBA integration issues, see [TBA_SCHEMA_FIX_SUMMARY.md](TBA_SCHEMA_FIX_SUMMARY.md).
 
 ## License
 

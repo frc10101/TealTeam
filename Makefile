@@ -66,7 +66,7 @@ migrate:
 	fi
 
 seed:
-	go run ./scripts/seed.go
+	go run ./cmd/scripts/seed
 
 # Testing
 test:

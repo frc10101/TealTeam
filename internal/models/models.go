@@ -73,34 +73,41 @@ type Event struct {
 
 // ScoutingData represents scouting data for a team at a match
 type ScoutingData struct {
-	ID               int        `json:"id" gorm:"column:id;primaryKey"`
-	EventID          int        `json:"event_id" gorm:"column:event_id"`
-	TeamID           int        `json:"team_id" gorm:"column:team_id"`
-	AllianceColor    string     `json:"alliance_color" gorm:"column:alliance_color"`
-	AutoScore        int        `json:"auto_score" gorm:"column:auto_score"`
-	TeleopScore      int        `json:"teleop_score" gorm:"column:teleop_score"`
-	EndgameScore     int        `json:"endgame_score" gorm:"column:endgame_score"`
-	Notes            *string    `json:"notes,omitempty" gorm:"column:notes"`
-	ScouterName      *string    `json:"scouter_name,omitempty" gorm:"column:scouter_name"`
-	StartingPosition *string    `json:"starting_position,omitempty" gorm:"column:starting_position"`
-	DefenseRating    *string    `json:"defense_rating,omitempty" gorm:"column:defense_rating"`
-	Throughput       *string    `json:"throughput,omitempty" gorm:"column:throughput"`
-	ScoringStrategy  *string    `json:"scoring_strategy,omitempty" gorm:"column:scoring_strategy"`
-	ShootingSpeed    *string    `json:"shooting_speed,omitempty" gorm:"column:shooting_speed"`
-	Capacity         *string    `json:"capacity,omitempty" gorm:"column:capacity"`
-	Defendability    *string    `json:"defendability,omitempty" gorm:"column:defendability"`
-	Traversal        *string    `json:"traversal,omitempty" gorm:"column:traversal"`
-	HangLevel        *string    `json:"hang_level,omitempty" gorm:"column:hang_level"`
-	AutoHang         *string    `json:"auto_hang,omitempty" gorm:"column:auto_hang"`
-	HangPosition     *string    `json:"hang_position,omitempty" gorm:"column:hang_position"`
-	HubAutoCount     int        `json:"hub_auto_count" gorm:"column:hub_auto_count"`
-	HubTeleopCount   int        `json:"hub_teleop_count" gorm:"column:hub_teleop_count"`
-	HubEndgameCount  int        `json:"hub_endgame_count" gorm:"column:hub_endgame_count"`
-	PenaltiesCaused  int        `json:"penalties_caused" gorm:"column:penalties_caused"`
-	ScoutedAt        *time.Time `json:"scouted_at,omitempty" gorm:"column:scouted_at"`
-	ScouterID        *int       `json:"scouter_id,omitempty" gorm:"column:scouter_id"`
-	CreatedAt        time.Time  `json:"created_at" gorm:"column:created_at"`
-	UpdatedAt        time.Time  `json:"updated_at" gorm:"column:updated_at"`
+	ID               int     `json:"id" gorm:"column:id;primaryKey"`
+	EventID          int     `json:"event_id" gorm:"column:event_id"`
+	TeamID           int     `json:"team_id" gorm:"column:team_id"`
+	AllianceColor    string  `json:"alliance_color" gorm:"column:alliance_color"`
+	Notes            *string `json:"notes,omitempty" gorm:"column:notes"`
+	StartingPosition *string `json:"starting_position,omitempty" gorm:"column:starting_position"`
+	DefenseRating    *string `json:"defense_rating,omitempty" gorm:"column:defense_rating"`
+	ScoringStrategy  *string `json:"scoring_strategy,omitempty" gorm:"column:scoring_strategy"`
+	ShootingSpeed    *string `json:"shooting_speed,omitempty" gorm:"column:shooting_speed"`
+	Capacity         *string `json:"capacity,omitempty" gorm:"column:capacity"`
+	Defendability    *string `json:"defendability,omitempty" gorm:"column:defendability"`
+	Traversal        *string `json:"traversal,omitempty" gorm:"column:traversal"`
+	HangLevel        *string `json:"hang_level,omitempty" gorm:"column:hang_level"`
+	AutoHang         *string `json:"auto_hang,omitempty" gorm:"column:auto_hang"`
+	HangPosition     *string `json:"hang_position,omitempty" gorm:"column:hang_position"`
+
+	ScoutedAt *time.Time `json:"scouted_at,omitempty" gorm:"column:scouted_at"`
+	ScouterID *int       `json:"scouter_id,omitempty" gorm:"column:scouter_id"`
+	CreatedAt time.Time  `json:"created_at" gorm:"column:created_at"`
+	UpdatedAt time.Time  `json:"updated_at" gorm:"column:updated_at"`
+}
+
+// Match represents a FRC match
+type Match struct {
+	ID            int        `json:"id" gorm:"column:id;primaryKey"`
+	EventID       int        `json:"event_id" gorm:"column:event_id"`
+	MatchNumber   int        `json:"match_number" gorm:"column:match_number"`
+	MatchType     string     `json:"match_type" gorm:"column:match_type"`
+	RedScore      int        `json:"red_score" gorm:"column:red_score"`
+	BlueScore     int        `json:"blue_score" gorm:"column:blue_score"`
+	Played        bool       `json:"played" gorm:"column:played"`
+	ScheduledTime *time.Time `json:"scheduled_time,omitempty" gorm:"column:scheduled_time"`
+	ActualTime    *time.Time `json:"actual_time,omitempty" gorm:"column:actual_time"`
+	CreatedAt     time.Time  `json:"created_at" gorm:"column:created_at"`
+	UpdatedAt     time.Time  `json:"updated_at" gorm:"column:updated_at"`
 }
 
 // TeamEventStats represents aggregated team statistics for an event
@@ -117,6 +124,7 @@ type TeamEventStats struct {
 	Rank           *int      `json:"rank,omitempty" gorm:"column:rank"`
 	MatchesPlayed  int       `json:"matches_played" gorm:"column:matches_played"`
 	QualAverage    *float64  `json:"qual_average,omitempty" gorm:"column:qual_average"`
+	AvgMatchPoints *float64  `json:"avg_match_points,omitempty" gorm:"column:avg_match_points"`
 	Wins           int       `json:"wins" gorm:"column:wins"`
 	Losses         int       `json:"losses" gorm:"column:losses"`
 	Ties           int       `json:"ties" gorm:"column:ties"`

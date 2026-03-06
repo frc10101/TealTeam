@@ -121,3 +121,36 @@ func (c *Client) GetEventTeams(ctx context.Context, season int, eventCode string
 	}
 	return resp.Teams, nil
 }
+
+// ScheduleResponse matches the /{season}/schedule/{eventCode} response.
+type ScheduleResponse struct {
+	Schedule []ScheduleMatch `json:"Schedule"`
+}
+
+// ScheduleMatch represents a match in the schedule.
+type ScheduleMatch struct {
+	Description     string              `json:"description"`
+	TournamentLevel string              `json:"tournamentLevel"`
+	MatchNumber     int                 `json:"matchNumber"`
+	StartTime       string              `json:"startTime"` // ISO 8601 format
+	Field           string              `json:"field"`
+	Teams           []ScheduleMatchTeam `json:"teams"`
+}
+
+// ScheduleMatchTeam represents a team in a match.
+type ScheduleMatchTeam struct {
+	TeamNumber int    `json:"teamNumber"`
+	Station    string `json:"station"` // e.g., "Red1", "Blue2"
+	Surrogate  bool   `json:"surrogate"`
+	DQ         bool   `json:"dq"`
+}
+
+// GetMatchSchedule retrieves the match schedule for an event.
+func (c *Client) GetMatchSchedule(ctx context.Context, season int, eventCode string, filters url.Values) ([]ScheduleMatch, error) {
+	var resp ScheduleResponse
+	path := fmt.Sprintf("/%d/schedule/%s", season, eventCode)
+	if err := c.getJSON(ctx, path, filters, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Schedule, nil
+}

@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -80,7 +79,7 @@ func (h *Handler) HandleLogin(c *gin.Context) {
 		h.sendAuthResponse(c, false, "Invalid email or password", "")
 		return
 	} else if err != nil {
-		log.Printf("Database error during login: %v", err)
+		h.log.Error("database error during login", "error", err)
 		h.sendAuthResponse(c, false, "An error occurred. Please try again.", "")
 		return
 	}
@@ -94,7 +93,7 @@ func (h *Handler) HandleLogin(c *gin.Context) {
 	// Create session
 	sessionID, err := generateSessionID()
 	if err != nil {
-		log.Printf("Failed to generate session ID: %v", err)
+		h.log.Error("failed to generate session ID", "error", err)
 		h.sendAuthResponse(c, false, "Failed to create session", "")
 		return
 	}
@@ -107,14 +106,14 @@ func (h *Handler) HandleLogin(c *gin.Context) {
 		ExpiresAt: expiresAt,
 	}
 	if err := h.db.Create(&session).Error; err != nil {
-		log.Printf("Failed to store session: %v", err)
+		h.log.Error("failed to store session", "error", err)
 		h.sendAuthResponse(c, false, "Failed to create session", "")
 		return
 	}
 
 	// Update last login time
 	if err := h.db.Model(&models.User{}).Where("id = ?", user.ID).Update("last_login", time.Now()).Error; err != nil {
-		log.Printf("Failed to update last login: %v", err)
+		h.log.Warn("failed to update last login", "user_id", user.ID, "error", err)
 	}
 
 	// Set session cookie
@@ -135,7 +134,7 @@ func (h *Handler) HandleLogin(c *gin.Context) {
 			defer cancel()
 			_, err := frc.SyncTeamForUser(ctx, h.db, *user.TeamNumber)
 			if err != nil {
-				log.Printf("Failed to sync team data for user %d (team %d): %v", user.ID, *user.TeamNumber, err)
+				h.log.Error("failed to sync team data on login", "user_id", user.ID, "team", *user.TeamNumber, "error", err)
 			}
 		}()
 	}
@@ -186,14 +185,14 @@ func (h *Handler) HandleSignup(c *gin.Context) {
 		h.sendAuthResponse(c, false, "An account with this email already exists", "")
 		return
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-		log.Printf("Database error checking existing user: %v", err)
+		h.log.Error("database error checking existing user", "error", err)
 		h.sendAuthResponse(c, false, "An error occurred. Please try again.", "")
 		return
 	}
 
 	passwordHash, err := HashPassword(password)
 	if err != nil {
-		log.Printf("Failed to hash password: %v", err)
+		h.log.Error("failed to hash password", "error", err)
 		h.sendAuthResponse(c, false, "Failed to create account. Please try again.", "")
 		return
 	}
@@ -203,7 +202,7 @@ func (h *Handler) HandleSignup(c *gin.Context) {
 		if value, err := strconv.Atoi(teamNumber); err == nil {
 			parsedTeamNumber = &value
 		} else {
-			log.Printf("Invalid team number provided by %s: %s", email, teamNumber)
+			h.log.Warn("invalid team number on signup", "email", email, "team_number", teamNumber)
 		}
 	}
 
@@ -220,7 +219,7 @@ func (h *Handler) HandleSignup(c *gin.Context) {
 	}
 
 	if err := h.db.Create(&user).Error; err != nil {
-		log.Printf("Failed to create user: %v", err)
+		h.log.Error("failed to create user", "email", email, "error", err)
 		if strings.Contains(err.Error(), "duplicate") || strings.Contains(err.Error(), "unique") {
 			h.sendAuthResponse(c, false, "An account with this email already exists", "")
 		} else {
@@ -230,7 +229,7 @@ func (h *Handler) HandleSignup(c *gin.Context) {
 	}
 
 	if parsedTeamNumber != nil {
-		log.Printf("User %d (%s) signed up with team number: %d", user.ID, email, *parsedTeamNumber)
+		h.log.Info("user signed up", "user_id", user.ID, "email", email, "team", *parsedTeamNumber)
 
 		// Sync team data from FIRST API for new team member
 		go func() {
@@ -239,17 +238,17 @@ func (h *Handler) HandleSignup(c *gin.Context) {
 
 			result, err := frc.SyncTeamForUser(ctx, h.db, *parsedTeamNumber)
 			if err != nil {
-				log.Printf("Failed to sync team %d on signup: %v", *parsedTeamNumber, err)
+				h.log.Error("failed to sync team on signup", "team", *parsedTeamNumber, "error", err)
 				return
 			}
-			log.Printf("Synced team %d on signup: events=%d teams=%d event_teams=%d",
-				*parsedTeamNumber, result.Events, result.Teams, result.EventTeams)
+			h.log.Info("synced team on signup", "team", *parsedTeamNumber,
+				"events", result.Events, "teams", result.Teams, "event_teams", result.EventTeams)
 		}()
 	}
 
 	sessionID, err := generateSessionID()
 	if err != nil {
-		log.Printf("Failed to generate session ID: %v", err)
+		h.log.Error("failed to generate session ID on signup", "error", err)
 		h.sendAuthResponse(c, true, "Account created! Redirecting to sign in...", "/sign-in")
 		return
 	}
@@ -261,7 +260,7 @@ func (h *Handler) HandleSignup(c *gin.Context) {
 		ExpiresAt: expiresAt,
 	}
 	if err := h.db.Create(&session).Error; err != nil {
-		log.Printf("Failed to store session: %v", err)
+		h.log.Error("failed to store session on signup", "error", err)
 		h.sendAuthResponse(c, true, "Account created! Redirecting to sign in...", "/sign-in")
 		return
 	}
@@ -283,7 +282,7 @@ func (h *Handler) HandleSignup(c *gin.Context) {
 			defer cancel()
 			_, err := frc.SyncTeamForUser(ctx, h.db, *parsedTeamNumber)
 			if err != nil {
-				log.Printf("Failed to sync team data for user %d (team %d): %v", user.ID, *parsedTeamNumber, err)
+				h.log.Error("failed to sync team data on signup", "user_id", user.ID, "team", *parsedTeamNumber, "error", err)
 			}
 		}()
 	}
@@ -295,7 +294,7 @@ func (h *Handler) HandleLogout(c *gin.Context) {
 	cookie, err := c.Request.Cookie(sessionCookieName)
 	if err == nil && h.hasDB() {
 		if err := h.db.Where("session_id = ?", cookie.Value).Delete(&models.Session{}).Error; err != nil {
-			log.Printf("Failed to delete session: %v", err)
+			h.log.Warn("failed to delete session on logout", "error", err)
 		}
 	}
 
@@ -398,7 +397,7 @@ func (h *Handler) CleanupExpiredSessions() error {
 
 	rowsAffected := result.RowsAffected
 	if rowsAffected > 0 {
-		log.Printf("Cleaned up %d expired sessions", rowsAffected)
+		h.log.Info("cleaned up expired sessions", "count", rowsAffected)
 	}
 
 	return nil
@@ -463,19 +462,19 @@ func (h *Handler) HandleChangePassword(c *gin.Context) {
 	// Hash new password
 	newPasswordHash, err := HashPassword(newPassword)
 	if err != nil {
-		log.Printf("Failed to hash password: %v", err)
+		h.log.Error("failed to hash new password", "user_id", user.ID, "error", err)
 		h.sendPasswordChangeResponse(c, false, "Failed to update password. Please try again.")
 		return
 	}
 
 	// Update password in database
 	if err := h.db.Model(&models.User{}).Where("id = ?", user.ID).Update("password_hash", newPasswordHash).Error; err != nil {
-		log.Printf("Failed to update password for user %d: %v", user.ID, err)
+		h.log.Error("failed to update password", "user_id", user.ID, "error", err)
 		h.sendPasswordChangeResponse(c, false, "Failed to update password. Please try again.")
 		return
 	}
 
-	log.Printf("Password changed successfully for user %d (%s)", user.ID, user.Email)
+	h.log.Info("password changed", "user_id", user.ID, "email", user.Email)
 	h.sendPasswordChangeResponse(c, true, "Password changed successfully!")
 }
 
