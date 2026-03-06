@@ -8,6 +8,12 @@ services:
     name: tealteam
     runtime: docker
     plan: free
+    region: oregon
+    branch: main
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /
+    autoDeploy: true
     preDeployCommand: echo "Migrations will run on application startup"
     envVars:
       - key: PORT
