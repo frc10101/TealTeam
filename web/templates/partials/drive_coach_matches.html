@@ -1,0 +1,71 @@
+{{define "drive_coach_matches"}}
+<div id="drive-coach-matches-content">
+	{{if .DriveCoachError}}
+	<div class="rounded-lg border border-red-600 bg-red-900/30 px-4 py-3 text-sm text-red-200">
+		{{.DriveCoachError}}
+	</div>
+	{{else if .DriveCoachMatches}}
+	<div class="space-y-4">
+		{{range .DriveCoachMatches}}
+		<div class="rounded-lg border p-4 {{.StatusClass}} transition-colors">
+			<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+				<div>
+					<div class="flex items-center gap-2">
+						<h2 class="text-lg font-semibold text-gray-100">{{.Description}}</h2>
+						<span class="rounded-full px-2 py-0.5 text-xs font-semibold {{if eq .Status "current"}}bg-yellow-600 text-white{{else if eq .Status "completed"}}bg-gray-700 text-gray-200{{else}}bg-teal-700 text-white{{end}}">{{.StatusLabel}}</span>
+					</div>
+					<div class="mt-1 text-sm text-gray-400">
+						Match {{.MatchNumber}}
+						{{if .TimeDisplay}}• {{.TimeDisplay}}{{end}}
+						{{if eq .OurAlliance "Red"}}• You are Red{{else if eq .OurAlliance "Blue"}}• You are Blue{{end}}
+					</div>
+					{{if .OurPartners}}
+					<div class="mt-2 text-sm text-gray-300">
+						Partners:
+						{{range .OurPartners}}
+							<a href="/teams?team={{.}}" class="ml-1 text-teal-300 hover:text-teal-200">{{.}}</a>
+						{{end}}
+					</div>
+					{{end}}
+				</div>
+				<div class="rounded-lg border border-gray-700 bg-gray-900/60 px-3 py-2 text-right">
+					<div class="text-xs uppercase tracking-wide text-gray-500">Prediction</div>
+					<div class="mt-1 text-sm font-semibold text-red-300">Red {{printf "%.1f" .PredictedRedScore}}</div>
+					<div class="text-sm font-semibold text-blue-300">Blue {{printf "%.1f" .PredictedBlueScore}}</div>
+				</div>
+			</div>
+
+			<div class="mt-4 grid gap-3 md:grid-cols-2">
+				<div class="rounded-lg border border-red-700 bg-red-900/20 p-3">
+					<div class="text-xs font-semibold uppercase tracking-wide text-red-300">Red Alliance</div>
+					<ul class="mt-2 space-y-1">
+						{{range .RedTeams}}
+						<li class="flex items-center justify-between text-sm">
+							<a href="/teams?team={{.TeamNumber}}" class="font-mono text-gray-100 hover:text-teal-200">Team {{.TeamNumber}}</a>
+							<span class="text-xs text-gray-400">OPR {{float1 .OPR}} • DPR {{float1 .DPR}}</span>
+						</li>
+						{{end}}
+					</ul>
+				</div>
+				<div class="rounded-lg border border-blue-700 bg-blue-900/20 p-3">
+					<div class="text-xs font-semibold uppercase tracking-wide text-blue-300">Blue Alliance</div>
+					<ul class="mt-2 space-y-1">
+						{{range .BlueTeams}}
+						<li class="flex items-center justify-between text-sm">
+							<a href="/teams?team={{.TeamNumber}}" class="font-mono text-gray-100 hover:text-teal-200">Team {{.TeamNumber}}</a>
+							<span class="text-xs text-gray-400">OPR {{float1 .OPR}} • DPR {{float1 .DPR}}</span>
+						</li>
+						{{end}}
+					</ul>
+				</div>
+			</div>
+		</div>
+		{{end}}
+	</div>
+	{{else}}
+	<div class="rounded-lg border border-gray-700 bg-gray-900 px-4 py-6 text-center text-sm text-gray-400">
+		Select an event to load your team schedule.
+	</div>
+	{{end}}
+</div>
+{{end}}

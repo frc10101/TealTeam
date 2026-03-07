@@ -62,7 +62,7 @@ func New(db *gorm.DB) *Handler {
 	}
 
 	// Parse each page template with the layout (and partials)
-	pages := []string{"index", "submission", "submission_detail", "db_viewer", "admin_viewer", "signin", "signup", "team", "account"}
+	pages := []string{"index", "submission", "submission_detail", "db_viewer", "admin_viewer", "coach_viewer", "signin", "signup", "team", "account"}
 	for _, page := range pages {
 		pageFile := filepath.Join("web", "templates", "pages", page+".html")
 		files := append([]string{layoutFile, pageFile}, partialFiles...)

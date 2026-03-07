@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -24,7 +25,7 @@ type MatchDisplay struct {
 	MinutesUntil int
 }
 
-// HandleMatchSchedule returns current matches in the 30-minute window
+// HandleMatchSchedule returns all matches for the selected event
 func (h *Handler) HandleMatchSchedule(c *gin.Context) {
 	if !h.hasDB() {
 		h.renderPartial(c, "match_schedule", map[string]any{
@@ -120,7 +121,7 @@ func (h *Handler) HandleMatchSchedule(c *gin.Context) {
 		return
 	}
 
-	// Filter matches within 15-minute window (past and future)
+	// Filter matches within 15-minute window (past and future) for admin panel
 	now := time.Now()
 	windowStart := now.Add(-15 * time.Minute)
 	windowEnd := now.Add(15 * time.Minute)
@@ -133,7 +134,7 @@ func (h *Handler) HandleMatchSchedule(c *gin.Context) {
 			continue
 		}
 
-		// Filter by time window
+		// Filter by time window - only show matches within ±15 minutes
 		if startTime.Before(windowStart) || startTime.After(windowEnd) {
 			continue
 		}
@@ -151,9 +152,9 @@ func (h *Handler) HandleMatchSchedule(c *gin.Context) {
 		// Determine time status
 		timeStatus := "upcoming"
 		minutesUntil := int(startTime.Sub(now).Minutes())
-		if startTime.Before(now) {
+		if minutesUntil < -15 {
 			timeStatus = "past"
-		} else if minutesUntil <= 5 {
+		} else if minutesUntil <= 5 && minutesUntil >= -15 {
 			timeStatus = "current"
 		}
 
@@ -161,13 +162,18 @@ func (h *Handler) HandleMatchSchedule(c *gin.Context) {
 			Description:  match.Description,
 			MatchNumber:  match.MatchNumber,
 			StartTime:    startTime,
-			TimeDisplay:  startTime.Format("3:04 PM"),
+			TimeDisplay:  startTime.In(time.Local).Format("Mon Jan 2, 3:04 PM"),
 			TimeStatus:   timeStatus,
 			RedTeams:     redTeams,
 			BlueTeams:    blueTeams,
 			MinutesUntil: minutesUntil,
 		})
 	}
+
+	// Sort matches by start time (earliest first)
+	sort.Slice(displayMatches, func(i, j int) bool {
+		return displayMatches[i].StartTime.Before(displayMatches[j].StartTime)
+	})
 
 	data := map[string]any{
 		"Matches":   displayMatches,

@@ -9,6 +9,7 @@
         hx-swap="outerHTML transition:true"
         hx-indicator="#event-selection-indicator"
         hx-trigger="change, submit"
+        hx-on::after-request="htmx.trigger('#drive-coach-matches-container', 'reload-matches')"
         class="flex flex-col gap-4 sm:flex-row sm:items-end">
         <div class="flex-1">
             <label for="event-selection" class="block text-sm font-medium text-gray-300 mb-2">Current Event</label>
