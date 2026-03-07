@@ -20,7 +20,7 @@ func (h *Handler) HandleIndex(c *gin.Context) {
 
 	data := map[string]any{
 		"Title":   "Home",
-		"Message": "Welcome to Your Application",
+		"Message": "TealTeam Scouting",
 		"User":    user,
 	}
 
@@ -280,7 +280,7 @@ func (h *Handler) HandleSignIn(c *gin.Context) {
 
 	data := map[string]any{
 		"Title":       "Sign In",
-		"Description": "Sign in to access higher level features.",
+		"Description": "Access scouting data, analytics, and team management features.",
 	}
 	h.render(c, "signin", data)
 }
@@ -295,15 +295,7 @@ func (h *Handler) HandleSignUp(c *gin.Context) {
 
 	data := map[string]any{
 		"Title":       "Sign Up",
-		"Description": "Create an account to get started.",
+		"Description": "Join your team's scouting network and start collecting match data.",
 	}
 	h.render(c, "signup", data)
 }
-
-// TODO: Add more page handlers here
-// func (h *Handler) HandleYourPage(w http.ResponseWriter, r *http.Request) {
-//     data := map[string]any{
-//         "Title": "Your Page Title",
-//     }
-//     h.render(w, "yourpage", data)
-// }

@@ -154,6 +154,7 @@ func main() {
 	router.GET("/hx/teams/search", h.HandleTeamSearch)
 	router.GET("/hx/teams/data", h.HandleTeamEventData)
 	router.GET("/hx/matches/schedule", h.HandleMatchSchedule)
+	router.GET("/hx/drive-coach/matches", h.HandleDriveCoachMatches)
 	router.POST("/hx/lead-scout/submissions/:id/approve", h.HandleApproveSubmission)
 	router.POST("/hx/lead-scout/submissions/:id/decline", h.HandleDeclineSubmission)
 

@@ -78,7 +78,7 @@ func (scoutingSubmission) TableName() string { return "scouting_submissions" }
 func (h *Handler) buildSubmissionPageData(c *gin.Context, user *models.User) map[string]any {
 	data := map[string]any{
 		"Title":       "Scouting Submission",
-		"Description": "Submit scouting data for competitions",
+		"Description": "Collect and submit match data for teams at competitions.",
 		"User":        user,
 	}
 

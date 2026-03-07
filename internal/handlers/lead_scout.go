@@ -38,6 +38,7 @@ type scoutingMetricRow struct {
 	AutoHang         string
 	HangPosition     string
 	StartingPosition string
+	CreatedAt        string
 }
 
 type teamPointSummary struct {
@@ -47,6 +48,7 @@ type teamPointSummary struct {
 	Rank       *int
 	Points     int
 	Matches    int
+	Strategy   string
 }
 
 func (h *Handler) loadPendingSubmissions(c *gin.Context) ([]pendingSubmissionRow, error) {
@@ -143,7 +145,8 @@ func (h *Handler) loadTeamPointRankings(c *gin.Context, eventID int, sortKey str
 			scouting_data.hang_level,
 			scouting_data.auto_hang,
 			scouting_data.hang_position,
-			scouting_data.starting_position`).
+			scouting_data.starting_position,
+			scouting_data.created_at`).
 		Where("scouting_data.event_id = ?", eventID).
 		Scan(&metrics).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
@@ -151,9 +154,45 @@ func (h *Handler) loadTeamPointRankings(c *gin.Context, eventID int, sortKey str
 
 	pointsByTeam := make(map[int]int)
 	matchesByTeam := make(map[int]int)
+	// Track strategy frequency and most recent for each team
+	type strategyInfo struct {
+		count     int
+		createdAt string
+	}
+	strategiesByTeam := make(map[int]map[string]strategyInfo)
 	for _, row := range metrics {
 		pointsByTeam[row.TeamID] += calculateScoutingPoints(row)
 		matchesByTeam[row.TeamID]++
+		// Track strategy if it's not empty
+		if row.ScoringStrategy != "" {
+			if strategiesByTeam[row.TeamID] == nil {
+				strategiesByTeam[row.TeamID] = make(map[string]strategyInfo)
+			}
+			current := strategiesByTeam[row.TeamID][row.ScoringStrategy]
+			current.count++
+			// Keep the most recent created_at for this strategy
+			if row.CreatedAt > current.createdAt {
+				current.createdAt = row.CreatedAt
+			}
+			strategiesByTeam[row.TeamID][row.ScoringStrategy] = current
+		}
+	}
+
+	// Determine most common (or most recent if tie) strategy for each team
+	mostCommonStrategyByTeam := make(map[int]string)
+	for teamID, strategies := range strategiesByTeam {
+		var bestStrategy string
+		var bestCount int
+		var bestCreatedAt string
+		for strategy, info := range strategies {
+			// Choose this strategy if it has more occurrences, or if tied, if it's more recent
+			if info.count > bestCount || (info.count == bestCount && info.createdAt > bestCreatedAt) {
+				bestStrategy = strategy
+				bestCount = info.count
+				bestCreatedAt = info.createdAt
+			}
+		}
+		mostCommonStrategyByTeam[teamID] = bestStrategy
 	}
 
 	summaries := make([]teamPointSummary, 0, len(teams))
@@ -171,6 +210,7 @@ func (h *Handler) loadTeamPointRankings(c *gin.Context, eventID int, sortKey str
 			Rank:       rankPtr,
 			Points:     pointsByTeam[team.TeamID],
 			Matches:    matchesByTeam[team.TeamID],
+			Strategy:   mostCommonStrategyByTeam[team.TeamID],
 		})
 	}
 

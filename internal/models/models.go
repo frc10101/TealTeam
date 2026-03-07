@@ -61,6 +61,7 @@ type Event struct {
 	ID          int        `json:"id" gorm:"column:id;primaryKey"`
 	Name        string     `json:"name" gorm:"column:name"`
 	Location    *string    `json:"location,omitempty" gorm:"column:location"`
+	Timezone    *string    `json:"timezone,omitempty" gorm:"column:timezone"` // IANA timezone (e.g., "America/Los_Angeles")
 	StartDate   *time.Time `json:"start_date,omitempty" gorm:"column:start_date"`
 	EndDate     *time.Time `json:"end_date,omitempty" gorm:"column:end_date"`
 	TBAKey      *string    `json:"tba_key,omitempty" gorm:"column:tba_key"`
