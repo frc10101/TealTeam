@@ -25,8 +25,21 @@ func main() {
 	_ = godotenv.Load()
 
 	// Parse command line flags
-	env := flag.String("env", "test", "Environment to use: 'test' (local Docker) or 'prod' (Render)")
+	env := flag.String("env", "", "Environment to use: 'test' (local Docker) or 'prod' (Render)")
 	flag.Parse()
+
+	// If env flag not provided, check ENVIRONMENT variable (set by Render)
+	if *env == "" {
+		if envVar := os.Getenv("ENVIRONMENT"); envVar != "" {
+			if envVar == "production" {
+				*env = "prod"
+			} else {
+				*env = "test"
+			}
+		} else {
+			*env = "test"
+		}
+	}
 
 	// Validate environment
 	if *env != "test" && *env != "prod" {

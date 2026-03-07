@@ -48,6 +48,7 @@ type scoutingData struct {
 	HangPosition     string    `gorm:"column:hang_position"`
 	ScoutedAt        time.Time `gorm:"column:scouted_at"`
 	ScouterID        *int      `gorm:"column:scouter_id"`
+	SubmittingTeamID *int      `gorm:"column:submitting_team_id"`
 }
 
 func (scoutingData) TableName() string { return "scouting_data" }
@@ -70,6 +71,7 @@ type scoutingSubmission struct {
 	HangPosition     string    `gorm:"column:hang_position"`
 	ScoutedAt        time.Time `gorm:"column:scouted_at"`
 	ScouterID        *int      `gorm:"column:scouter_id"`
+	SubmittingTeamID *int      `gorm:"column:submitting_team_id"`
 	CreatedAt        time.Time `gorm:"column:created_at"`
 }
 
@@ -145,6 +147,21 @@ func (h *Handler) HandleSubmission(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
+	// Get the scouter's team ID for submission tracking
+	var submittingTeamID *int
+	if user.TeamNumber != nil && *user.TeamNumber > 0 {
+		var team struct {
+			ID int
+		}
+		if err := h.db.WithContext(ctx).
+			Table("teams").
+			Select("id").
+			Where("team_number = ?", *user.TeamNumber).
+			First(&team).Error; err == nil {
+			submittingTeamID = &team.ID
+		}
+	}
+
 	submission := scoutingSubmission{
 		EventID:          input.EventID,
 		TeamID:           input.TeamID,
@@ -162,6 +179,7 @@ func (h *Handler) HandleSubmission(c *gin.Context) {
 		HangPosition:     input.HangPosition,
 		ScoutedAt:        time.Now().UTC(),
 		ScouterID:        &user.ID,
+		SubmittingTeamID: submittingTeamID,
 	}
 
 	if err := h.db.WithContext(ctx).Create(&submission).Error; err != nil {
