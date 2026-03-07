@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/frc10101/TealTeam/internal/frc"
+	"github.com/frc10101/TealTeam/internal/models"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -51,7 +52,39 @@ type teamPointSummary struct {
 	Strategy   string
 }
 
-func (h *Handler) loadPendingSubmissions(c *gin.Context) ([]pendingSubmissionRow, error) {
+// canAccessSubmission checks if a user has permission to access a submission
+func (h *Handler) canAccessSubmission(c *gin.Context, user *models.User, submissionID string) bool {
+	if user.IsAdmin {
+		return true // Admins can access all submissions
+	}
+
+	if !user.IsLeadScout {
+		return false // Only admins and lead scouts can access
+	}
+
+	// Lead scouts can only access submissions from their own team
+	if user.TeamNumber == nil || *user.TeamNumber <= 0 {
+		return false // Lead scout must have a team number
+	}
+
+	var submittingTeamNumber *int
+	if err := h.db.WithContext(c.Request.Context()).
+		Table("scouting_submissions").
+		Select("teams.team_number").
+		Joins("JOIN teams ON teams.id = scouting_submissions.submitting_team_id").
+		Where("scouting_submissions.id = ?", submissionID).
+		Scan(&submittingTeamNumber).Error; err != nil {
+		return false
+	}
+
+	if submittingTeamNumber == nil {
+		return false // No submitting team found
+	}
+
+	return *submittingTeamNumber == *user.TeamNumber
+}
+
+func (h *Handler) loadPendingSubmissions(c *gin.Context, user *models.User) ([]pendingSubmissionRow, error) {
 	var rows []struct {
 		ID         int
 		EventName  string
@@ -61,12 +94,23 @@ func (h *Handler) loadPendingSubmissions(c *gin.Context) ([]pendingSubmissionRow
 		Notes      sql.NullString
 	}
 
-	if err := h.db.WithContext(c.Request.Context()).
+	query := h.db.WithContext(c.Request.Context()).
 		Table("scouting_submissions").
 		Select("scouting_submissions.id, events.name as event_name, teams.team_number, teams.name as team_name, users.name as scout_name, scouting_submissions.notes").
 		Joins("JOIN events ON events.id = scouting_submissions.event_id").
 		Joins("JOIN teams ON teams.id = scouting_submissions.team_id").
-		Joins("LEFT JOIN users ON users.id = scouting_submissions.scouter_id").
+		Joins("LEFT JOIN users ON users.id = scouting_submissions.scouter_id")
+
+	// Filter by lead scout's team - only see submissions from their team
+	if !user.IsAdmin && user.IsLeadScout {
+		if user.TeamNumber != nil && *user.TeamNumber > 0 {
+			query = query.Joins("JOIN teams AS submitting_team ON submitting_team.id = scouting_submissions.submitting_team_id").
+				Where("submitting_team.team_number = ?", *user.TeamNumber)
+		}
+	}
+	// Admins see all submissions
+
+	if err := query.
 		Order("scouting_submissions.created_at").
 		Scan(&rows).Error; err != nil {
 		return nil, err
@@ -274,6 +318,12 @@ func (h *Handler) HandleApproveSubmission(c *gin.Context) {
 		return
 	}
 
+	// Check if user has access to this submission
+	if !h.canAccessSubmission(c, user, id) {
+		http.Redirect(c.Writer, c.Request, "/", http.StatusSeeOther)
+		return
+	}
+
 	ctx := c.Request.Context()
 
 	var submission scoutingSubmission
@@ -314,6 +364,7 @@ func (h *Handler) HandleApproveSubmission(c *gin.Context) {
 		HangPosition:     submission.HangPosition,
 		ScoutedAt:        submission.ScoutedAt,
 		ScouterID:        submission.ScouterID,
+		SubmittingTeamID: submission.SubmittingTeamID,
 	}
 
 	tx := h.db.WithContext(ctx).Begin()
@@ -355,6 +406,12 @@ func (h *Handler) HandleDeclineSubmission(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
 		http.Error(c.Writer, "Submission ID is required", http.StatusBadRequest)
+		return
+	}
+
+	// Check if user has access to this submission
+	if !h.canAccessSubmission(c, user, id) {
+		http.Redirect(c.Writer, c.Request, "/", http.StatusSeeOther)
 		return
 	}
 
@@ -406,6 +463,12 @@ func (h *Handler) HandleViewSubmission(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
 		http.Error(c.Writer, "Submission ID is required", http.StatusBadRequest)
+		return
+	}
+
+	// Check if user has access to this submission
+	if !h.canAccessSubmission(c, user, id) {
+		http.Redirect(c.Writer, c.Request, "/", http.StatusSeeOther)
 		return
 	}
 
