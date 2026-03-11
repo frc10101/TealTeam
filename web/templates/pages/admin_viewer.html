@@ -44,7 +44,7 @@
 										<div class="flex justify-end gap-2">
 											<a href="/lead-scout/submissions/{{.ID}}" target="_blank" class="btn btn-sm btn-secondary">View</a>
 											<button class="btn btn-sm btn-primary" hx-post="/hx/lead-scout/submissions/{{.ID}}/approve" hx-target="#submission-{{.ID}}" hx-swap="outerHTML transition:true">Approve</button>
-											<button class="btn btn-sm btn-danger" hx-post="/hx/lead-scout/submissions/{{.ID}}/decline" hx-target="#submission-{{.ID}}" hx-swap="outerHTML transition:true">Decline</button>
+											<button class="btn btn-sm btn-danger" hx-post="/hx/lead-scout/submissions/{{.ID}}/decline" hx-target="#submission-{{.ID}}" hx-swap="outerHTML transition:true" hx-prompt="Reason for rejection (optional):">Decline</button>
 										</div>
 									</td>
 								</tr>
@@ -58,23 +58,8 @@
 						</table>
 					</div>
 					<div class="mt-4 flex flex-wrap items-center gap-3">
-						<button class="btn btn-primary btn-sm">Approve all clean</button>
-						<button class="btn btn-danger btn-sm">Send back flagged</button>
 						<a href="/development/db" class="text-sm text-teal-300 hover:text-teal-200">Open database viewer</a>
 					</div>
-				</div>
-			</div>
-
-			<div class="card">
-				<div class="card-header accent-yellow">
-					<h2 class="text-lg font-semibold text-gray-100">Drive Coach Channel</h2>
-				</div>
-				<div class="card-body space-y-3">
-					<div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-400">
-						Live comms with drive coach will be enabled on the drive coach page.
-					</div>
-					<textarea class="form-input" rows="3" placeholder="Share match focus, defense alerts, or pick notes" disabled></textarea>
-					<button class="btn btn-primary btn-sm" disabled>Send to drive coach</button>
 				</div>
 			</div>
 		</div>

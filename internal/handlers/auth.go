@@ -403,6 +403,45 @@ func (h *Handler) CleanupExpiredSessions() error {
 	return nil
 }
 
+// CleanupExpiredSubmissions removes pending submissions older than 20 minutes
+func (h *Handler) CleanupExpiredSubmissions() error {
+	if !h.hasDB() {
+		return fmt.Errorf("database unavailable")
+	}
+
+	cutoff := time.Now().Add(-20 * time.Minute)
+	result := h.db.Where("created_at < ? AND (status = ? OR status IS NULL)", cutoff, "pending").Delete(&scoutingSubmission{})
+	if result.Error != nil {
+		return fmt.Errorf("failed to cleanup expired submissions: %w", result.Error)
+	}
+
+	if result.RowsAffected > 0 {
+		h.log.Info("cleaned up expired submissions", "count", result.RowsAffected)
+	}
+
+	return nil
+}
+
+// StartBackgroundCleanup starts periodic cleanup of expired sessions and submissions
+func (h *Handler) StartBackgroundCleanup(stop <-chan struct{}) {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if err := h.CleanupExpiredSessions(); err != nil {
+				h.log.Error("session cleanup failed", "error", err)
+			}
+			if err := h.CleanupExpiredSubmissions(); err != nil {
+				h.log.Error("submission cleanup failed", "error", err)
+			}
+		case <-stop:
+			return
+		}
+	}
+}
+
 // HandleAccountPage displays the user's account information page
 func (h *Handler) HandleAccountPage(c *gin.Context) {
 	user, err := h.GetSessionUser(c)

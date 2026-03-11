@@ -89,11 +89,13 @@ type ScoutingData struct {
 	HangLevel        *string `json:"hang_level,omitempty" gorm:"column:hang_level"`
 	AutoHang         *string `json:"auto_hang,omitempty" gorm:"column:auto_hang"`
 	HangPosition     *string `json:"hang_position,omitempty" gorm:"column:hang_position"`
+	AccuracyRating   *string `json:"accuracy_rating,omitempty" gorm:"column:accuracy_rating"`
 
-	ScoutedAt *time.Time `json:"scouted_at,omitempty" gorm:"column:scouted_at"`
-	ScouterID *int       `json:"scouter_id,omitempty" gorm:"column:scouter_id"`
-	CreatedAt time.Time  `json:"created_at" gorm:"column:created_at"`
-	UpdatedAt time.Time  `json:"updated_at" gorm:"column:updated_at"`
+	ScoutedAt        *time.Time `json:"scouted_at,omitempty" gorm:"column:scouted_at"`
+	ScouterID        *int       `json:"scouter_id,omitempty" gorm:"column:scouter_id"`
+	SubmittingTeamID *int       `json:"submitting_team_id,omitempty" gorm:"column:submitting_team_id"`
+	CreatedAt        time.Time  `json:"created_at" gorm:"column:created_at"`
+	UpdatedAt        time.Time  `json:"updated_at" gorm:"column:updated_at"`
 }
 
 // Match represents a FRC match

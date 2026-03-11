@@ -49,9 +49,24 @@
 <!-- Event Selection -->
 <div class="card">
 	<div class="card-header accent-teal">
-		<h2 class="text-lg font-semibold text-gray-100">Select Event to View</h2>
+		<div class="flex items-center justify-between">
+			<h2 class="text-lg font-semibold text-gray-100">Select Event to View</h2>
+			<button
+				hx-post="/hx/teams/fetch-past-events"
+				hx-vals='{"team": "{{.TeamNumber}}"}'
+				hx-target="#team-info-container"
+				hx-swap="innerHTML"
+				hx-indicator="#fetch-past-indicator"
+				class="btn btn-secondary btn-sm">
+				Fetch Past Events
+			</button>
+		</div>
 	</div>
 	<div class="card-body">
+		<div id="fetch-past-indicator" class="htmx-indicator flex items-center gap-2 text-xs text-gray-400 mb-3">
+			<span class="loading-spinner"></span>
+			Fetching past event data from FIRST API...
+		</div>
 		{{if .User}}
 		<div class="flex flex-col gap-4">
 			<div class="flex-1">

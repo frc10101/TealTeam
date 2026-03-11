@@ -12,6 +12,16 @@
     </div>
     {{end}}
 
+    {{if .RejectionNotice}}
+    <div class="rounded-lg border border-amber-600 bg-amber-900/30 px-4 py-2 text-sm text-amber-200">
+        <span class="font-medium">Rejection reason:</span> {{.RejectionNotice}}
+    </div>
+    {{end}}
+
+    {{if .EditSubmission}}
+    {{template "scouting_edit_form" .}}
+    {{else}}
     {{template "scouting_form" .}}
+    {{end}}
 </div>
 {{end}}

@@ -15,6 +15,36 @@
         </div>
     </div>
 
+    {{if .RejectedSubmissions}}
+    <div class="card">
+        <div class="card-header" style="border-top: 2px solid #ef4444;">
+            <h2 class="text-xl font-semibold text-gray-100">Rejected Submissions</h2>
+        </div>
+        <div class="card-body space-y-3">
+            <p class="text-sm text-gray-400">These submissions were rejected by your lead scout. You can edit and resubmit them.</p>
+            {{range .RejectedSubmissions}}
+            <div class="rounded-lg border border-red-700/50 bg-red-900/20 p-4">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <div class="text-sm font-medium text-gray-200">{{.EventName}} &mdash; Team {{.TeamNumber}} ({{.TeamName}})</div>
+                        {{if .RejectionReason}}
+                        <div class="mt-1 text-sm text-red-300"><span class="font-medium">Reason:</span> {{.RejectionReason}}</div>
+                        {{end}}
+                        {{if .Notes}}
+                        <div class="mt-1 text-xs text-gray-400 truncate max-w-md">Notes: {{.Notes}}</div>
+                        {{end}}
+                    </div>
+                    <a href="/submission/edit/{{.ID}}"
+                       class="shrink-0 px-4 py-1.5 rounded-lg text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 transition-colors">
+                        Edit &amp; Resubmit
+                    </a>
+                </div>
+            </div>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
+
     <div class="card">
         <div class="card-header accent-yellow">
             <h2 class="text-xl font-semibold text-gray-100">Recent Submissions</h2>

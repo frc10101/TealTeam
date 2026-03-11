@@ -11,12 +11,14 @@
 | Notes | Free text | Qualitative notes |
 | Starting Position | Left, Right, Center | Pre-match setup |
 | Defense Rating | Low, Mid, High | Defensive capability |
-| Bump | Yes (default to no) | Robot mobility type |
-| Trench | Yes (default to no) | Robot mobility type |
+| Bump | Checkbox (default unchecked) | Robot can traverse bump |
+| Trench | Checkbox (default unchecked) | Robot can traverse trench |
 | Shooting Speed | Fast, Medium, Slow | Throughput of shooting mechanism |
 | Capacity | High, Medium, Low | Capacity of hopper |
 | Defendability | Notes | How would we defend against them |
 | Teleop Strategy | Scoring, Defending, Passing (multi select) | What they do in teleop |
+| Accuracy Rating | Low, Medium, High | Shooting/scoring accuracy |
+| Notes | Free text | Qualitative notes (team-private — only your team can see) |
 
 ---
 

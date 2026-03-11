@@ -183,19 +183,33 @@ func (h *Handler) HandleTeamEventData(c *gin.Context) {
 		return
 	}
 
+	// Resolve the viewer's team ID for notes filtering
+	var viewerTeamID int
+	if user, _ := h.GetSessionUser(c); user != nil && user.TeamNumber != nil {
+		var viewerTeam models.Team
+		if err := h.db.WithContext(c.Request.Context()).
+			Table("teams").
+			Where("team_number = ?", *user.TeamNumber).
+			First(&viewerTeam).Error; err == nil {
+			viewerTeamID = viewerTeam.ID
+		}
+	}
+
 	data := map[string]any{
 		"TeamNumber": team.TeamNumber,
 		"TeamName":   team.Name,
 	}
 
-	h.hydrateTeamEventData(c, team.ID, eventID, data)
+	h.hydrateTeamEventData(c, team.ID, eventID, viewerTeamID, data)
 
 	// Render the partial template
 	h.renderPartial(c, "team_data", data)
 }
 
-// hydrateTeamEventData adds team performance data for a specific event to the data map
-func (h *Handler) hydrateTeamEventData(c *gin.Context, teamID int, eventID int, data map[string]any) {
+// hydrateTeamEventData adds team performance data for a specific event to the data map.
+// viewerTeamID is the team ID of the logged-in user; notes are filtered to only show
+// entries submitted by that team. Pass 0 to hide all notes.
+func (h *Handler) hydrateTeamEventData(c *gin.Context, teamID int, eventID int, viewerTeamID int, data map[string]any) {
 	// Get event name
 	var event models.Event
 	if err := h.db.WithContext(c.Request.Context()).
@@ -234,6 +248,7 @@ func (h *Handler) hydrateTeamEventData(c *gin.Context, teamID int, eventID int, 
 			autoHangs := make(map[string]int)
 			hangPositions := make(map[string]int)
 			allianceColors := make(map[string]int)
+			accuracyRatings := make(map[string]int)
 
 			for _, sd := range scoutingData {
 				if sd.StartingPosition != nil && *sd.StartingPosition != "" {
@@ -259,6 +274,9 @@ func (h *Handler) hydrateTeamEventData(c *gin.Context, teamID int, eventID int, 
 				}
 				// Alliance color distribution
 				allianceColors[sd.AllianceColor]++
+				if sd.AccuracyRating != nil && *sd.AccuracyRating != "" {
+					accuracyRatings[*sd.AccuracyRating]++
+				}
 			}
 
 			// Alliance color stats
@@ -333,15 +351,25 @@ func (h *Handler) hydrateTeamEventData(c *gin.Context, teamID int, eventID int, 
 			}
 			data["MostCommonHangPosition"] = mostCommonHangPos
 
+			// Most common accuracy rating
+			var mostCommonAccuracy string
+			maxCount = 0
+			for rating, cnt := range accuracyRatings {
+				if cnt > maxCount {
+					maxCount = cnt
+					mostCommonAccuracy = rating
+				}
+			}
+			data["MostCommonAccuracy"] = mostCommonAccuracy
+
 			// Get qualitative data (most recent or mode)
 			latestData := scoutingData[0]
-			data["LatestNotes"] = latestData.Notes
-			data["ShootingSpeed"] = latestData.ShootingSpeed
-			data["Capacity"] = latestData.Capacity
-			data["Defendability"] = latestData.Defendability
-			data["ScoringStrategy"] = latestData.ScoringStrategy
+			data["ShootingSpeed"] = derefStr(latestData.ShootingSpeed)
+			data["Capacity"] = derefStr(latestData.Capacity)
+			data["Defendability"] = derefStr(latestData.Defendability)
+			data["ScoringStrategy"] = derefStr(latestData.ScoringStrategy)
 
-			// Collect all notes from the competition
+			// Collect notes only from the viewer's own team
 			type NoteEntry struct {
 				Note       string
 				ScoutedAt  *time.Time
@@ -349,7 +377,7 @@ func (h *Handler) hydrateTeamEventData(c *gin.Context, teamID int, eventID int, 
 			}
 			var notes []NoteEntry
 			for i, sd := range scoutingData {
-				if sd.Notes != nil && *sd.Notes != "" {
+				if sd.Notes != nil && *sd.Notes != "" && viewerTeamID > 0 && sd.SubmittingTeamID != nil && *sd.SubmittingTeamID == viewerTeamID {
 					notes = append(notes, NoteEntry{
 						Note:       *sd.Notes,
 						ScoutedAt:  sd.ScoutedAt,
@@ -358,6 +386,14 @@ func (h *Handler) hydrateTeamEventData(c *gin.Context, teamID int, eventID int, 
 				}
 			}
 			data["AllNotes"] = notes
+
+			// LatestNotes: first note belonging to the viewer's team
+			for _, sd := range scoutingData {
+				if sd.Notes != nil && *sd.Notes != "" && viewerTeamID > 0 && sd.SubmittingTeamID != nil && *sd.SubmittingTeamID == viewerTeamID {
+					data["LatestNotes"] = *sd.Notes
+					break
+				}
+			}
 		}
 	}
 }
@@ -368,4 +404,52 @@ func valueOrNA(s *string) string {
 		return *s
 	}
 	return "Unknown"
+}
+
+// derefStr safely dereferences a *string, returning "" if nil or empty.
+func derefStr(s *string) string {
+	if s != nil {
+		return *s
+	}
+	return ""
+}
+
+// HandleFetchPastEvents triggers a sync for a team's past events from FIRST API
+func (h *Handler) HandleFetchPastEvents(c *gin.Context) {
+	if !h.hasDB() {
+		c.String(http.StatusServiceUnavailable, "Database not available")
+		return
+	}
+
+	user, _ := h.GetSessionUser(c)
+
+	teamNumberStr := c.PostForm("team")
+	if teamNumberStr == "" {
+		c.String(http.StatusBadRequest, "Team number is required")
+		return
+	}
+
+	teamNumber, err := strconv.Atoi(teamNumberStr)
+	if err != nil {
+		c.String(http.StatusBadRequest, "Invalid team number")
+		return
+	}
+
+	// Sync team events from FIRST API
+	syncErr := h.syncAndLoadTeamEvents(c, teamNumber)
+	if syncErr != nil {
+		h.log.Warn("failed to fetch past events", "team", teamNumber, "error", syncErr)
+	}
+
+	// Re-render the team info partial with updated data
+	data := map[string]any{
+		"User": user,
+	}
+
+	if _, errMsg := h.hydrateTeamLookupData(c, user, teamNumberStr, data); errMsg != "" {
+		c.String(http.StatusInternalServerError, "<div class=\"card\"><div class=\"card-body text-center text-red-400 py-8\">%s</div></div>", errMsg)
+		return
+	}
+
+	h.renderPartial(c, "team_info", data)
 }

@@ -99,7 +99,8 @@ func (h *Handler) loadPendingSubmissions(c *gin.Context, user *models.User) ([]p
 		Select("scouting_submissions.id, events.name as event_name, teams.team_number, teams.name as team_name, users.name as scout_name, scouting_submissions.notes").
 		Joins("JOIN events ON events.id = scouting_submissions.event_id").
 		Joins("JOIN teams ON teams.id = scouting_submissions.team_id").
-		Joins("LEFT JOIN users ON users.id = scouting_submissions.scouter_id")
+		Joins("LEFT JOIN users ON users.id = scouting_submissions.scouter_id").
+		Where("scouting_submissions.status = ?", "pending")
 
 	// Filter by lead scout's team - only see submissions from their team
 	if !user.IsAdmin && user.IsLeadScout {
@@ -362,6 +363,7 @@ func (h *Handler) HandleApproveSubmission(c *gin.Context) {
 		HangLevel:        submission.HangLevel,
 		AutoHang:         submission.AutoHang,
 		HangPosition:     submission.HangPosition,
+		AccuracyRating:   submission.AccuracyRating,
 		ScoutedAt:        submission.ScoutedAt,
 		ScouterID:        submission.ScouterID,
 		SubmittingTeamID: submission.SubmittingTeamID,
@@ -392,8 +394,12 @@ func (h *Handler) HandleApproveSubmission(c *gin.Context) {
 		}
 	}()
 
-	// Redirect back to lead-scout page to refresh the rankings and submission list
-	c.Header("HX-Redirect", "/lead-scout")
+	// Redirect back to lead-scout page
+	if c.GetHeader("HX-Request") == "true" {
+		c.Header("HX-Redirect", "/lead-scout")
+	} else {
+		c.Redirect(http.StatusSeeOther, "/lead-scout")
+	}
 }
 
 func (h *Handler) HandleDeclineSubmission(c *gin.Context) {
@@ -415,15 +421,28 @@ func (h *Handler) HandleDeclineSubmission(c *gin.Context) {
 		return
 	}
 
+	reason := strings.TrimSpace(c.PostForm("reason"))
+	if reason == "" {
+		reason = strings.TrimSpace(c.GetHeader("HX-Prompt"))
+	}
+
 	if err := h.db.WithContext(c.Request.Context()).
+		Table("scouting_submissions").
 		Where("id = ?", id).
-		Delete(&scoutingSubmission{}).Error; err != nil {
+		Updates(map[string]any{
+			"status":           "rejected",
+			"rejection_reason": reason,
+		}).Error; err != nil {
 		http.Error(c.Writer, "Failed to decline submission", http.StatusInternalServerError)
 		return
 	}
 
-	// Redirect back to lead-scout page to refresh the submission list
-	c.Header("HX-Redirect", "/lead-scout")
+	// Redirect back to lead-scout page
+	if c.GetHeader("HX-Request") == "true" {
+		c.Header("HX-Redirect", "/lead-scout")
+	} else {
+		c.Redirect(http.StatusSeeOther, "/lead-scout")
+	}
 }
 
 type submissionDetailRow struct {
@@ -448,6 +467,7 @@ type submissionDetailRow struct {
 	HangLevel        string
 	AutoHang         string
 	HangPosition     string
+	AccuracyRating   string
 	FlagLabel        string
 	FlagClass        string
 	CreatedAt        string
@@ -481,14 +501,10 @@ func (h *Handler) HandleViewSubmission(c *gin.Context) {
 		TeamName         string
 		ScoutName        sql.NullString
 		AllianceColor    string
-		AutoScore        int
-		TeleopScore      int
-		EndgameScore     int
 		Notes            string
 		StartingPosition string
 		DefenseRating    string
 		Traversal        string
-		Throughput       string
 		ScoringStrategy  string
 		ShootingSpeed    string
 		Capacity         string
@@ -496,6 +512,7 @@ func (h *Handler) HandleViewSubmission(c *gin.Context) {
 		HangLevel        string
 		AutoHang         string
 		HangPosition     string
+		AccuracyRating   string
 		CreatedAt        string
 	}
 
@@ -507,14 +524,10 @@ func (h *Handler) HandleViewSubmission(c *gin.Context) {
 			teams.name as team_name, 
 			users.name as scout_name,
 			scouting_submissions.alliance_color,
-			scouting_submissions.auto_score,
-			scouting_submissions.teleop_score,
-			scouting_submissions.endgame_score,
 			scouting_submissions.notes,
 			scouting_submissions.starting_position,
 			scouting_submissions.defense_rating,
 			scouting_submissions.traversal,
-			scouting_submissions.throughput,
 			scouting_submissions.scoring_strategy,
 			scouting_submissions.shooting_speed,
 			scouting_submissions.capacity,
@@ -522,6 +535,7 @@ func (h *Handler) HandleViewSubmission(c *gin.Context) {
 			scouting_submissions.hang_level,
 			scouting_submissions.auto_hang,
 			scouting_submissions.hang_position,
+			scouting_submissions.accuracy_rating,
 			TO_CHAR(scouting_submissions.created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at`).
 		Joins("JOIN events ON events.id = scouting_submissions.event_id").
 		Joins("JOIN teams ON teams.id = scouting_submissions.team_id").
@@ -559,14 +573,10 @@ func (h *Handler) HandleViewSubmission(c *gin.Context) {
 		TeamName:         submission.TeamName,
 		ScoutName:        scoutName,
 		AllianceColor:    submission.AllianceColor,
-		AutoScore:        submission.AutoScore,
-		TeleopScore:      submission.TeleopScore,
-		EndgameScore:     submission.EndgameScore,
 		Notes:            submission.Notes,
 		StartingPosition: submission.StartingPosition,
 		DefenseRating:    submission.DefenseRating,
 		Traversal:        submission.Traversal,
-		Throughput:       submission.Throughput,
 		ScoringStrategy:  submission.ScoringStrategy,
 		ShootingSpeed:    submission.ShootingSpeed,
 		Capacity:         submission.Capacity,
@@ -574,6 +584,7 @@ func (h *Handler) HandleViewSubmission(c *gin.Context) {
 		HangLevel:        submission.HangLevel,
 		AutoHang:         submission.AutoHang,
 		HangPosition:     submission.HangPosition,
+		AccuracyRating:   submission.AccuracyRating,
 		FlagLabel:        flagLabel,
 		FlagClass:        flagClass,
 		CreatedAt:        submission.CreatedAt,
