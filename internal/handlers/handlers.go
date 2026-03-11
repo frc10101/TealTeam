@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"path/filepath"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -50,6 +51,9 @@ func New(db *gorm.DB) *Handler {
 				return "—"
 			}
 			return fmt.Sprintf("%.2f", *ptr)
+		},
+		"containsStr": func(s, substr string) bool {
+			return strings.Contains(s, substr)
 		},
 	}
 

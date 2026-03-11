@@ -24,8 +24,14 @@ This document provides a comprehensive analysis of the team page implementation,
 
 - **`HandleTeamEventData()`** - HTMX endpoint returning team data for specific event
   - Accepts `team` and `event_id` query parameters
+  - Resolves viewer's team ID from session for notes privacy filtering
   - Calls `hydrateTeamEventData()` to fetch stats and scouting info
   - Returns HTML fragment via `renderPartial(c, "team_data", data)`
+
+- **`HandleFetchPastEvents()`** - HTMX endpoint to sync past event data from FIRST API
+  - Accepts team number via POST form
+  - Calls FIRST API to sync team events
+  - Re-renders team info partial with updated event list
 
 **Key Helper Functions:**
 
@@ -40,6 +46,7 @@ This document provides a comprehensive analysis of the team page implementation,
   - Returns event list with ID and Name
 
 - **`hydrateTeamEventData()`** - Aggregates all data for team at specific event
+  - Accepts `viewerTeamID` parameter for notes privacy filtering
   - Fetches **TeamEventStats** from `team_event_stats` table
   - Fetches all **ScoutingData** for the team at the event
   - Calculates aggregations:
@@ -50,7 +57,9 @@ This document provides a comprehensive analysis of the team page implementation,
     - Most common hang level
     - Most common auto hang configuration
     - Most common hang position
+    - Most common accuracy rating
     - Alliance color distribution
+  - **Notes are filtered by `submitting_team_id`** to only show notes from the viewer's team
 
 **Data Flow:**
 ```
@@ -142,7 +151,13 @@ Render team_data.html with stats
    - Most common scoring strategy
    - Most common hang level
    - Most common hang position
+   - Most common accuracy rating
    - Alliance color distribution pie chart
+
+7. **Notes Section (Team-Private):**
+   - Notes from competition (filtered to viewer's team only)
+   - Displays match index and timestamp per note
+   - Fallback to latest note if only one exists
 
 ---
 
@@ -197,8 +212,10 @@ type ScoutingData struct {
     HangLevel        *string    `json:"hang_level,omitempty" gorm:"column:hang_level"`
     AutoHang         *string    `json:"auto_hang,omitempty" gorm:"column:auto_hang"`
     HangPosition     *string    `json:"hang_position,omitempty" gorm:"column:hang_position"`
+    AccuracyRating   *string    `json:"accuracy_rating,omitempty" gorm:"column:accuracy_rating"`
     ScoutedAt        *time.Time `json:"scouted_at,omitempty" gorm:"column:scouted_at"`
     ScouterID        *int       `json:"scouter_id,omitempty" gorm:"column:scouter_id"`
+    SubmittingTeamID *int       `json:"submitting_team_id,omitempty" gorm:"column:submitting_team_id"`
     CreatedAt        time.Time  `json:"created_at" gorm:"column:created_at"`
     UpdatedAt        time.Time  `json:"updated_at" gorm:"column:updated_at"`
 }
@@ -291,8 +308,10 @@ The typo "pionts" does not appear anywhere in the codebase. All instances use co
 **Source 2: Local Database - Scouting Data**
 
 - Field: `scouting_data` table
-- Populated: Via scouting form submissions
-- Captures: Starting position, defense rating, traversal, scoring strategy, hang level, auto hang, hang position, alliance color
+- Populated: Via scouting form submissions (approved by lead scout)
+- Captures: Starting position, defense rating, traversal, scoring strategy, hang level, auto hang, hang position, alliance color, accuracy rating
+- Ownership: Each record has `submitting_team_id` tracking which team submitted it
+- **Notes Privacy**: Notes are only displayed to the team that submitted them
 
 **Source 3: Team Information**
 

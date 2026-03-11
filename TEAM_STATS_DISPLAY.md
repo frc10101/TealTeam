@@ -119,7 +119,17 @@ The page also shows **Scouted Performance** from your team's scouting submission
 - Average scores (Auto, Teleop, Endgame)
 - Starting positions
 - Most common strategies
+- Accuracy ratings (Low / Medium / High)
 - Recent match history
+
+### Notes (Team-Private)
+- Notes submitted by your team are displayed in the "Notes from Competition" section
+- **Notes are private to your team** — other teams cannot see notes your scouts wrote
+- Notes are sorted by most recent first, with match index and timestamp
+
+### Past Events
+- Use the "Fetch Past Events" button on the team info panel to sync historical event data from the FIRST API
+- Allows viewing team performance at previous competitions
 
 ## Responsive Design
 

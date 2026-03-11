@@ -94,10 +94,16 @@ TealTeam is a scouting and analytics platform for FRC (FIRST Robotics Competitio
 - **Purpose**: Scouts submit match observations via web forms
 - **Trigger**: Manual form submission at `/submission`
 - **Data Captured**:
-  - Starting position, defense rating, traversal level
+  - Starting position, defense rating, traversal (Bump/Trench multi-select)
   - Hang capabilities, hang position, scoring strategy
   - Alliance color, match details
+  - Accuracy rating (Low / Medium / High)
   - Notes and observations
+- **Submission Lifecycle**:
+  - Submissions are stored in `scouting_submissions` for lead scout review
+  - A background goroutine cleans up submissions older than 20 minutes
+  - On approval, data is copied to `scouting_data` with `submitting_team_id` for ownership tracking
+- **Notes Privacy**: Notes are only visible to the team that submitted them (filtered by `submitting_team_id`)
 
 ### 2. **Data Storage & Models** (`internal/models/`)
 
@@ -130,6 +136,8 @@ TealTeam is a scouting and analytics platform for FRC (FIRST Robotics Competitio
   - Points (qual, elim, award, alliance)
 - `Match`: Individual match information
 - `ScoutingData`: Manual observations from scouts
+  - Includes `accuracy_rating` and `submitting_team_id` fields
+  - Notes are team-private (filtered by submitting team at display time)
 
 ### 3. **Display Layer** (`web/templates/` + handlers)
 
@@ -153,8 +161,10 @@ Request: /team?team=6328&event=123
 
 #### Data Displayed:
 - **From `team_event_stats`**: OPR, DPR, CCWM, Rank, MatchesPlayed, Record, QualAverage, Points
-- **From `scouting_data`**: Starting positions, defense ratings, traversals, hang info
+- **From `scouting_data`**: Starting positions, defense ratings, traversals, hang info, accuracy ratings
 - **Calculated**: Most common values, defense breakdowns, hang statistics
+- **Notes**: Displayed per-team — only notes submitted by the viewer's team are shown
+- **Past Events**: "Fetch Past Events" button syncs historical event data from FIRST API
 
 ## Key Issues & How They're Fixed
 
@@ -179,7 +189,8 @@ Request: /team?team=6328&event=123
 | Rankings | TBA API | TBA (real-time) | Manual input |
 | OPR/DPR/CCWM | TBA API | TBA | None (calculated) |
 | Match Results | TBA API | TBA | Scouting input |
-| Scouting Notes | Manual forms | User input | Aggregated observations |
+| Scouting Notes | Manual forms | User input (team-private) | Aggregated observations |
+| Accuracy Rating | Manual forms | User input | Per-submission quality flag |
 
 ## Configuration & Environment Variables
 

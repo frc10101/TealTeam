@@ -1,0 +1,176 @@
+{{define "scouting_edit_form"}}
+{{$e := .EditSubmission}}
+<form
+    action="/submission/resubmit/{{.EditSubmissionID}}"
+    method="post"
+    hx-post="/submission/resubmit/{{.EditSubmissionID}}"
+    hx-target="#submission-panel"
+    hx-swap="outerHTML transition:true"
+    hx-indicator="#submission-spinner"
+    class="space-y-6"
+    id="scouting-form">
+    <div class="grid gap-6 md:grid-cols-2">
+        <div>
+            <label for="event-id" class="block text-sm font-medium text-gray-300 mb-2">Event</label>
+            <select id="event-id" name="event_id" required
+                hx-get="/submission/event-teams" hx-target="#team-id" hx-swap="innerHTML" hx-trigger="change"
+                class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled>Select event</option>
+                {{if .Events}}
+                    {{range .Events}}
+                        <option value="{{.ID}}" {{if eq .ID $e.EventID}}selected{{end}}>{{.Name}}</option>
+                    {{end}}
+                {{end}}
+            </select>
+        </div>
+
+        <div>
+            <label for="team-id" class="block text-sm font-medium text-gray-300 mb-2">Team</label>
+            <select id="team-id" name="team_id" required
+                class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="{{$e.TeamID}}" selected>{{$e.TeamNumber}} — {{$e.TeamName}}</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="alliance-color" class="block text-sm font-medium text-gray-300 mb-2">Alliance Color</label>
+            <select id="alliance-color" name="alliance_color" required class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled>Select color</option>
+                <option value="red" {{if eq $e.AllianceColor "red"}}selected{{end}}>Red</option>
+                <option value="blue" {{if eq $e.AllianceColor "blue"}}selected{{end}}>Blue</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="starting-position" class="block text-sm font-medium text-gray-300 mb-2">Starting Position</label>
+            <select id="starting-position" name="starting_position" required class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled>Select position</option>
+                <option value="left" {{if eq $e.StartingPosition "left"}}selected{{end}}>Left</option>
+                <option value="center" {{if eq $e.StartingPosition "center"}}selected{{end}}>Center</option>
+                <option value="right" {{if eq $e.StartingPosition "right"}}selected{{end}}>Right</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="defense-rating" class="block text-sm font-medium text-gray-300 mb-2">Defense Rating</label>
+            <select id="defense-rating" name="defense_rating" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled>Select rating</option>
+                <option value="low" {{if eq $e.DefenseRating "low"}}selected{{end}}>Low</option>
+                <option value="mid" {{if eq $e.DefenseRating "mid"}}selected{{end}}>Mid</option>
+                <option value="high" {{if eq $e.DefenseRating "high"}}selected{{end}}>High</option>
+            </select>
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Traversal</label>
+            <div class="flex flex-col gap-2">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" name="traversal" value="bump" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                        {{if containsStr $e.Traversal "bump"}}checked{{end}}>
+                    <span class="text-sm text-gray-200">Bump</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" name="traversal" value="trench" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                        {{if containsStr $e.Traversal "trench"}}checked{{end}}>
+                    <span class="text-sm text-gray-200">Trench</span>
+                </label>
+            </div>
+        </div>
+
+        <div>
+            <label for="shooting-speed" class="block text-sm font-medium text-gray-300 mb-2">Shooting Speed</label>
+            <select id="shooting-speed" name="shooting_speed" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled>Select speed</option>
+                <option value="fast" {{if eq $e.ShootingSpeed "fast"}}selected{{end}}>Fast</option>
+                <option value="medium" {{if eq $e.ShootingSpeed "medium"}}selected{{end}}>Medium</option>
+                <option value="slow" {{if eq $e.ShootingSpeed "slow"}}selected{{end}}>Slow</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="capacity" class="block text-sm font-medium text-gray-300 mb-2">Capacity</label>
+            <select id="capacity" name="capacity" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled>Select capacity</option>
+                <option value="high" {{if eq $e.Capacity "high"}}selected{{end}}>High</option>
+                <option value="medium" {{if eq $e.Capacity "medium"}}selected{{end}}>Medium</option>
+                <option value="low" {{if eq $e.Capacity "low"}}selected{{end}}>Low</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="teleop-strategy" class="block text-sm font-medium text-gray-300 mb-2">Teleop Strategy</label>
+            <select id="teleop-strategy" name="teleop_strategy" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled>Select strategy</option>
+                <option value="scoring" {{if eq $e.ScoringStrategy "scoring"}}selected{{end}}>Scoring</option>
+                <option value="defending" {{if eq $e.ScoringStrategy "defending"}}selected{{end}}>Defending</option>
+                <option value="passing" {{if eq $e.ScoringStrategy "passing"}}selected{{end}}>Passing</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="hang-level" class="block text-sm font-medium text-gray-300 mb-2">Hang Level</label>
+            <select id="hang-level" name="hang_level" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled>Select level</option>
+                <option value="none" {{if eq $e.HangLevel "none"}}selected{{end}}>None</option>
+                <option value="l1" {{if eq $e.HangLevel "l1"}}selected{{end}}>L1</option>
+                <option value="l2" {{if eq $e.HangLevel "l2"}}selected{{end}}>L2</option>
+                <option value="l3" {{if eq $e.HangLevel "l3"}}selected{{end}}>L3</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="auto-hang" class="block text-sm font-medium text-gray-300 mb-2">Auto Hang</label>
+            <select id="auto-hang" name="auto_hang" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled>Select option</option>
+                <option value="yes" {{if eq $e.AutoHang "yes"}}selected{{end}}>Yes</option>
+                <option value="no" {{if eq $e.AutoHang "no"}}selected{{end}}>No</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="hang-position" class="block text-sm font-medium text-gray-300 mb-2">Hang Position</label>
+            <select id="hang-position" name="hang_position" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled>Select position</option>
+                <option value="left" {{if eq $e.HangPosition "left"}}selected{{end}}>Left</option>
+                <option value="right" {{if eq $e.HangPosition "right"}}selected{{end}}>Right</option>
+                <option value="center" {{if eq $e.HangPosition "center"}}selected{{end}}>Center</option>
+            </select>
+        </div>
+    </div>
+
+    <div>
+        <label for="accuracy-rating" class="block text-sm font-medium text-gray-300 mb-2">Accuracy Rating</label>
+        <select id="accuracy-rating" name="accuracy_rating" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+            <option value="" disabled>Select confidence level</option>
+            <option value="low" {{if eq $e.AccuracyRating "low"}}selected{{end}}>Low</option>
+            <option value="med" {{if eq $e.AccuracyRating "med"}}selected{{end}}>Medium</option>
+            <option value="high" {{if eq $e.AccuracyRating "high"}}selected{{end}}>High</option>
+        </select>
+    </div>
+
+    <div>
+        <label for="notes" class="block text-sm font-medium text-gray-300 mb-2">Notes</label>
+        <textarea id="notes" name="notes" rows="4" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors" placeholder="Observations and qualitative notes">{{$e.Notes}}</textarea>
+    </div>
+
+    <div>
+        <label for="defendability" class="block text-sm font-medium text-gray-300 mb-2">Defendability</label>
+        <textarea id="defendability" name="defendability" rows="3" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors" placeholder="How would we defend against them?">{{$e.Defendability}}</textarea>
+    </div>
+
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <a href="/submission" class="px-4 py-2 rounded-lg text-sm font-medium text-gray-300 border border-gray-600 hover:border-gray-500 hover:text-gray-200 transition-colors">
+            Cancel
+        </a>
+        <div class="flex items-center gap-3">
+            <div id="submission-spinner" class="htmx-indicator flex items-center gap-2 text-xs text-gray-400">
+                <span class="loading-spinner"></span>
+                Resubmitting...
+            </div>
+            <button type="submit" class="px-6 py-2 rounded-lg text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 focus:ring-offset-gray-900 transition-colors">
+                Resubmit for Review
+            </button>
+        </div>
+    </div>
+</form>
+{{end}}

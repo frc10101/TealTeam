@@ -93,6 +93,10 @@
 					<label class="text-xs text-gray-400">Hang Position</label>
 					<div class="text-gray-200">{{if .Submission.HangPosition}}{{.Submission.HangPosition}}{{else}}Not specified{{end}}</div>
 				</div>
+				<div>
+					<label class="text-xs text-gray-400">Accuracy Rating</label>
+					<div class="text-gray-200">{{if .Submission.AccuracyRating}}{{.Submission.AccuracyRating}}{{else}}Not specified{{end}}</div>
+				</div>
 			</div>
 
 			<!-- Notes -->
@@ -108,9 +112,13 @@
 	<!-- Action Buttons -->
 	<div class="card">
 		<div class="card-body">
-			<div class="flex justify-end gap-3">
+			<div class="flex items-end justify-end gap-3">
 				<button class="btn btn-danger" onclick="window.close()">Close Window</button>
-				<form action="/hx/lead-scout/submissions/{{.Submission.ID}}/decline" method="POST" style="display: inline;">
+				<form action="/hx/lead-scout/submissions/{{.Submission.ID}}/decline" method="POST" class="flex items-end gap-2">
+					<div>
+						<label class="block text-xs text-gray-400 mb-1">Rejection reason</label>
+						<input type="text" name="reason" placeholder="Optional reason..." class="px-3 py-2 text-sm bg-gray-800 border border-gray-600 rounded-lg text-gray-200 placeholder-gray-500 focus:ring-2 focus:ring-red-500 focus:border-transparent">
+					</div>
 					<button type="submit" class="btn btn-danger">Decline Submission</button>
 				</form>
 				<form action="/hx/lead-scout/submissions/{{.Submission.ID}}/approve" method="POST" style="display: inline;">

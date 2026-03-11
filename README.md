@@ -499,6 +499,8 @@ Then rebuild: `npm run css:build`
 4. **Business logic lives on the server**
 5. **Client-side JS is for UI polish only** (no business rules)
 6. **Keep the stack boring and maintainable**
+7. **Scouting notes are team-private** — only visible to the team that submitted them
+8. **Submissions expire after 20 minutes** — background cleanup runs every 5 minutes
 
 ## 🚢 Deployment
 
