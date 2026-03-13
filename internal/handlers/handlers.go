@@ -55,6 +55,8 @@ func New(db *gorm.DB) *Handler {
 		"containsStr": func(s, substr string) bool {
 			return strings.Contains(s, substr)
 		},
+		"optionLabel":     optionLabel,
+		"weightFieldName": buildWeightFieldName,
 	}
 
 	// Parse layout
@@ -66,7 +68,7 @@ func New(db *gorm.DB) *Handler {
 	}
 
 	// Parse each page template with the layout (and partials)
-	pages := []string{"index", "submission", "submission_detail", "db_viewer", "admin_viewer", "coach_viewer", "signin", "signup", "team", "account"}
+	pages := []string{"index", "submission", "submission_detail", "db_viewer", "admin_viewer", "coach_viewer", "signin", "signup", "team", "account", "lead_scout_weights"}
 	for _, page := range pages {
 		pageFile := filepath.Join("web", "templates", "pages", page+".html")
 		files := append([]string{layoutFile, pageFile}, partialFiles...)

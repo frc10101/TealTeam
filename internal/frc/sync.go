@@ -157,12 +157,15 @@ func SyncNow(ctx context.Context, db *gorm.DB) (SyncResult, error) {
 		log.Printf("✅ FIRST teams synced for %s: %d", eventCode, len(teamIDs))
 	}
 
-	return SyncResult{
+	result := SyncResult{
 		Season:     season,
 		Events:     len(eventIDs),
 		Teams:      len(uniqueTeams),
 		EventTeams: eventTeamCount,
-	}, nil
+	}
+
+	recordSuccessfulSync()
+	return result, nil
 }
 
 // SyncTeamForUser pulls FIRST Events API data for a specific team when they sign in.
@@ -277,12 +280,15 @@ func SyncTeamForUser(ctx context.Context, db *gorm.DB, teamNumber int) (SyncResu
 	// Use background context instead of the passed context (which may be cancelled)
 	go syncTeamTBAStatsForUser(db, teamID, eventIDs)
 
-	return SyncResult{
+	result := SyncResult{
 		Season:     season,
 		Events:     len(eventIDs),
 		Teams:      1,
 		EventTeams: eventTeamCount,
-	}, nil
+	}
+
+	recordSuccessfulSync()
+	return result, nil
 }
 
 // syncTeamTBAStatsForUser syncs TBA statistics for all events a team is attending

@@ -1,5 +1,44 @@
 {{define "submission_panel"}}
 <div id="submission-panel" class="space-y-4 fade-swap">
+    <div class="rounded-lg border border-gray-700 bg-gray-900/60 px-4 py-3">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="text-xs text-gray-400">Offline mode: choose an event, then sync teams manually when network is available.</div>
+            <div class="flex items-center gap-3">
+                <div
+                    id="network-status-container"
+                    hx-get="/hx/network/status"
+                    hx-trigger="load, networkStatusRefresh from:body"
+                    hx-swap="innerHTML">
+                </div>
+                <button
+                    type="button"
+                    hx-get="/hx/network/status"
+                    hx-target="#network-status-container"
+                    hx-swap="innerHTML"
+                    class="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-900 transition-colors">
+                    Refresh Status
+                </button>
+                <div id="team-sync-spinner" class="htmx-indicator flex items-center gap-2 text-xs text-gray-400">
+                    <span class="loading-spinner"></span>
+                    Syncing teams...
+                </div>
+                <button
+                    id="manual-team-sync-btn"
+                    type="button"
+                    hx-get="/submission/event-teams"
+                    hx-include="#event-id"
+                    hx-vals='{"force_refresh":"true"}'
+                    hx-target="#team-id"
+                    hx-swap="innerHTML"
+                    hx-indicator="#team-sync-spinner"
+                    hx-on::after-request="htmx.trigger(document.body, 'networkStatusRefresh')"
+                    class="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900 transition-colors">
+                    Sync Teams Now
+                </button>
+            </div>
+        </div>
+    </div>
+
     {{if .SubmissionError}}
     <div class="rounded-lg border border-red-600 bg-red-900/30 px-4 py-2 text-sm text-red-200">
         {{.SubmissionError}}

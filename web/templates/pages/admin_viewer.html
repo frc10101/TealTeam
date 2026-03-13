@@ -96,7 +96,9 @@
 		<div class="card-header accent-purple">
 			<div class="flex items-center justify-between">
 				<h2 class="text-lg font-semibold text-gray-100">Team Rankings</h2>
-				<div class="flex gap-2 text-xs">
+				<div class="flex items-center gap-3">
+					<a href="/lead-scout/weights" class="text-xs text-teal-300 hover:text-teal-200">Edit Weights</a>
+					<div class="flex gap-2 text-xs">
 					<a href="?team_sort=rank" class="{{if or (eq .TeamRankingSort "") (eq .TeamRankingSort "rank")}}text-teal-300{{else}}text-gray-400 hover:text-gray-300{{end}}">Rank</a>
 					<span class="text-gray-600">|</span>
 					<a href="?team_sort=points" class="{{if eq .TeamRankingSort "points"}}text-teal-300{{else}}text-gray-400 hover:text-gray-300{{end}}">Points</a>
@@ -104,6 +106,7 @@
 					<a href="?team_sort=number" class="{{if eq .TeamRankingSort "number"}}text-teal-300{{else}}text-gray-400 hover:text-gray-300{{end}}">Number</a>
 					<span class="text-gray-600">|</span>
 					<a href="?team_sort=name" class="{{if eq .TeamRankingSort "name"}}text-teal-300{{else}}text-gray-400 hover:text-gray-300{{end}}">Name</a>
+					</div>
 				</div>
 			</div>
 		</div>

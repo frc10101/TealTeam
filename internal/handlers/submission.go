@@ -440,30 +440,41 @@ func parseRequiredInt(c *gin.Context, field string) (int, error) {
 // HandleGetEventTeams returns teams participating in a selected event for HTMX
 func (h *Handler) HandleGetEventTeams(c *gin.Context) {
 	if !h.hasDB() {
-		c.String(http.StatusServiceUnavailable, "Database not connected")
+		c.String(http.StatusServiceUnavailable, `<option value="" disabled selected>Database not connected</option>`)
 		return
 	}
 
 	eventIDStr := c.Query("event_id")
 	if eventIDStr == "" {
-		c.String(http.StatusBadRequest, "event_id is required")
+		c.String(http.StatusBadRequest, `<option value="" disabled selected>Select event first</option>`)
 		return
 	}
 
 	eventID, err := strconv.Atoi(eventIDStr)
 	if err != nil {
-		c.String(http.StatusBadRequest, "event_id must be a number")
+		c.String(http.StatusBadRequest, `<option value="" disabled selected>Invalid event selection</option>`)
 		return
 	}
+
+	forceRefresh := strings.EqualFold(strings.TrimSpace(c.Query("force_refresh")), "true") || strings.TrimSpace(c.Query("force_refresh")) == "1"
 
 	ctx := c.Request.Context()
 
 	// Get event code from database
 	var event struct {
-		TBAKey string
+		TBAKey *string
 	}
 	if err := h.db.WithContext(ctx).Table("events").Select("tba_key").Where("id = ?", eventID).Scan(&event).Error; err != nil {
-		c.String(http.StatusInternalServerError, "Failed to fetch event")
+		c.String(http.StatusInternalServerError, `<option value="" disabled selected>Failed to load event</option>`)
+		return
+	}
+
+	eventCode := ""
+	if event.TBAKey != nil {
+		eventCode = extractEventCode(strings.TrimSpace(*event.TBAKey))
+	}
+	if eventCode == "" {
+		c.String(http.StatusBadRequest, `<option value="" disabled selected>Selected event is missing API code</option>`)
 		return
 	}
 
@@ -481,31 +492,57 @@ func (h *Handler) HandleGetEventTeams(c *gin.Context) {
 		Where("event_teams.event_id = ?", eventID).
 		Order("teams.team_number")
 
-	if err := query.Scan(&teams).Error; err == nil && len(teams) > 0 {
-		// We have teams in the database, render them
+	_ = query.Scan(&teams).Error
+
+	renderOptions := func(prefix string, sourceTeams []struct {
+		ID         int
+		TeamNumber int
+		Name       string
+	}) string {
 		html := `<option value="" disabled selected>Select team</option>`
-		for _, team := range teams {
+		if prefix != "" {
+			html += fmt.Sprintf(`<option value="" disabled>%s</option>`, prefix)
+		}
+		for _, team := range sourceTeams {
 			html += fmt.Sprintf(`<option value="%d">%d - %s</option>`, team.ID, team.TeamNumber, team.Name)
 		}
-		c.Header("Content-Type", "text/html; charset=utf-8")
-		c.String(http.StatusOK, html)
-		return
+		if len(sourceTeams) == 0 {
+			html += `<option value="" disabled>No teams available for this event</option>`
+		}
+		return html
+	}
+
+	if !forceRefresh {
+		if len(teams) > 0 {
+			// We have teams in the database, render them
+			c.Header("Content-Type", "text/html; charset=utf-8")
+			c.String(http.StatusOK, renderOptions("", teams))
+			return
+		}
 	}
 
 	// No teams in database, try FIRST API
 	username := strings.TrimSpace(os.Getenv("FIRST_API_USERNAME"))
 	key := strings.TrimSpace(os.Getenv("FIRST_API_KEY"))
 	if username == "" || key == "" {
-		c.String(http.StatusInternalServerError, "FIRST API credentials not configured")
+		c.String(http.StatusInternalServerError, `<option value="" disabled selected>FIRST API credentials not configured</option>`)
 		return
 	}
 
-	// Extract season from year in event code if possible
 	season := 2026
 	client := frc.NewClient(username, key)
-	firstTeams, err := client.GetEventTeams(ctx, season, event.TBAKey)
+	firstTeams, err := client.GetEventTeams(ctx, season, eventCode)
 	if err != nil {
-		c.String(http.StatusInternalServerError, "Failed to fetch teams from FIRST API")
+		if len(teams) > 0 {
+			c.Header("Content-Type", "text/html; charset=utf-8")
+			c.String(http.StatusOK, renderOptions("Using cached teams (stale)", teams))
+			return
+		}
+		if frc.IsInternetUnavailable(err) {
+			c.String(http.StatusServiceUnavailable, `<option value="" disabled selected>No internet connection. Connect LAN uplink and retry sync.</option>`)
+			return
+		}
+		c.String(http.StatusInternalServerError, `<option value="" disabled selected>Failed to fetch teams from FIRST API</option>`)
 		return
 	}
 

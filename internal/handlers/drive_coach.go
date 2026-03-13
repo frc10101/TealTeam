@@ -29,11 +29,6 @@ type DriveCoachMatch struct {
 	RedScore  int
 	BlueScore int
 
-	// Predicted scores (if not played)
-	PredictedRedScore  float64
-	PredictedBlueScore float64
-	PredictedWinner    string // "red", "blue", or "tie"
-
 	WinningAlliance string // actual winner if played
 }
 
@@ -60,7 +55,7 @@ func (h *Handler) HandleDriveCoach(c *gin.Context) {
 	if err != nil || session.SelectedEventID == nil {
 		h.render(c, "drive_coach", map[string]any{
 			"Title":       "Drive Coach Dashboard",
-			"Description": "Match schedule, alliance info, and predictive analytics",
+			"Description": "Match schedule and alliance info",
 			"User":        user,
 			"Error":       "Please select an event to view match schedule.",
 		})
@@ -76,7 +71,7 @@ func (h *Handler) HandleDriveCoach(c *gin.Context) {
 		First(&event).Error; err != nil {
 		h.render(c, "drive_coach", map[string]any{
 			"Title":       "Drive Coach Dashboard",
-			"Description": "Match schedule, alliance info, and predictive analytics",
+			"Description": "Match schedule and alliance info",
 			"User":        user,
 			"Error":       "Unable to load event details.",
 		})
@@ -89,7 +84,7 @@ func (h *Handler) HandleDriveCoach(c *gin.Context) {
 		h.log.Error("failed to fetch drive coach matches", "error", err)
 		h.render(c, "drive_coach", map[string]any{
 			"Title":       "Drive Coach Dashboard",
-			"Description": "Match schedule, alliance info, and predictive analytics",
+			"Description": "Match schedule and alliance info",
 			"User":        user,
 			"Event":       event,
 			"Error":       "Unable to load match schedule.",
@@ -99,7 +94,7 @@ func (h *Handler) HandleDriveCoach(c *gin.Context) {
 
 	data := map[string]any{
 		"Title":       "Drive Coach Dashboard",
-		"Description": "Match schedule, alliance info, and predictive analytics",
+		"Description": "Match schedule and alliance info",
 		"User":        user,
 		"Event":       event,
 		"Matches":     matches,
@@ -109,7 +104,7 @@ func (h *Handler) HandleDriveCoach(c *gin.Context) {
 	h.render(c, "drive_coach", data)
 }
 
-// getDriveCoachMatches fetches and enriches match data with predictions
+// getDriveCoachMatches fetches and enriches match data with team stats
 func (h *Handler) getDriveCoachMatches(ctx context.Context, eventID int, userTeamNumber *int) ([]DriveCoachMatch, error) {
 	// Get all matches for the event
 	var dbMatches []models.Match
@@ -219,19 +214,6 @@ func (h *Handler) getDriveCoachMatches(ctx context.Context, eventID int, userTea
 				}
 			}
 
-			// Calculate predictions if match hasn't been played
-			if !match.Played {
-				dcMatch.PredictedRedScore = calculateAllianceScore(dcMatch.RedTeams)
-				dcMatch.PredictedBlueScore = calculateAllianceScore(dcMatch.BlueTeams)
-
-				if dcMatch.PredictedRedScore > dcMatch.PredictedBlueScore {
-					dcMatch.PredictedWinner = "red"
-				} else if dcMatch.PredictedBlueScore > dcMatch.PredictedRedScore {
-					dcMatch.PredictedWinner = "blue"
-				} else {
-					dcMatch.PredictedWinner = "tie"
-				}
-			}
 		}
 
 		matches = append(matches, dcMatch)
@@ -308,24 +290,4 @@ func (h *Handler) getTeamStatsForEvent(ctx context.Context, eventID int) (map[in
 	return result, nil
 }
 
-// calculateAllianceScore predicts alliance score using OPR
-func calculateAllianceScore(teams []TeamWithStats) float64 {
-	totalOPR := 0.0
-	count := 0
 
-	for _, team := range teams {
-		if team.OPR != nil && *team.OPR > 0 {
-			totalOPR += *team.OPR
-			count++
-		}
-	}
-
-	// If no OPR data, return 0
-	if count == 0 {
-		return 0
-	}
-
-	// OPR is already an average contribution per team
-	// Summing OPRs gives predicted alliance score
-	return totalOPR
-}

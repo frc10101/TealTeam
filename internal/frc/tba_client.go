@@ -31,32 +31,73 @@ func NewTBAClient(authKey string) *TBAClient {
 }
 
 func (c *TBAClient) getJSON(ctx context.Context, path string, query url.Values, out any) error {
+	if !shouldSkipConnectivityCheck(c.baseURL) {
+		if err := ensureInternetConnectivity(ctx); err != nil {
+			recordAPIError(err)
+			return fmt.Errorf("tba api preflight failed: %w", err)
+		}
+	}
+
 	endpoint := c.baseURL + path
 	if len(query) > 0 {
 		endpoint += "?" + query.Encode()
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
+	for attempt := 0; attempt < apiRetryMaxAttempts; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+		if err != nil {
+			recordAPIError(err)
+			return err
+		}
+
+		req.Header.Set("X-TBA-Auth-Key", c.authKey)
+		req.Header.Set("Accept", "application/json")
+
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			recordAPIError(err)
+			if attempt < apiRetryMaxAttempts-1 && shouldRetryRequestError(err) {
+				if sleepErr := sleepWithContext(ctx, backoffDelay(attempt)); sleepErr != nil {
+					recordAPIError(sleepErr)
+					return sleepErr
+				}
+				continue
+			}
+			return err
+		}
+
+		func() {
+			defer resp.Body.Close()
+			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+				body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+				err = fmt.Errorf("tba api %s returned %d: %s", path, resp.StatusCode, string(body))
+				return
+			}
+
+			dec := json.NewDecoder(resp.Body)
+			err = dec.Decode(out)
+		}()
+
+		if err == nil {
+			recordAPISuccess()
+			return nil
+		}
+
+		recordAPIError(err)
+		if attempt < apiRetryMaxAttempts-1 && resp != nil && shouldRetryStatusCode(resp.StatusCode) {
+			if sleepErr := sleepWithContext(ctx, backoffDelay(attempt)); sleepErr != nil {
+				recordAPIError(sleepErr)
+				return sleepErr
+			}
+			continue
+		}
+
 		return err
 	}
 
-	req.Header.Set("X-TBA-Auth-Key", c.authKey)
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("tba api %s returned %d: %s", path, resp.StatusCode, string(body))
-	}
-
-	dec := json.NewDecoder(resp.Body)
-	return dec.Decode(out)
+	finalErr := fmt.Errorf("tba api %s retries exhausted", path)
+	recordAPIError(finalErr)
+	return finalErr
 }
 
 // OPRData contains OPR, DPR, and CCWM statistics for all teams at an event.

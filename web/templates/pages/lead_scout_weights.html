@@ -1,0 +1,56 @@
+{{define "content"}}
+<div class="space-y-6">
+	<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+		<div>
+			<h1 class="text-3xl font-bold text-gray-100">{{.Title}}</h1>
+			<p class="mt-2 text-gray-400">{{.Description}}</p>
+		</div>
+		<a href="/lead-scout?team_sort=points" class="btn btn-secondary">Back to Lead Scout Panel</a>
+	</div>
+
+	{{if .Updated}}
+	<div class="rounded-lg border border-teal-700 bg-teal-900/30 px-4 py-3 text-sm text-teal-200">
+		Point weights were updated. Team rankings now use the latest values.
+	</div>
+	{{end}}
+	{{if .Error}}
+	<div class="rounded-lg border border-red-700 bg-red-900/30 px-4 py-3 text-sm text-red-200">
+		{{.Error}}
+	</div>
+	{{end}}
+
+	<form method="post" action="/lead-scout/weights" class="space-y-6">
+		<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+			{{range .Sections}}
+			{{$section := .}}
+			<div class="card">
+				<div class="card-header accent-teal">
+					<h2 class="text-lg font-semibold text-gray-100">{{.Label}}</h2>
+				</div>
+				<div class="card-body space-y-3">
+					{{range .Options}}
+					<div class="flex items-center justify-between gap-3">
+						<label for="{{weightFieldName $section.Key .Key}}" class="text-sm text-gray-300">{{optionLabel .Key}}</label>
+						<input
+							id="{{weightFieldName $section.Key .Key}}"
+							name="{{weightFieldName $section.Key .Key}}"
+							type="number"
+							min="-100"
+							max="100"
+							value="{{.Points}}"
+							class="w-20 rounded-lg border border-gray-700 bg-gray-900 px-3 py-1.5 text-right text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-teal-500"
+						/>
+					</div>
+					{{end}}
+				</div>
+			</div>
+			{{end}}
+		</div>
+
+		<div class="flex flex-wrap items-center gap-3">
+			<button type="submit" class="btn btn-primary">Save and Update Rankings</button>
+			<a href="/lead-scout" class="btn btn-secondary">Cancel</a>
+		</div>
+	</form>
+</div>
+{{end}}

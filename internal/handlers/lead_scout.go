@@ -199,6 +199,7 @@ func (h *Handler) loadTeamPointRankings(c *gin.Context, eventID int, sortKey str
 
 	pointsByTeam := make(map[int]int)
 	matchesByTeam := make(map[int]int)
+	pointConfig := h.loadEffectiveScoutingPointConfig(c)
 	// Track strategy frequency and most recent for each team
 	type strategyInfo struct {
 		count     int
@@ -206,7 +207,7 @@ func (h *Handler) loadTeamPointRankings(c *gin.Context, eventID int, sortKey str
 	}
 	strategiesByTeam := make(map[int]map[string]strategyInfo)
 	for _, row := range metrics {
-		pointsByTeam[row.TeamID] += calculateScoutingPoints(row)
+		pointsByTeam[row.TeamID] += calculateScoutingPointsWithConfig(row, pointConfig)
 		matchesByTeam[row.TeamID]++
 		// Track strategy if it's not empty
 		if row.ScoringStrategy != "" {
