@@ -32,7 +32,7 @@ func NewTBAClient(authKey string) *TBAClient {
 
 func (c *TBAClient) getJSON(ctx context.Context, path string, query url.Values, out any) error {
 	if !shouldSkipConnectivityCheck(c.baseURL) {
-		if err := ensureInternetConnectivity(ctx); err != nil {
+		if err := ensureInternetConnectivityForBaseURL(ctx, c.baseURL); err != nil {
 			recordAPIError(err)
 			return fmt.Errorf("tba api preflight failed: %w", err)
 		}

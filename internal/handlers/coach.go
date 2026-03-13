@@ -154,7 +154,11 @@ func (h *Handler) loadDriveCoachMatches(ctx context.Context, eventID int, userTe
 	}
 
 	filters := url.Values{}
-	filters.Set("teamNumber", strconv.Itoa(*userTeamNumber))
+	if *userTeamNumber > 0 {
+		filters.Set("teamNumber", strconv.Itoa(*userTeamNumber))
+	} else {
+		filters.Set("tournamentLevel", "Qualification")
+	}
 
 	client := frc.NewClient(username, key)
 	apiCtx, cancel := context.WithTimeout(ctx, 15*time.Second)

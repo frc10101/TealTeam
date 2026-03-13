@@ -14,7 +14,7 @@ import (
 var ErrInternetUnavailable = errors.New("internet unavailable")
 
 const (
-	connectivityProbeAddress = "8.8.8.8:53"
+	connectivityProbeAddress = "1.1.1.1:443"
 	connectivityProbeNetwork = "tcp"
 	connectivityProbeTimeout = 1500 * time.Millisecond
 	connectivityCacheTTL     = 3 * time.Second
@@ -59,6 +59,44 @@ func RefreshConnectivity(ctx context.Context) error {
 	return ensureInternetConnectivity(ctx)
 }
 
+func ensureInternetConnectivityForBaseURL(ctx context.Context, baseURL string) error {
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return ensureInternetConnectivity(ctx)
+	}
+
+	host := strings.TrimSpace(u.Hostname())
+	if host == "" {
+		return ensureInternetConnectivity(ctx)
+	}
+
+	port := u.Port()
+	if port == "" {
+		if strings.EqualFold(u.Scheme, "http") {
+			port = "80"
+		} else {
+			port = "443"
+		}
+	}
+
+	probeAddress := net.JoinHostPort(host, port)
+
+	dialCtx, cancel := context.WithTimeout(ctx, connectivityProbeTimeout)
+	defer cancel()
+
+	var d net.Dialer
+	conn, err := d.DialContext(dialCtx, connectivityProbeNetwork, probeAddress)
+	if err != nil {
+		reason := fmt.Sprintf("failed to reach %s (%v)", probeAddress, err)
+		recordConnectivityResult(false, reason)
+		return fmt.Errorf("%w: failed to reach %s (%v)", ErrInternetUnavailable, probeAddress, err)
+	}
+	_ = conn.Close()
+	recordConnectivityResult(true, "")
+
+	return nil
+}
+
 // GetNetworkStatusSnapshot returns the current health snapshot.
 func GetNetworkStatusSnapshot() NetworkStatusSnapshot {
 	runtimeState.mu.RLock()
@@ -88,7 +126,12 @@ func recordAPISuccess() {
 	runtimeState.mu.Lock()
 	defer runtimeState.mu.Unlock()
 
-	runtimeState.LastAPISuccessAt = time.Now().UTC()
+	now := time.Now().UTC()
+	runtimeState.LastAPISuccessAt = now
+	// Treat successful API calls as authoritative proof that internet/API path is reachable.
+	runtimeState.connectivity.CheckedAt = now
+	runtimeState.connectivity.OK = true
+	runtimeState.connectivity.ErrText = ""
 	// Keep last error timestamp/message for diagnostics.
 }
 

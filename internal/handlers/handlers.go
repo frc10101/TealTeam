@@ -1,13 +1,11 @@
 package handlers
 
 import (
-	"fmt"
 	"html/template"
 	"log"
 	"log/slog"
 	"net/http"
 	"path/filepath"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -26,7 +24,7 @@ func New(db *gorm.DB) *Handler {
 	logger := slog.Default()
 	templates := make(map[string]*template.Template)
 
-	// Template functions for pagination and formatting
+	// Template functions for pagination
 	funcMap := template.FuncMap{
 		"add": func(a, b int) int {
 			return a + b
@@ -40,23 +38,6 @@ func New(db *gorm.DB) *Handler {
 			}
 			return a / b
 		},
-		"float1": func(ptr *float64) string {
-			if ptr == nil {
-				return "—"
-			}
-			return fmt.Sprintf("%.1f", *ptr)
-		},
-		"float2": func(ptr *float64) string {
-			if ptr == nil {
-				return "—"
-			}
-			return fmt.Sprintf("%.2f", *ptr)
-		},
-		"containsStr": func(s, substr string) bool {
-			return strings.Contains(s, substr)
-		},
-		"optionLabel":     optionLabel,
-		"weightFieldName": buildWeightFieldName,
 	}
 
 	// Parse layout
@@ -68,7 +49,7 @@ func New(db *gorm.DB) *Handler {
 	}
 
 	// Parse each page template with the layout (and partials)
-	pages := []string{"index", "submission", "submission_detail", "db_viewer", "admin_viewer", "coach_viewer", "signin", "signup", "team", "account", "lead_scout_weights"}
+	pages := []string{"index", "submission", "submission_detail", "db_viewer", "admin_viewer", "signin", "signup", "team", "account"}
 	for _, page := range pages {
 		pageFile := filepath.Join("web", "templates", "pages", page+".html")
 		files := append([]string{layoutFile, pageFile}, partialFiles...)

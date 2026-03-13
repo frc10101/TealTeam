@@ -79,6 +79,11 @@ Pi mode uses standalone `docker-compose.pi.yml` and defaults to:
 - PostgreSQL not exposed to host
 - Adminer not included in Pi runtime compose
 
+Headless notes:
+
+- Service loads optional boot-partition config from `/boot/firmware/tealteam.env` (or `/boot/tealteam.env`).
+- Default access URL is `http://<hostname>.local/` when mDNS is supported on the LAN.
+
 ---
 
 ## 🚀 Quick Start
@@ -131,12 +136,19 @@ docker-compose stop
 
 # Start again after reboot/power-on
 docker-compose start
+
+# Rebuild/recreate containers without deleting DB data
+docker-compose up -d --build
+
+# Or DB only
+make db-rebuild
 ```
 
 Important:
 
 - Do not run `docker-compose down -v` unless you intentionally want to wipe DB data.
 - `make db-reset` is destructive and removes existing DB data.
+- `make db-reset` now requires explicit confirmation: `make db-reset CONFIRM_RESET_DB=yes`.
 
 ### 3. Build CSS
 

@@ -9,7 +9,15 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const recentAPISuccessWindow = 10 * time.Minute
+
 func classifyNetworkState(s frc.NetworkStatusSnapshot) string {
+	if !s.LastAPISuccessAt.IsZero() && time.Since(s.LastAPISuccessAt) <= recentAPISuccessWindow {
+		if s.LastAPIErrorAt.IsZero() || s.LastAPISuccessAt.After(s.LastAPIErrorAt) {
+			return "internet-ok"
+		}
+	}
+
 	if !s.InternetReachable {
 		return "offline"
 	}

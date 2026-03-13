@@ -31,10 +31,6 @@ func (h *Handler) HandleFRCSync(c *gin.Context) {
 			http.Error(c.Writer, "FIRST API credentials missing", http.StatusBadRequest)
 			return
 		}
-		if frc.IsInternetUnavailable(err) {
-			http.Error(c.Writer, "No internet connection available for FIRST API sync", http.StatusServiceUnavailable)
-			return
-		}
 		h.log.Error("FRC sync failed", "error", err)
 		http.Error(c.Writer, err.Error(), http.StatusInternalServerError)
 		return

@@ -426,6 +426,13 @@ func TestGetEventRankingsInvalidJSON(t *testing.T) {
 // Integration Tests - These test against real The Blue Alliance API endpoints
 // Requires TBA_AUTH_KEY environment variable
 
+func skipIfNoInternetTBA(t *testing.T, err error) {
+	t.Helper()
+	if IsInternetUnavailable(err) {
+		t.Skipf("skipping integration test: internet unavailable (%v)", err)
+	}
+}
+
 func TestGetEventOPRsIntegration(t *testing.T) {
 	authKey := os.Getenv("TBA_AUTH_KEY")
 	if authKey == "" {
@@ -606,6 +613,7 @@ func TestTBAAuthenticationIntegration(t *testing.T) {
 	// Try to access an event that exists
 	event, err := client.GetEvent(ctx, "2026alhu")
 	if err != nil {
+		skipIfNoInternetTBA(t, err)
 		t.Fatalf("Authentication failed with valid TBA_AUTH_KEY: %v", err)
 	}
 

@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"regexp"
 	"sort"
@@ -112,8 +113,15 @@ func (h *Handler) HandleMatchSchedule(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 	defer cancel()
 
-	// Fetch qualification matches
-	matches, err := client.GetMatchSchedule(ctx, season, eventCode, nil)
+	filters := url.Values{}
+	// FIRST schedule endpoint requires at least one filter parameter.
+	if user.TeamNumber != nil && *user.TeamNumber > 0 {
+		filters.Set("teamNumber", strconv.Itoa(*user.TeamNumber))
+	} else {
+		filters.Set("tournamentLevel", "Qualification")
+	}
+
+	matches, err := client.GetMatchSchedule(ctx, season, eventCode, filters)
 	if err != nil {
 		h.log.Error("failed to fetch match schedule", "error", err, "event_code", eventCode)
 

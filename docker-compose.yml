@@ -76,6 +76,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    profiles:
+      - test
 
   # Optional: Adminer for database management
   adminer:
@@ -89,6 +91,8 @@ services:
 
 # Usage:
 # Start: docker-compose up -d
+# Start app only (default): docker-compose up --build
+# Run tests explicitly: docker-compose --profile test up --build test
 # Stop: docker-compose down
 # View logs: docker-compose logs -f db
 # Reset DB: docker-compose down -v && docker-compose up -d
