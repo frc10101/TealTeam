@@ -289,5 +289,3 @@ func (h *Handler) getTeamStatsForEvent(ctx context.Context, eventID int) (map[in
 
 	return result, nil
 }
-
-
