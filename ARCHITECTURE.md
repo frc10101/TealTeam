@@ -1,247 +1,131 @@
 # TealTeam Architecture Overview
 
-## System Overview
-TealTeam is a scouting and analytics platform for FRC (FIRST Robotics Competition) teams. It aggregates data from multiple sources and displays team performance metrics and scouting information.
+## System Summary
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        TealTeam Application                      │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                   │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │                    Frontend (Web)                        │   │
-│  │  - Go templates (HTML/CSS/JS)                           │   │
-│  │  - Tailwind CSS for styling                             │   │
-│  │  - HTMX for dynamic updates                             │   │
-│  │  - TypeScript/vanilla JS for interactivity              │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                              ↑                                    │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │                  Go Web Server (Gin)                     │   │
-│  │  - Routes: /team, /submission, /admin, /auth, etc      │   │
-│  │  - Handlers in internal/handlers/                       │   │
-│  │  - Middleware: auth, logging, CORS                      │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                              ↑                                    │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │                   Business Logic Layer                   │   │
-│  │  ┌──────────────────────────────────────────────────┐   │   │
-│  │  │  internal/frc/                                   │   │   │
-│  │  │  - TBA Client: API calls to The Blue Alliance   │   │   │
-│  │  │  - FIRST Client: API calls to FIRST Events API  │   │   │
-│  │  │  - Team Stats Syncer: Background sync process   │   │   │
-│  │  │  - Sync: Event/team syncing logic                │   │   │
-│  │  └──────────────────────────────────────────────────┘   │   │
-│  │  ┌──────────────────────────────────────────────────┐   │   │
-│  │  │  internal/models/                               │   │   │
-│  │  │  - Team, Event, Match, ScoutingData, User       │   │   │
-│  │  │  - TeamEventStats (aggregated stats)            │   │   │
-│  │  └──────────────────────────────────────────────────┘   │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                              ↑                                    │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │                  Data Access Layer (GORM)              │   │
-│  │  - internal/db/                                        │   │
-│  │  - Handles migrations and database connections         │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                              ↑                                    │
-└──────────────────┬───────────────────────────────────────────────┘
-                   │
-         ┌─────────┴──────────┬──────────────┬──────────────┐
-         │                    │              │              │
-    ┌────▼────┐        ┌─────▼──────┐ ┌───▼────┐     ┌───▼────┐
-    │PostgreSQL│        │The Blue    │ │FIRST   │     │Manual  │
-    │Database  │        │Alliance API│ │Events  │     │Scouting│
-    │          │        │(TBA)       │ │API     │     │Forms   │
-    └──────────┘        └────────────┘ └────────┘     └────────┘
+TealTeam is a server-rendered scouting platform for FRC teams. It combines manual scouting submissions with automated FIRST and TBA data sync, then serves team and event insights through HTML pages and HTMX fragments.
+
+## High-Level Components
+
+```text
+Browser (pages + HTMX)
+  -> Gin router and handlers
+    -> Service logic (auth, sync, scoring, aggregation)
+      -> PostgreSQL (events, teams, stats, submissions, sessions)
+      -> External APIs (FIRST Events, The Blue Alliance)
 ```
 
-## Data Flow Architecture
+## Runtime Startup Flow
 
-### 1. **Data Integration Layer** (Multiple Sources)
+1. `cmd/web/main.go` loads `.env`, parses `-env`, and resolves `DATABASE_URL`.
+2. DB connection is established via `internal/db.Connect`.
+3. SQL migrations are auto-applied from `migrations/` and recorded in `schema_migrations`.
+4. FIRST sync runs on boot unless `FIRST_SYNC_ON_BOOT=false`.
+5. TBA background sync starts if `TBA_AUTH_KEY` is configured.
+6. Gin routes are registered for full pages, APIs, and HTMX fragments.
 
-#### A. FIRST API Integration (`internal/frc/first_api.go`)
-- **Purpose**: Sync official FRC event and team participation data
-- **Trigger**: 
-  - On application boot (`SyncOnBoot()` in `cmd/web/main.go`)
-  - Manual sync via `/frc-sync` endpoint
-- **Flow**:
-  ```
-  FIRST API → SyncNow() → Parse Events/Teams → Store in DB
-  ```
-- **Data Synced**:
-  - Event details (name, location, dates, dates)
-  - Team participation (which teams are at which events)
-  - Event type and district information
+## Routing Model
 
-#### B. The Blue Alliance (TBA) API Integration (`internal/frc/tba_client.go`)
-- **Purpose**: Sync detailed team performance statistics
-- **Trigger**: 
-  - Background syncer (starts automatically if `TBA_AUTH_KEY` is set)
-  - Runs every 2 minutes during events, every 3 hours between events
-- **Data Synced**:
-  - OPR, DPR, CCWM (overall performance metrics)
-  - Component OPRs (Auto, Teleop, Endgame)
-  - Team rankings and records (Wins, Losses, Ties, DQs)
-  - Match schedules and results
-  - Component breakdowns (auto scores, etc.)
-- **Flow**:
-  ```
-  Background Timer → Check Active Events → Fetch TBA Data → Update Stats
-  ```
+Full page routes (examples):
 
-#### C. Manual Scouting Input
-- **Purpose**: Scouts submit match observations via web forms
-- **Trigger**: Manual form submission at `/submission`
-- **Data Captured**:
-  - Starting position, defense rating, traversal (Bump/Trench multi-select)
-  - Hang capabilities, hang position, scoring strategy
-  - Alliance color, match details
-  - Accuracy rating (Low / Medium / High)
-  - Notes and observations
-- **Submission Lifecycle**:
-  - Submissions are stored in `scouting_submissions` for lead scout review
-  - A background goroutine cleans up submissions older than 20 minutes
-  - On approval, data is copied to `scouting_data` with `submitting_team_id` for ownership tracking
-- **Notes Privacy**: Notes are only visible to the team that submitted them (filtered by `submitting_team_id`)
+- `/`
+- `/submission`
+- `/teams`
+- `/lead-scout`
+- `/drive-coach`
+- `/account`
+- `/sign-in`
+- `/sign-up`
 
-### 2. **Data Storage & Models** (`internal/models/`)
+API routes:
 
-```
-┌────────────────────────────────────────────────────┐
-│           Database Schema Overview                 │
-├────────────────────────────────────────────────────┤
-│                                                    │
-│  teams                → event_teams ← events      │
-│  (team info)          (many-to-many)  (event info)│
-│        ↓                                    ↑      │
-│        └──────────────────────────────────┘       │
-│                      ↓                             │
-│  team_event_stats (aggregated stats per event)    │
-│  matches (match schedule & results)               │
-│  scouting_data (manual observations)              │
-│  users (scouts, coaches, leads)                   │
-│  sessions (authentication)                        │
-│                                                    │
-└────────────────────────────────────────────────────┘
-```
+- `/api/auth/login`
+- `/api/auth/signup`
+- `/api/auth/logout`
+- `/api/account/change-password`
+- `/api/events/select`
+- `/api/frc/sync`
 
-**Key Models**:
-- `Team`: Basic team info (number, name, school, location)
-- `Event`: Competition details
-- `TeamEventStats`: **Aggregated performance metrics per team per event**
-  - `MatchesPlayed` (calculated from: Wins + Losses + Ties)
-  - OPR, DPR, CCWM, component OPRs
-  - Ranking and record
-  - Points (qual, elim, award, alliance)
-- `Match`: Individual match information
-- `ScoutingData`: Manual observations from scouts
-  - Includes `accuracy_rating` and `submitting_team_id` fields
-  - Notes are team-private (filtered by submitting team at display time)
+HTMX routes:
 
-### 3. **Display Layer** (`web/templates/` + handlers)
+- `/hx/events/summary`
+- `/hx/teams/search`
+- `/hx/teams/data`
+- `/hx/matches/schedule`
+- `/hx/lead-scout/submissions/:id/approve`
+- `/hx/lead-scout/submissions/:id/decline`
 
-#### Team Page Flow
-```
-Request: /team?team=6328&event=123
-         ↓
-    find_team_from_number()
-         ↓
-    match with events they're at
-         ↓
-    fetch team_event_stats for selected event
-    fetch scouting_data for that event
-         ↓
-    render team_data.html with:
-    - TBA stats (OPR, ranking, matches)
-    - Scouting observations (aggregated)
-    - Component OPRs
-    - Match history
-```
+## Data Domains
 
-#### Data Displayed:
-- **From `team_event_stats`**: OPR, DPR, CCWM, Rank, MatchesPlayed, Record, QualAverage, Points
-- **From `scouting_data`**: Starting positions, defense ratings, traversals, hang info, accuracy ratings
-- **Calculated**: Most common values, defense breakdowns, hang statistics
-- **Notes**: Displayed per-team — only notes submitted by the viewer's team are shown
-- **Past Events**: "Fetch Past Events" button syncs historical event data from FIRST API
+Core relational domains:
 
-## Key Issues & How They're Fixed
+- Identity: `users`, `sessions`
+- Competition graph: `events`, `teams`, `event_teams`
+- Performance sync: `team_event_stats`, `matches`, `awards`, `zebra_data`
+- Scouting intake and review: `scouting_submissions`, `scouting_data`
+- Operational metadata: `schema_migrations`
 
-### Issue: Match Count Discrepancy
-- **Problem**: `team_event_stats.matches_played` was using TBA's `matches_played` field directly, which could be out of sync
-- **Solution** (Fixed in `team_stats_sync.go`):
-  ```go
-  // OLD:
-  stats.MatchesPlayed = ranking.MatchesPlayed
-  
-  // NEW:
-  stats.MatchesPlayed = ranking.Record.Wins + ranking.Record.Losses + ranking.Record.Ties
-  ```
-- **Why**: The record (W-L-T) is always the source of truth; matches played = total matches in record
+## FIRST Integration
 
-## Data Sources & Priority
+Code path: `internal/frc/sync.go`, `internal/frc/first_api.go`
 
-| Field | Source | Priority | Fallback |
-|-------|--------|----------|----------|
-| Team info | FIRST API → TBA API | FIRST (official) | Manual entry |
-| Events | FIRST API | Official | TBA event list |
-| Rankings | TBA API | TBA (real-time) | Manual input |
-| OPR/DPR/CCWM | TBA API | TBA | None (calculated) |
-| Match Results | TBA API | TBA | Scouting input |
-| Scouting Notes | Manual forms | User input (team-private) | Aggregated observations |
-| Accuracy Rating | Manual forms | User input | Per-submission quality flag |
+Behavior:
 
-## Configuration & Environment Variables
+- Pulls season events and event team attendance from FIRST Events API
+- Upserts `events`, `teams`, and `event_teams`
+- Supports optional filtering with `FIRST_EVENT_CODE`, `FIRST_TEAM_NUMBER`, and `FIRST_COUNTRY`
+- Admin/lead scout can trigger manual sync via `POST /api/frc/sync`
 
-```bash
-# FIRST API (for event/team sync on boot)
-FIRST_API_USERNAME=<username>
-FIRST_API_KEY=<api_key>
-FIRST_SEASON=2026              # Current season
-FIRST_SYNC_ON_BOOT=true        # Sync on startup
-FIRST_EVENT_CODE=NHNA          # Focus event
-FIRST_TEAM_NUMBER=6328         # Focus team
+## TBA Integration
 
-# TBA API (for background stats sync)
-TBA_AUTH_KEY=<auth_key>        # Required for team stats sync
+Code path: `internal/frc/team_stats_sync.go`, `internal/frc/tba_client.go`
 
-# Database
-DATABASE_URL=postgres://user:password@localhost:5432/db
+Behavior:
 
-# Server
-PORT=8080
-```
+- Background sync loop cadence:
+  - Every 2 minutes during active events
+  - Every 3 hours between events
+- For each active/recent event with a valid TBA key:
+  - Sync rankings and OPR families into `team_event_stats`
+  - Sync match schedule/results into `matches`
+- Handles season schema variance with fallback extraction logic for ranking/points fields and component OPR payloads.
 
-## Data Sync Timing
+## Submission Review Pipeline
 
-```
-Application Start
-    ├─ Apply migrations
-    ├─ SyncOnBoot() [if FIRST_SYNC_ON_BOOT=true]
-    │  └─ Sync FIRST API events & teams (one-time on boot)
-    │
-    └─ Start background TeamStatsSyncer [if TBA_AUTH_KEY set]
-       └─ Loop every 2-3 minutes:
-          ├─ Find active events
-          ├─ For each active event:
-          │  ├─ Sync team stats (OPR, DPR, rankings)
-          │  └─ Sync match schedule & results
-          └─ Sleep for interval
-```
+Code path: `internal/handlers/submission.go`, `internal/handlers/lead_scout.go`
 
-## Current Data Issue Resolution
+Pipeline:
 
-**Problem**: System showing seeded test data (3 wins/0 losses) instead of real TBA data (9-1-0 record)
+1. Scouts submit observations into `scouting_submissions`.
+2. Lead scout reviews pending submissions.
+3. Approve action copies normalized data into `scouting_data`.
+4. Decline action removes the pending entry.
+5. Legacy null/blank statuses are normalized by `migrations/0012_normalize_submission_status.sql`.
 
-**Root Cause**: 
-1. Application uses test/seeded events with fake TBA keys (e.g., "2026txho1")
-2. These keys don't exist on real TBA API, so background sync finds no data
-3. Seeded test data persists in database
+Privacy rule:
 
-**Solution Path**:
-1. Identify real TBA event key for Week 0 Nashua, NH 2026 event
-2. Either:
-   - Update event records with correct TBA keys, OR
-   - Manually sync specific events with correct TBA keys
-3. Delete old seeded data or reset database with correct event configuration
+- Notes are scoped by submitting team (`submitting_team_id`) when rendered to team users.
+
+## Auth and Team Bootstrapping
+
+Code path: `internal/handlers/auth.go`, `internal/frc/sync.go`
+
+- Signup/login creates session state and can trigger team-specific FIRST sync.
+- Team-specific TBA sync is launched asynchronously for that team's events when credentials are available.
+
+## Deployment Architecture (Render)
+
+Source of truth: `render.yaml`
+
+- Web service runs from the Docker image produced by `Dockerfile`
+- Container command: `/server -env=prod`
+- Managed PostgreSQL connection injected as `DATABASE_URL`
+- Secret env vars are configured manually in Render dashboard:
+  - `FIRST_API_USERNAME`
+  - `FIRST_API_KEY`
+  - `TBA_AUTH_KEY`
+
+## Operational Notes
+
+- The app can start even if DB is unavailable, but DB-backed pages and features will degrade.
+- In `-env=test`, migration history table is reset before migration apply.
+- Pi and offline event mode are documented in `docs/PI_EVENT_BOOT.md`.

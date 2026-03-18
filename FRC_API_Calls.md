@@ -20,12 +20,14 @@ Authorization: Basic <base64_encoded_token>
 2. Base64 encode the string: `echo -n "username:key" | base64`
 3. Use the result in the Authorization header
 
-**Example:**
+**Example (placeholder values only):**
 ```
-username: tealteam
-key: 7eaa6338-a097-4221-ac04-b6120fcc4d49
-encoded: dGVhbHRlYW06N2VhYTYzMzgtYTA5Ny00MjIxLWFjMDQtYjYxMjBmY2M0ZDQ5
+username: your-first-username
+key: your-first-api-key
+encoded: <base64("your-first-username:your-first-api-key")>
 ```
+
+Never commit real credentials to documentation, source, or logs.
 
 ---
 

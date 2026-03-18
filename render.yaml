@@ -12,11 +12,10 @@ services:
     branch: main
     dockerfilePath: ./Dockerfile
     dockerContext: .
+    dockerCommand: /server -env=prod
     healthCheckPath: /
     autoDeploy: true
     envVars:
-      - key: PORT
-        value: 8080
       - key: GIN_MODE
         value: release
       - key: ENVIRONMENT
@@ -31,5 +30,15 @@ services:
         sync: false
       - key: FIRST_API_KEY
         sync: false
+      - key: FIRST_SEASON
+        value: "2026"
+      - key: FIRST_SYNC_ON_BOOT
+        value: "true"
+      - key: FIRST_EVENT_CODE
+        value: ""
+      - key: FIRST_TEAM_NUMBER
+        value: ""
+      - key: FIRST_COUNTRY
+        value: ""
       - key: TBA_AUTH_KEY
         sync: false
