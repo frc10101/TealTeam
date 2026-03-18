@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"path/filepath"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -29,6 +30,12 @@ func New(db *gorm.DB) *Handler {
 	funcMap := template.FuncMap{
 		"add": func(a, b int) int {
 			return a + b
+		},
+		"containsStr": func(haystack, needle string) bool {
+			if haystack == "" || needle == "" {
+				return false
+			}
+			return strings.Contains(haystack, needle)
 		},
 		"float1": func(v any) string {
 			switch n := v.(type) {
@@ -54,6 +61,30 @@ func New(db *gorm.DB) *Handler {
 				return "0.0"
 			}
 		},
+		"float2": func(v any) string {
+			switch n := v.(type) {
+			case float64:
+				return fmt.Sprintf("%.2f", n)
+			case float32:
+				return fmt.Sprintf("%.2f", n)
+			case int:
+				return fmt.Sprintf("%.2f", float64(n))
+			case int64:
+				return fmt.Sprintf("%.2f", float64(n))
+			case *float64:
+				if n == nil {
+					return "0.00"
+				}
+				return fmt.Sprintf("%.2f", *n)
+			case *float32:
+				if n == nil {
+					return "0.00"
+				}
+				return fmt.Sprintf("%.2f", *n)
+			default:
+				return "0.00"
+			}
+		},
 		"subtract": func(a, b int) int {
 			return a - b
 		},
@@ -74,7 +105,7 @@ func New(db *gorm.DB) *Handler {
 	}
 
 	// Parse each page template with the layout (and partials)
-	pages := []string{"index", "submission", "submission_detail", "db_viewer", "admin_viewer", "signin", "signup", "team", "account"}
+	pages := []string{"index", "submission", "submission_detail", "db_viewer", "admin_viewer", "coach_viewer", "signin", "signup", "team", "account"}
 	for _, page := range pages {
 		pageFile := filepath.Join("web", "templates", "pages", page+".html")
 		files := append([]string{layoutFile, pageFile}, partialFiles...)
