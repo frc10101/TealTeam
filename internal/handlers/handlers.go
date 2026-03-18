@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"html/template"
 	"log"
 	"log/slog"
@@ -28,6 +29,30 @@ func New(db *gorm.DB) *Handler {
 	funcMap := template.FuncMap{
 		"add": func(a, b int) int {
 			return a + b
+		},
+		"float1": func(v any) string {
+			switch n := v.(type) {
+			case float64:
+				return fmt.Sprintf("%.1f", n)
+			case float32:
+				return fmt.Sprintf("%.1f", n)
+			case int:
+				return fmt.Sprintf("%.1f", float64(n))
+			case int64:
+				return fmt.Sprintf("%.1f", float64(n))
+			case *float64:
+				if n == nil {
+					return "0.0"
+				}
+				return fmt.Sprintf("%.1f", *n)
+			case *float32:
+				if n == nil {
+					return "0.0"
+				}
+				return fmt.Sprintf("%.1f", *n)
+			default:
+				return "0.0"
+			}
 		},
 		"subtract": func(a, b int) int {
 			return a - b

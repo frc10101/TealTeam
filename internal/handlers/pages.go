@@ -261,7 +261,7 @@ func (h *Handler) HandleAdminViewer(c *gin.Context) {
 				data["PickListTeams"] = teams
 			}
 		}
-		pending, err := h.loadPendingSubmissions(c, user)
+		pending, err := h.loadPendingSubmissions(c)
 		if err == nil {
 			data["PendingSubmissions"] = pending
 		}
