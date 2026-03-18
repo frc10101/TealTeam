@@ -59,6 +59,33 @@ An FRC (FIRST Robotics Competition) scouting application built with **Go**, **HT
 
 ---
 
+## Raspberry Pi Event Autostart
+
+For event use (minimal setup on power-on), use the Pi autostart flow documented in:
+
+- `docs/PI_EVENT_BOOT.md`
+
+Quick commands on the Pi:
+
+```bash
+sudo ./scripts/pi_first_boot.sh
+sudo ./scripts/install_pi_autostart.sh
+sudo systemctl start tealteam.service
+```
+
+Pi mode uses standalone `docker-compose.pi.yml` and defaults to:
+
+- Web UI exposed on host port `80` (container `8080`)
+- PostgreSQL not exposed to host
+- Adminer not included in Pi runtime compose
+
+Headless notes:
+
+- Service loads optional boot-partition config from `/boot/firmware/tealteam.env` (or `/boot/tealteam.env`).
+- Default access URL is `http://<hostname>.local/` when mDNS is supported on the LAN.
+
+---
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -89,6 +116,39 @@ make migrate
 # psql postgres://user:password@localhost:5432/yourdb -f migrations/0001_init.sql
 # psql postgres://user:password@localhost:5432/yourdb -f migrations/0002_...
 ```
+
+### Offline / Power-Cycle Data Persistence
+
+For offline events, PostgreSQL data is persisted to a host directory so data survives machine reboots and power loss.
+
+- Compose mount: `${DB_DATA_PATH:-./.data/postgres}:/var/lib/postgresql/data`
+- Default host path: `./.data/postgres`
+- Override path by setting `DB_DATA_PATH` in `.env`
+
+Safe operational commands:
+
+```bash
+# Start DB and app
+docker-compose up -d
+
+# Stop containers without deleting data
+docker-compose stop
+
+# Start again after reboot/power-on
+docker-compose start
+
+# Rebuild/recreate containers without deleting DB data
+docker-compose up -d --build
+
+# Or DB only
+make db-rebuild
+```
+
+Important:
+
+- Do not run `docker-compose down -v` unless you intentionally want to wipe DB data.
+- `make db-reset` is destructive and removes existing DB data.
+- `make db-reset` now requires explicit confirmation: `make db-reset CONFIRM_RESET_DB=yes`.
 
 ### 3. Build CSS
 

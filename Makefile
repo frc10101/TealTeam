@@ -1,6 +1,6 @@
 # Makefile for common development tasks
 
-.PHONY: help dev run build css css-watch db-up db-down db-reset migrate seed test clean
+.PHONY: help dev run build css css-watch db-up db-down db-rebuild db-reset migrate seed test clean
 
 # Default target
 help:
@@ -12,6 +12,7 @@ help:
 	@echo "  make css-watch  - Watch and rebuild Tailwind CSS"
 	@echo "  make db-up      - Start PostgreSQL with docker-compose"
 	@echo "  make db-down    - Stop PostgreSQL"
+	@echo "  make db-rebuild - Rebuild/recreate DB container (preserves data)"
 	@echo "  make db-reset   - Reset database (delete all data)"
 	@echo "  make migrate    - Run database migrations"
 	@echo "  make seed       - Seed database with test data"
@@ -47,7 +48,14 @@ db-up:
 db-down:
 	docker-compose down
 
+db-rebuild:
+	docker-compose up -d --build db
+
 db-reset:
+	@if [ "$(CONFIRM_RESET_DB)" != "yes" ]; then \
+		echo "Refusing destructive reset. Re-run with: make db-reset CONFIRM_RESET_DB=yes"; \
+		exit 1; \
+	fi
 	docker-compose down -v
 	docker-compose up -d db
 	@echo "Waiting for database to be ready..."

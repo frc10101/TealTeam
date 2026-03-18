@@ -13,6 +13,10 @@ import (
 
 const defaultDBURL = "postgres://user:password@localhost:5432/yourdb?sslmode=disable"
 
+func main() {
+	createUser()
+}
+
 func createUser() {
 	// Parse command line flags
 	email := flag.String("email", "", "User email")

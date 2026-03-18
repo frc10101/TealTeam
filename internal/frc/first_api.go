@@ -33,32 +33,73 @@ func NewClient(username, key string) *Client {
 }
 
 func (c *Client) getJSON(ctx context.Context, path string, query url.Values, out any) error {
+	if !shouldSkipConnectivityCheck(c.baseURL) {
+		if err := ensureInternetConnectivityForBaseURL(ctx, c.baseURL); err != nil {
+			recordAPIError(err)
+			return fmt.Errorf("first api preflight failed: %w", err)
+		}
+	}
+
 	endpoint := c.baseURL + path
 	if len(query) > 0 {
 		endpoint += "?" + query.Encode()
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
+	for attempt := 0; attempt < apiRetryMaxAttempts; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+		if err != nil {
+			recordAPIError(err)
+			return err
+		}
+
+		req.Header.Set("Authorization", c.authHeader)
+		req.Header.Set("Accept", "application/json")
+
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			recordAPIError(err)
+			if attempt < apiRetryMaxAttempts-1 && shouldRetryRequestError(err) {
+				if sleepErr := sleepWithContext(ctx, backoffDelay(attempt)); sleepErr != nil {
+					recordAPIError(sleepErr)
+					return sleepErr
+				}
+				continue
+			}
+			return err
+		}
+
+		func() {
+			defer resp.Body.Close()
+			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+				body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+				err = fmt.Errorf("first api %s returned %d: %s", path, resp.StatusCode, string(body))
+				return
+			}
+
+			dec := json.NewDecoder(resp.Body)
+			err = dec.Decode(out)
+		}()
+
+		if err == nil {
+			recordAPISuccess()
+			return nil
+		}
+
+		recordAPIError(err)
+		if attempt < apiRetryMaxAttempts-1 && resp != nil && shouldRetryStatusCode(resp.StatusCode) {
+			if sleepErr := sleepWithContext(ctx, backoffDelay(attempt)); sleepErr != nil {
+				recordAPIError(sleepErr)
+				return sleepErr
+			}
+			continue
+		}
+
 		return err
 	}
 
-	req.Header.Set("Authorization", c.authHeader)
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("first api %s returned %d: %s", path, resp.StatusCode, string(body))
-	}
-
-	dec := json.NewDecoder(resp.Body)
-	return dec.Decode(out)
+	finalErr := fmt.Errorf("first api %s retries exhausted", path)
+	recordAPIError(finalErr)
+	return finalErr
 }
 
 // EventsResponse matches the /{season}/events response.

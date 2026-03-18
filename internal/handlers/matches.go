@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"fmt"
+	"net/url"
 	"os"
 	"regexp"
 	"sort"
@@ -111,10 +113,38 @@ func (h *Handler) HandleMatchSchedule(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 	defer cancel()
 
-	// Fetch qualification matches
-	matches, err := client.GetMatchSchedule(ctx, season, eventCode, nil)
+	filters := url.Values{}
+	// FIRST schedule endpoint requires at least one filter parameter.
+	if user.TeamNumber != nil && *user.TeamNumber > 0 {
+		filters.Set("teamNumber", strconv.Itoa(*user.TeamNumber))
+	} else {
+		filters.Set("tournamentLevel", "Qualification")
+	}
+
+	matches, err := client.GetMatchSchedule(ctx, season, eventCode, filters)
 	if err != nil {
 		h.log.Error("failed to fetch match schedule", "error", err, "event_code", eventCode)
+
+		staleMatches, staleErr := h.loadStaleMatchesFromDB(c.Request.Context(), eventID)
+		if staleErr == nil && len(staleMatches) > 0 {
+			notice := "Using cached schedule data from local DB."
+			if frc.IsInternetUnavailable(err) {
+				notice = "Offline: showing cached schedule from local DB."
+			}
+			h.renderPartial(c, "match_schedule", map[string]any{
+				"Matches":         staleMatches,
+				"EventName":       event.Name,
+				"ScheduleMessage": notice,
+			})
+			return
+		}
+
+		if frc.IsInternetUnavailable(err) {
+			h.renderPartial(c, "match_schedule", map[string]any{
+				"ScheduleMessage": "No internet connection available. Connect uplink and retry manual sync.",
+			})
+			return
+		}
 		h.renderPartial(c, "match_schedule", map[string]any{
 			"ScheduleMessage": "Could not fetch match schedule from FIRST API.",
 		})
@@ -181,6 +211,46 @@ func (h *Handler) HandleMatchSchedule(c *gin.Context) {
 	}
 
 	h.renderPartial(c, "match_schedule", data)
+}
+
+func (h *Handler) loadStaleMatchesFromDB(ctx context.Context, eventID int) ([]MatchDisplay, error) {
+	var dbMatches []struct {
+		MatchNumber   int
+		ScheduledTime *time.Time
+	}
+
+	if err := h.db.WithContext(ctx).
+		Table("matches").
+		Select("match_number, scheduled_time").
+		Where("event_id = ?", eventID).
+		Order("scheduled_time").
+		Scan(&dbMatches).Error; err != nil {
+		return nil, err
+	}
+
+	now := time.Now()
+	display := make([]MatchDisplay, 0, len(dbMatches))
+	for _, m := range dbMatches {
+		item := MatchDisplay{
+			Description: fmt.Sprintf("Match %d", m.MatchNumber),
+			MatchNumber: m.MatchNumber,
+			TimeStatus:  "upcoming",
+		}
+		if m.ScheduledTime != nil {
+			item.StartTime = *m.ScheduledTime
+			item.TimeDisplay = m.ScheduledTime.In(time.Local).Format("Mon Jan 2, 3:04 PM")
+			minutesUntil := int(m.ScheduledTime.Sub(now).Minutes())
+			item.MinutesUntil = minutesUntil
+			if minutesUntil < -15 {
+				item.TimeStatus = "past"
+			} else if minutesUntil <= 5 {
+				item.TimeStatus = "current"
+			}
+		}
+		display = append(display, item)
+	}
+
+	return display, nil
 }
 
 // extractEventCode extracts the event code from a TBA key

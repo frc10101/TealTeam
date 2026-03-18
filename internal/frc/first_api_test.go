@@ -255,6 +255,13 @@ func TestGetEventTeamsInvalidJSON(t *testing.T) {
 // Integration Tests - These test against real FIRST API endpoints
 // Requires FIRST_API_USERNAME and FIRST_API_KEY environment variables
 
+func skipIfNoInternetFirst(t *testing.T, err error) {
+	t.Helper()
+	if IsInternetUnavailable(err) {
+		t.Skipf("skipping integration test: internet unavailable (%v)", err)
+	}
+}
+
 func TestGetSeasonEventsIntegration(t *testing.T) {
 	username := os.Getenv("FIRST_API_USERNAME")
 	key := os.Getenv("FIRST_API_KEY")
@@ -269,6 +276,7 @@ func TestGetSeasonEventsIntegration(t *testing.T) {
 	// Test getting 2024 events
 	events, err := client.GetSeasonEvents(ctx, 2024, url.Values{})
 	if err != nil {
+		skipIfNoInternetFirst(t, err)
 		t.Fatalf("GetSeasonEvents failed: %v", err)
 	}
 
@@ -303,6 +311,7 @@ func TestGetEventTeamsIntegration(t *testing.T) {
 	// First get a valid event code
 	events, err := client.GetSeasonEvents(ctx, 2024, url.Values{})
 	if err != nil {
+		skipIfNoInternetFirst(t, err)
 		t.Fatalf("GetSeasonEvents failed: %v", err)
 	}
 
@@ -350,6 +359,7 @@ func TestAuthenticationIntegration(t *testing.T) {
 
 	_, err := client.GetSeasonEvents(ctx, 2024, url.Values{})
 	if err != nil {
+		skipIfNoInternetFirst(t, err)
 		t.Fatalf("Authentication failed with valid credentials: %v", err)
 	}
 

@@ -3,7 +3,8 @@
 <div class="rounded-lg border border-gray-700 bg-gray-900 px-4 py-6 text-center text-sm text-gray-400">
     {{.ScheduleMessage}}
 </div>
-{{else if .Matches}}
+{{end}}
+{{if .Matches}}
 <div class="card">
     <div class="card-header accent-teal">
         <h2 class="text-xl font-semibold text-gray-100">Current Matches</h2>
@@ -61,7 +62,7 @@
         </div>
     </div>
 </div>
-{{else}}
+{{else if not .ScheduleMessage}}
 <div class="text-sm text-gray-400 text-center py-4">
     No matches in the next 15 minutes
 </div>

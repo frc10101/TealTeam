@@ -25,21 +25,8 @@ func main() {
 	_ = godotenv.Load()
 
 	// Parse command line flags
-	env := flag.String("env", "", "Environment to use: 'test' (local Docker) or 'prod' (Render)")
+	env := flag.String("env", "test", "Environment to use: 'test' (local Docker) or 'prod' (Render)")
 	flag.Parse()
-
-	// If env flag not provided, check ENVIRONMENT variable (set by Render)
-	if *env == "" {
-		if envVar := os.Getenv("ENVIRONMENT"); envVar != "" {
-			if envVar == "production" {
-				*env = "prod"
-			} else {
-				*env = "test"
-			}
-		} else {
-			*env = "test"
-		}
-	}
 
 	// Validate environment
 	if *env != "test" && *env != "prod" {
@@ -130,11 +117,6 @@ func main() {
 	// Initialize handlers
 	h := handlers.New(database)
 
-	// Start background cleanup for expired sessions and submissions (20-min TTL)
-	cleanupStop := make(chan struct{})
-	go h.StartBackgroundCleanup(cleanupStop)
-	defer close(cleanupStop)
-
 	// Create Gin router
 	router := gin.New()
 	// Trust Render's proxy headers for proper client IP detection
@@ -171,13 +153,9 @@ func main() {
 	router.GET("/submission/event-teams", h.HandleGetEventTeams)
 	router.GET("/hx/teams/search", h.HandleTeamSearch)
 	router.GET("/hx/teams/data", h.HandleTeamEventData)
-	router.POST("/hx/teams/fetch-past-events", h.HandleFetchPastEvents)
 	router.GET("/hx/matches/schedule", h.HandleMatchSchedule)
-	router.GET("/hx/drive-coach/matches", h.HandleDriveCoachMatches)
 	router.POST("/hx/lead-scout/submissions/:id/approve", h.HandleApproveSubmission)
 	router.POST("/hx/lead-scout/submissions/:id/decline", h.HandleDeclineSubmission)
-	router.POST("/submission/resubmit/:id", h.HandleResubmit)
-	router.GET("/submission/edit/:id", h.HandleEditRejectedSubmission)
 
 	// TODO: Add more routes here
 	// Full pages: router.GET("/yourpage", h.HandleYourPage)

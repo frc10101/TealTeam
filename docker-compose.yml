@@ -11,9 +11,10 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: yourdb
     ports:
-      - "5432:5432"
+      - "${DB_HOST_PORT:-5432}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # Persist Postgres data on the host so data survives full power cycles.
+      - ${DB_DATA_PATH:-./.data/postgres}:/var/lib/postgresql/data
       # Optionally run migrations on startup:
       # - ./migrations:/docker-entrypoint-initdb.d
     healthcheck:
@@ -41,7 +42,7 @@ services:
       FIRST_COUNTRY: ${FIRST_COUNTRY}
       TBA_AUTH_KEY: ${TBA_AUTH_KEY}
     ports:
-      - "8080:8080"
+      - "${WEB_HOST_PORT:-8080}:8080"
     depends_on:
       db:
         condition: service_healthy
@@ -75,6 +76,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    profiles:
+      - test
 
   # Optional: Adminer for database management
   adminer:
@@ -82,15 +85,14 @@ services:
     container_name: tealteam_adminer
     restart: unless-stopped
     ports:
-      - "8081:8080"
+      - "${ADMINER_HOST_PORT:-8081}:8080"
     depends_on:
       - db
 
-volumes:
-  postgres_data:
-
 # Usage:
 # Start: docker-compose up -d
+# Start app only (default): docker-compose up --build
+# Run tests explicitly: docker-compose --profile test up --build test
 # Stop: docker-compose down
 # View logs: docker-compose logs -f db
 # Reset DB: docker-compose down -v && docker-compose up -d

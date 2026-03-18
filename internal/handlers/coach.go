@@ -23,33 +23,19 @@ type driveCoachTeam struct {
 }
 
 type driveCoachMatch struct {
-	Description        string
-	MatchNumber        int
-	MatchType          string
-	StartTime          *time.Time
-	TimeDisplay        string
-	Status             string
-	StatusLabel        string
-	StatusClass        string
-	MinutesFromNow     int
-	RedTeams           []driveCoachTeam
-	BlueTeams          []driveCoachTeam
-	OurAlliance        string
-	OurPartners        []int
-	PredictedRedScore  float64
-	PredictedBlueScore float64
-}
-
-func safeFloat(v *float64) float64 {
-	if v == nil {
-		return 0
-	}
-	return *v
-}
-
-func predictAllianceScore(ourOPRSum, opponentDPRSum float64) float64 {
-	// OPR and opponent DPR both model expected points; averaging dampens noisy inputs.
-	return (ourOPRSum + opponentDPRSum) / 2
+	Description    string
+	MatchNumber    int
+	MatchType      string
+	StartTime      *time.Time
+	TimeDisplay    string
+	Status         string
+	StatusLabel    string
+	StatusClass    string
+	MinutesFromNow int
+	RedTeams       []driveCoachTeam
+	BlueTeams      []driveCoachTeam
+	OurAlliance    string
+	OurPartners    []int
 }
 
 // HandleCoachViewer renders the drive coach panel
@@ -66,7 +52,7 @@ func (h *Handler) HandleCoachViewer(c *gin.Context) {
 
 	data := map[string]any{
 		"Title":       "Drive Coach Panel",
-		"Description": "Quick match schedule, alliance partners, and predicted score outlook.",
+		"Description": "Quick match schedule and alliance partners.",
 		"User":        user,
 	}
 
@@ -168,7 +154,11 @@ func (h *Handler) loadDriveCoachMatches(ctx context.Context, eventID int, userTe
 	}
 
 	filters := url.Values{}
-	filters.Set("teamNumber", strconv.Itoa(*userTeamNumber))
+	if *userTeamNumber > 0 {
+		filters.Set("teamNumber", strconv.Itoa(*userTeamNumber))
+	} else {
+		filters.Set("tournamentLevel", "Qualification")
+	}
 
 	client := frc.NewClient(username, key)
 	apiCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -176,6 +166,9 @@ func (h *Handler) loadDriveCoachMatches(ctx context.Context, eventID int, userTe
 
 	rawMatches, err := client.GetMatchSchedule(apiCtx, season, eventCode, filters)
 	if err != nil {
+		if frc.IsInternetUnavailable(err) {
+			return nil, nil, httpError("No internet connection available. Connect network uplink and try manual sync again.")
+		}
 		return nil, nil, httpError("Could not fetch match schedule from FIRST API")
 	}
 
@@ -307,11 +300,6 @@ func (h *Handler) loadDriveCoachMatches(ctx context.Context, eventID int, userTe
 				"error", err)
 		}
 
-		var redOPRSum float64
-		var redDPRSum float64
-		var blueOPRSum float64
-		var blueDPRSum float64
-
 		for _, team := range match.Teams {
 			teamStats, ok := statsByTeam[team.TeamNumber]
 			if !ok {
@@ -320,15 +308,11 @@ func (h *Handler) loadDriveCoachMatches(ctx context.Context, eventID int, userTe
 
 			if strings.HasPrefix(team.Station, "Red") {
 				entry.RedTeams = append(entry.RedTeams, teamStats)
-				redOPRSum += safeFloat(teamStats.OPR)
-				redDPRSum += safeFloat(teamStats.DPR)
 				if team.TeamNumber == *userTeamNumber {
 					entry.OurAlliance = "Red"
 				}
 			} else if strings.HasPrefix(team.Station, "Blue") {
 				entry.BlueTeams = append(entry.BlueTeams, teamStats)
-				blueOPRSum += safeFloat(teamStats.OPR)
-				blueDPRSum += safeFloat(teamStats.DPR)
 				if team.TeamNumber == *userTeamNumber {
 					entry.OurAlliance = "Blue"
 				}
@@ -348,9 +332,6 @@ func (h *Handler) loadDriveCoachMatches(ctx context.Context, eventID int, userTe
 				}
 			}
 		}
-
-		entry.PredictedRedScore = predictAllianceScore(redOPRSum, blueDPRSum)
-		entry.PredictedBlueScore = predictAllianceScore(blueOPRSum, redDPRSum)
 
 		results = append(results, entry)
 	}

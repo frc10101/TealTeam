@@ -61,6 +61,7 @@ render-build.log
 # Database
 *.db
 *.sqlite
+/.data/
 
 # Coverage
 coverage.out

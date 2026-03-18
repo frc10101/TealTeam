@@ -3,13 +3,11 @@ package handlers
 import (
 	"database/sql"
 	"errors"
-	"fmt"
 	"net/http"
 	"sort"
 	"strings"
 
 	"github.com/frc10101/TealTeam/internal/frc"
-	"github.com/frc10101/TealTeam/internal/models"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -28,6 +26,12 @@ type pickListTeam struct {
 	TeamNumber int
 }
 
+type rankingRow struct {
+	Rank        int
+	TeamNumber  int
+	QualAverage float64
+}
+
 type scoutingMetricRow struct {
 	TeamID           int
 	DefenseRating    string
@@ -39,7 +43,6 @@ type scoutingMetricRow struct {
 	AutoHang         string
 	HangPosition     string
 	StartingPosition string
-	CreatedAt        string
 }
 
 type teamPointSummary struct {
@@ -49,42 +52,9 @@ type teamPointSummary struct {
 	Rank       *int
 	Points     int
 	Matches    int
-	Strategy   string
 }
 
-// canAccessSubmission checks if a user has permission to access a submission
-func (h *Handler) canAccessSubmission(c *gin.Context, user *models.User, submissionID string) bool {
-	if user.IsAdmin {
-		return true // Admins can access all submissions
-	}
-
-	if !user.IsLeadScout {
-		return false // Only admins and lead scouts can access
-	}
-
-	// Lead scouts can only access submissions from their own team
-	if user.TeamNumber == nil || *user.TeamNumber <= 0 {
-		return false // Lead scout must have a team number
-	}
-
-	var submittingTeamNumber *int
-	if err := h.db.WithContext(c.Request.Context()).
-		Table("scouting_submissions").
-		Select("teams.team_number").
-		Joins("JOIN teams ON teams.id = scouting_submissions.submitting_team_id").
-		Where("scouting_submissions.id = ?", submissionID).
-		Scan(&submittingTeamNumber).Error; err != nil {
-		return false
-	}
-
-	if submittingTeamNumber == nil {
-		return false // No submitting team found
-	}
-
-	return *submittingTeamNumber == *user.TeamNumber
-}
-
-func (h *Handler) loadPendingSubmissions(c *gin.Context, user *models.User) ([]pendingSubmissionRow, error) {
+func (h *Handler) loadPendingSubmissions(c *gin.Context) ([]pendingSubmissionRow, error) {
 	var rows []struct {
 		ID         int
 		EventName  string
@@ -94,24 +64,12 @@ func (h *Handler) loadPendingSubmissions(c *gin.Context, user *models.User) ([]p
 		Notes      sql.NullString
 	}
 
-	query := h.db.WithContext(c.Request.Context()).
+	if err := h.db.WithContext(c.Request.Context()).
 		Table("scouting_submissions").
 		Select("scouting_submissions.id, events.name as event_name, teams.team_number, teams.name as team_name, users.name as scout_name, scouting_submissions.notes").
 		Joins("JOIN events ON events.id = scouting_submissions.event_id").
 		Joins("JOIN teams ON teams.id = scouting_submissions.team_id").
 		Joins("LEFT JOIN users ON users.id = scouting_submissions.scouter_id").
-		Where("scouting_submissions.status = ?", "pending")
-
-	// Filter by lead scout's team - only see submissions from their team
-	if !user.IsAdmin && user.IsLeadScout {
-		if user.TeamNumber != nil && *user.TeamNumber > 0 {
-			query = query.Joins("JOIN teams AS submitting_team ON submitting_team.id = scouting_submissions.submitting_team_id").
-				Where("submitting_team.team_number = ?", *user.TeamNumber)
-		}
-	}
-	// Admins see all submissions
-
-	if err := query.
 		Order("scouting_submissions.created_at").
 		Scan(&rows).Error; err != nil {
 		return nil, err
@@ -159,6 +117,65 @@ func (h *Handler) loadPickListTeams(c *gin.Context, eventID int) ([]pickListTeam
 	return teams, nil
 }
 
+func (h *Handler) loadRankingSnapshot(c *gin.Context, eventID int, teamNumber *int) ([]rankingRow, *rankingRow, []rankingRow, error) {
+	var topTeams []rankingRow
+	if err := h.db.WithContext(c.Request.Context()).
+		Table("team_event_stats").
+		Select("team_event_stats.rank, teams.team_number, team_event_stats.qual_average").
+		Joins("JOIN teams ON teams.id = team_event_stats.team_id").
+		Where("team_event_stats.event_id = ? AND team_event_stats.rank IS NOT NULL", eventID).
+		Order("team_event_stats.rank").
+		Limit(5).
+		Scan(&topTeams).Error; err != nil {
+		return nil, nil, nil, err
+	}
+
+	if teamNumber == nil {
+		return topTeams, nil, nil, nil
+	}
+
+	var userTeam rankingRow
+	err := h.db.WithContext(c.Request.Context()).
+		Table("team_event_stats").
+		Select("team_event_stats.rank, teams.team_number, team_event_stats.qual_average").
+		Joins("JOIN teams ON teams.id = team_event_stats.team_id").
+		Where("team_event_stats.event_id = ? AND teams.team_number = ? AND team_event_stats.rank IS NOT NULL", eventID, *teamNumber).
+		First(&userTeam).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return topTeams, nil, nil, nil
+		}
+		return nil, nil, nil, err
+	}
+
+	minRank := userTeam.Rank - 2
+	if minRank < 1 {
+		minRank = 1
+	}
+	maxRank := userTeam.Rank + 2
+
+	var aroundTeams []rankingRow
+	if err := h.db.WithContext(c.Request.Context()).
+		Table("team_event_stats").
+		Select("team_event_stats.rank, teams.team_number, team_event_stats.qual_average").
+		Joins("JOIN teams ON teams.id = team_event_stats.team_id").
+		Where("team_event_stats.event_id = ? AND team_event_stats.rank BETWEEN ? AND ? AND team_event_stats.rank IS NOT NULL", eventID, minRank, maxRank).
+		Order("team_event_stats.rank").
+		Scan(&aroundTeams).Error; err != nil {
+		return nil, nil, nil, err
+	}
+
+	filtered := make([]rankingRow, 0, len(aroundTeams))
+	for _, team := range aroundTeams {
+		if team.TeamNumber == userTeam.TeamNumber {
+			continue
+		}
+		filtered = append(filtered, team)
+	}
+
+	return topTeams, &userTeam, filtered, nil
+}
+
 func (h *Handler) loadTeamPointRankings(c *gin.Context, eventID int, sortKey string) ([]teamPointSummary, error) {
 	var teams []struct {
 		TeamID     int
@@ -190,8 +207,7 @@ func (h *Handler) loadTeamPointRankings(c *gin.Context, eventID int, sortKey str
 			scouting_data.hang_level,
 			scouting_data.auto_hang,
 			scouting_data.hang_position,
-			scouting_data.starting_position,
-			scouting_data.created_at`).
+			scouting_data.starting_position`).
 		Where("scouting_data.event_id = ?", eventID).
 		Scan(&metrics).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
@@ -199,45 +215,9 @@ func (h *Handler) loadTeamPointRankings(c *gin.Context, eventID int, sortKey str
 
 	pointsByTeam := make(map[int]int)
 	matchesByTeam := make(map[int]int)
-	// Track strategy frequency and most recent for each team
-	type strategyInfo struct {
-		count     int
-		createdAt string
-	}
-	strategiesByTeam := make(map[int]map[string]strategyInfo)
 	for _, row := range metrics {
 		pointsByTeam[row.TeamID] += calculateScoutingPoints(row)
 		matchesByTeam[row.TeamID]++
-		// Track strategy if it's not empty
-		if row.ScoringStrategy != "" {
-			if strategiesByTeam[row.TeamID] == nil {
-				strategiesByTeam[row.TeamID] = make(map[string]strategyInfo)
-			}
-			current := strategiesByTeam[row.TeamID][row.ScoringStrategy]
-			current.count++
-			// Keep the most recent created_at for this strategy
-			if row.CreatedAt > current.createdAt {
-				current.createdAt = row.CreatedAt
-			}
-			strategiesByTeam[row.TeamID][row.ScoringStrategy] = current
-		}
-	}
-
-	// Determine most common (or most recent if tie) strategy for each team
-	mostCommonStrategyByTeam := make(map[int]string)
-	for teamID, strategies := range strategiesByTeam {
-		var bestStrategy string
-		var bestCount int
-		var bestCreatedAt string
-		for strategy, info := range strategies {
-			// Choose this strategy if it has more occurrences, or if tied, if it's more recent
-			if info.count > bestCount || (info.count == bestCount && info.createdAt > bestCreatedAt) {
-				bestStrategy = strategy
-				bestCount = info.count
-				bestCreatedAt = info.createdAt
-			}
-		}
-		mostCommonStrategyByTeam[teamID] = bestStrategy
 	}
 
 	summaries := make([]teamPointSummary, 0, len(teams))
@@ -255,7 +235,6 @@ func (h *Handler) loadTeamPointRankings(c *gin.Context, eventID int, sortKey str
 			Rank:       rankPtr,
 			Points:     pointsByTeam[team.TeamID],
 			Matches:    matchesByTeam[team.TeamID],
-			Strategy:   mostCommonStrategyByTeam[team.TeamID],
 		})
 	}
 
@@ -319,12 +298,6 @@ func (h *Handler) HandleApproveSubmission(c *gin.Context) {
 		return
 	}
 
-	// Check if user has access to this submission
-	if !h.canAccessSubmission(c, user, id) {
-		http.Redirect(c.Writer, c.Request, "/", http.StatusSeeOther)
-		return
-	}
-
 	ctx := c.Request.Context()
 
 	var submission scoutingSubmission
@@ -363,10 +336,8 @@ func (h *Handler) HandleApproveSubmission(c *gin.Context) {
 		HangLevel:        submission.HangLevel,
 		AutoHang:         submission.AutoHang,
 		HangPosition:     submission.HangPosition,
-		AccuracyRating:   submission.AccuracyRating,
 		ScoutedAt:        submission.ScoutedAt,
 		ScouterID:        submission.ScouterID,
-		SubmittingTeamID: submission.SubmittingTeamID,
 	}
 
 	tx := h.db.WithContext(ctx).Begin()
@@ -390,16 +361,12 @@ func (h *Handler) HandleApproveSubmission(c *gin.Context) {
 		_, err := frc.SyncTeamForUser(ctx, h.db, team.TeamNumber)
 		if err != nil {
 			// Log the error but don't fail the request - the submission was already approved
-			fmt.Printf("warning: failed to sync team %d after approval: %v\n", team.TeamNumber, err)
+			h.log.Warn("failed to sync team after approval", "team", team.TeamNumber, "error", err)
 		}
 	}()
 
-	// Redirect back to lead-scout page
-	if c.GetHeader("HX-Request") == "true" {
-		c.Header("HX-Redirect", "/lead-scout")
-	} else {
-		c.Redirect(http.StatusSeeOther, "/lead-scout")
-	}
+	// Redirect back to lead-scout page to refresh the rankings and submission list
+	c.Header("HX-Redirect", "/lead-scout")
 }
 
 func (h *Handler) HandleDeclineSubmission(c *gin.Context) {
@@ -415,34 +382,15 @@ func (h *Handler) HandleDeclineSubmission(c *gin.Context) {
 		return
 	}
 
-	// Check if user has access to this submission
-	if !h.canAccessSubmission(c, user, id) {
-		http.Redirect(c.Writer, c.Request, "/", http.StatusSeeOther)
-		return
-	}
-
-	reason := strings.TrimSpace(c.PostForm("reason"))
-	if reason == "" {
-		reason = strings.TrimSpace(c.GetHeader("HX-Prompt"))
-	}
-
 	if err := h.db.WithContext(c.Request.Context()).
-		Table("scouting_submissions").
 		Where("id = ?", id).
-		Updates(map[string]any{
-			"status":           "rejected",
-			"rejection_reason": reason,
-		}).Error; err != nil {
+		Delete(&scoutingSubmission{}).Error; err != nil {
 		http.Error(c.Writer, "Failed to decline submission", http.StatusInternalServerError)
 		return
 	}
 
-	// Redirect back to lead-scout page
-	if c.GetHeader("HX-Request") == "true" {
-		c.Header("HX-Redirect", "/lead-scout")
-	} else {
-		c.Redirect(http.StatusSeeOther, "/lead-scout")
-	}
+	// Redirect back to lead-scout page to refresh the submission list
+	c.Header("HX-Redirect", "/lead-scout")
 }
 
 type submissionDetailRow struct {
@@ -452,14 +400,10 @@ type submissionDetailRow struct {
 	TeamName         string
 	ScoutName        string
 	AllianceColor    string
-	AutoScore        int
-	TeleopScore      int
-	EndgameScore     int
 	Notes            string
 	StartingPosition string
 	DefenseRating    string
 	Traversal        string
-	Throughput       string
 	ScoringStrategy  string
 	ShootingSpeed    string
 	Capacity         string
@@ -467,7 +411,6 @@ type submissionDetailRow struct {
 	HangLevel        string
 	AutoHang         string
 	HangPosition     string
-	AccuracyRating   string
 	FlagLabel        string
 	FlagClass        string
 	CreatedAt        string
@@ -483,12 +426,6 @@ func (h *Handler) HandleViewSubmission(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
 		http.Error(c.Writer, "Submission ID is required", http.StatusBadRequest)
-		return
-	}
-
-	// Check if user has access to this submission
-	if !h.canAccessSubmission(c, user, id) {
-		http.Redirect(c.Writer, c.Request, "/", http.StatusSeeOther)
 		return
 	}
 
@@ -512,7 +449,6 @@ func (h *Handler) HandleViewSubmission(c *gin.Context) {
 		HangLevel        string
 		AutoHang         string
 		HangPosition     string
-		AccuracyRating   string
 		CreatedAt        string
 	}
 
@@ -535,7 +471,6 @@ func (h *Handler) HandleViewSubmission(c *gin.Context) {
 			scouting_submissions.hang_level,
 			scouting_submissions.auto_hang,
 			scouting_submissions.hang_position,
-			scouting_submissions.accuracy_rating,
 			TO_CHAR(scouting_submissions.created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at`).
 		Joins("JOIN events ON events.id = scouting_submissions.event_id").
 		Joins("JOIN teams ON teams.id = scouting_submissions.team_id").
@@ -584,7 +519,6 @@ func (h *Handler) HandleViewSubmission(c *gin.Context) {
 		HangLevel:        submission.HangLevel,
 		AutoHang:         submission.AutoHang,
 		HangPosition:     submission.HangPosition,
-		AccuracyRating:   submission.AccuracyRating,
 		FlagLabel:        flagLabel,
 		FlagClass:        flagClass,
 		CreatedAt:        submission.CreatedAt,

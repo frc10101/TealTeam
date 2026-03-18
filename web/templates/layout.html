@@ -52,7 +52,6 @@
                     {{if .User}}
                     <!-- Logged in user -->
                     <div class="hidden sm:flex items-center gap-4">
-                        <span class="text-gray-400 text-sm">{{.User.Name}}</span>
                         <a href="/account" class="text-sm font-medium text-gray-300 hover:text-teal-300 transition-colors px-3 py-1.5 rounded-lg border border-gray-700 hover:border-teal-500">
                             Account
                         </a>
@@ -106,7 +105,6 @@
                 {{end}}
                 {{if .User}}
                 <div class="mt-2 pt-2 border-t border-gray-700">
-                    <span class="block px-2 py-2 text-gray-400 text-sm">{{.User.Name}}</span>
                     <a href="/account" class="block px-2 py-2 text-gray-300 hover:text-teal-300 hover:bg-gray-800 rounded transition-colors text-sm font-medium">Account</a>
                     <button 
                         hx-post="/api/auth/logout"
