@@ -100,7 +100,7 @@ func (h *Handler) HandleDriveCoachMatches(c *gin.Context) {
 	}
 
 	data := map[string]any{
-		"User":               user,
+		"User":                user,
 		"DriveCoachUpdatedAt": time.Now().Format("3:04:05 PM"),
 	}
 
