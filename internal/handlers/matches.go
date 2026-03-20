@@ -45,7 +45,18 @@ func (h *Handler) HandleMatchSchedule(c *gin.Context) {
 	}
 
 	session, err := h.GetSession(c)
-	if err != nil || session.SelectedEventID == nil {
+	if err != nil {
+		// If we can't get the session, but user is authenticated, the session may have expired
+		// Try to continue - only show "select event" if explicitly no session
+		h.log.Warn("failed to get session in HandleMatchSchedule", "error", err)
+		h.renderPartial(c, "match_schedule", map[string]any{
+			"ScheduleMessage": "Session error. Please refresh the page.",
+		})
+		return
+	}
+
+	if session.SelectedEventID == nil {
+		h.log.Info("no selected event in session", "user_id", session.UserID)
 		h.renderPartial(c, "match_schedule", map[string]any{
 			"ScheduleMessage": "Select an event to view live matches.",
 		})
@@ -53,6 +64,7 @@ func (h *Handler) HandleMatchSchedule(c *gin.Context) {
 	}
 
 	eventID := *session.SelectedEventID
+	h.log.Debug("fetching matches for event", "event_id", eventID, "user_id", session.UserID)
 
 	// Get event details from database
 	var event struct {

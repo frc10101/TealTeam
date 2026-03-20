@@ -24,6 +24,8 @@ type pendingSubmissionRow struct {
 
 type pickListTeam struct {
 	TeamNumber int
+	TeamName   string
+	Rank       *int
 }
 
 type rankingRow struct {
@@ -104,16 +106,36 @@ func (h *Handler) loadPendingSubmissions(c *gin.Context) ([]pendingSubmissionRow
 }
 
 func (h *Handler) loadPickListTeams(c *gin.Context, eventID int) ([]pickListTeam, error) {
-	var teams []pickListTeam
+	var rows []struct {
+		TeamNumber int
+		TeamName   string
+		Rank       sql.NullInt64
+	}
 	if err := h.db.WithContext(c.Request.Context()).
 		Table("teams").
-		Select("team_number").
+		Select("teams.team_number, teams.name as team_name, team_event_stats.rank").
 		Joins("JOIN event_teams ON event_teams.team_id = teams.id").
+		Joins("LEFT JOIN team_event_stats ON team_event_stats.team_id = teams.id AND team_event_stats.event_id = event_teams.event_id").
 		Where("event_teams.event_id = ?", eventID).
 		Order("team_number").
-		Scan(&teams).Error; err != nil {
+		Scan(&rows).Error; err != nil {
 		return nil, err
 	}
+
+	teams := make([]pickListTeam, 0, len(rows))
+	for _, row := range rows {
+		var rank *int
+		if row.Rank.Valid {
+			r := int(row.Rank.Int64)
+			rank = &r
+		}
+		teams = append(teams, pickListTeam{
+			TeamNumber: row.TeamNumber,
+			TeamName:   row.TeamName,
+			Rank:       rank,
+		})
+	}
+
 	return teams, nil
 }
 

@@ -142,6 +142,7 @@ if (submissionForm) {
 }
 const pickList = document.getElementById('pick-list');
 const pickListKey = 'leadScoutPickList';
+const pickListSelectedKey = 'leadScoutPickListSelectedTeams';
 const pickListColorClasses = {
     red: ['bg-red-900', 'border-red-500', 'text-red-200'],
     yellow: ['bg-yellow-900', 'border-yellow-600', 'text-yellow-200'],
@@ -163,6 +164,23 @@ function loadPickListState() {
 }
 function savePickListState(state) {
     localStorage.setItem(pickListKey, JSON.stringify(state));
+}
+function loadPickListSelectedTeams() {
+    const raw = localStorage.getItem(pickListSelectedKey);
+    if (!raw) {
+        return [];
+    }
+    try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+    }
+    catch (error) {
+        console.warn('Invalid pick list team selection payload', error);
+        return [];
+    }
+}
+function savePickListSelectedTeams(teamNumbers) {
+    localStorage.setItem(pickListSelectedKey, JSON.stringify(teamNumbers));
 }
 function clearPickListColors(element) {
     Object.values(pickListColorClasses).forEach((classes) => {
@@ -187,15 +205,102 @@ function applyPickListEntry(element, entry) {
     }
 }
 if (pickList) {
+    const pickListElement = pickList;
+    const addToggle = document.getElementById('pick-list-add-toggle');
+    const addPanel = document.getElementById('pick-list-add-panel');
+    const teamSelect = document.getElementById('pick-list-team-select');
+    const addTeamButton = document.getElementById('pick-list-add-team');
     const state = loadPickListState();
-    pickList.querySelectorAll('.pick-list-item').forEach((item) => {
-        const teamNumber = item.dataset.teamNumber;
-        if (!teamNumber) {
+    const allTeams = new Map();
+    if (teamSelect) {
+        Array.from(teamSelect.options).forEach((option) => {
+            if (!option.value) {
+                return;
+            }
+            const rankRaw = option.dataset.rank;
+            const rank = rankRaw ? Number.parseInt(rankRaw, 10) : undefined;
+            allTeams.set(option.value, {
+                teamNumber: option.value,
+                teamName: option.dataset.teamName || '',
+                rank: Number.isFinite(rank) ? rank : undefined
+            });
+        });
+    }
+    let selectedTeamNumbers = loadPickListSelectedTeams().filter((teamNumber) => allTeams.has(teamNumber));
+    function createPickListItem(team) {
+        const item = document.createElement('li');
+        item.className = 'pick-list-item rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 cursor-move transition-opacity duration-200';
+        item.dataset.teamNumber = team.teamNumber;
+        item.draggable = true;
+        const rankLabel = typeof team.rank === 'number' ? `#${team.rank}` : '-';
+        const teamName = team.teamName ? ` - ${team.teamName}` : '';
+        item.innerHTML = `
+      <div class="space-y-3">
+        <div class="flex items-start justify-between gap-2">
+          <div>
+            <div class="pick-list-label text-sm font-semibold text-gray-200">
+              <a href="/teams?team=${team.teamNumber}" class="text-inherit hover:text-teal-200">Team ${team.teamNumber}${teamName}</a>
+            </div>
+            <div class="text-xs text-gray-500">Rank: ${rankLabel}</div>
+          </div>
+          <span class="pick-list-status text-xs text-gray-500"></span>
+        </div>
+        <div class="border-t border-gray-700"></div>
+        <div class="flex flex-wrap gap-1">
+          <button type="button" class="rounded-full bg-red-900 px-2 py-1 text-xs text-red-200" data-action="pick" data-color="red">Red</button>
+          <button type="button" class="rounded-full bg-yellow-900 px-2 py-1 text-xs text-yellow-200" data-action="pick" data-color="yellow">Yellow</button>
+          <button type="button" class="rounded-full bg-teal-900 px-2 py-1 text-xs text-teal-200" data-action="pick" data-color="teal">Teal</button>
+          <button type="button" class="rounded-full border border-gray-700 px-2 py-1 text-xs text-gray-400" data-action="cross">Cross</button>
+          <button type="button" class="rounded-full border border-gray-700 px-2 py-1 text-xs text-gray-400" data-action="remove">Remove</button>
+        </div>
+      </div>
+    `;
+        return item;
+    }
+    function renderPickList() {
+        pickListElement.innerHTML = '';
+        selectedTeamNumbers.forEach((teamNumber) => {
+            const team = allTeams.get(teamNumber);
+            if (!team) {
+                return;
+            }
+            const item = createPickListItem(team);
+            pickListElement.appendChild(item);
+            applyPickListEntry(item, state[teamNumber] || {});
+        });
+    }
+    function setPickerVisibility(visible) {
+        if (!addPanel || !addToggle) {
             return;
         }
-        applyPickListEntry(item, state[teamNumber] || {});
-    });
-    pickList.addEventListener('click', (event) => {
+        addPanel.classList.toggle('hidden', !visible);
+        addPanel.classList.toggle('flex', visible);
+        addToggle.textContent = visible ? 'Cancel' : '+ Add Team';
+    }
+    renderPickList();
+    if (addToggle && addPanel) {
+        addToggle.addEventListener('click', () => {
+            const isHidden = addPanel.classList.contains('hidden');
+            setPickerVisibility(isHidden);
+        });
+    }
+    if (addTeamButton && teamSelect) {
+        addTeamButton.addEventListener('click', () => {
+            const teamNumber = teamSelect.value;
+            if (!teamNumber || !allTeams.has(teamNumber)) {
+                return;
+            }
+            if (selectedTeamNumbers.includes(teamNumber)) {
+                return;
+            }
+            selectedTeamNumbers.push(teamNumber);
+            savePickListSelectedTeams(selectedTeamNumbers);
+            renderPickList();
+            teamSelect.value = '';
+            setPickerVisibility(false);
+        });
+    }
+    pickListElement.addEventListener('click', (event) => {
         const target = event.target;
         if (!target || !target.dataset.action) {
             return;
@@ -206,6 +311,12 @@ if (pickList) {
         }
         const teamNumber = item.dataset.teamNumber;
         if (!teamNumber) {
+            return;
+        }
+        if (target.dataset.action === 'remove') {
+            selectedTeamNumbers = selectedTeamNumbers.filter((value) => value !== teamNumber);
+            savePickListSelectedTeams(selectedTeamNumbers);
+            renderPickList();
             return;
         }
         const entry = state[teamNumber] || {};
@@ -228,30 +339,30 @@ if (pickList) {
     });
     // Drag and drop functionality
     let draggedItem = null;
-    pickList.addEventListener('dragstart', (event) => {
+    pickListElement.addEventListener('dragstart', (event) => {
         const target = event.target;
         if (target.classList.contains('pick-list-item')) {
             draggedItem = target;
             target.style.opacity = '0.4';
         }
     });
-    pickList.addEventListener('dragend', (event) => {
+    pickListElement.addEventListener('dragend', (event) => {
         const target = event.target;
         if (target.classList.contains('pick-list-item')) {
             target.style.opacity = '1';
         }
     });
-    pickList.addEventListener('dragover', (event) => {
+    pickListElement.addEventListener('dragover', (event) => {
         event.preventDefault();
     });
-    pickList.addEventListener('drop', (event) => {
+    pickListElement.addEventListener('drop', (event) => {
         event.preventDefault();
         const target = event.target;
         const dropTarget = target.classList.contains('pick-list-item')
             ? target
             : target.closest('.pick-list-item');
         if (draggedItem && dropTarget && draggedItem !== dropTarget) {
-            const allItems = Array.from(pickList.querySelectorAll('.pick-list-item'));
+            const allItems = Array.from(pickListElement.querySelectorAll('.pick-list-item'));
             const draggedIndex = allItems.indexOf(draggedItem);
             const dropIndex = allItems.indexOf(dropTarget);
             if (draggedIndex < dropIndex) {
@@ -260,6 +371,10 @@ if (pickList) {
             else {
                 dropTarget.parentNode?.insertBefore(draggedItem, dropTarget);
             }
+            selectedTeamNumbers = Array.from(pickListElement.querySelectorAll('.pick-list-item'))
+                .map((item) => item.dataset.teamNumber || '')
+                .filter((teamNumber) => teamNumber !== '');
+            savePickListSelectedTeams(selectedTeamNumbers);
         }
     });
 }

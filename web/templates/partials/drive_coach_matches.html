@@ -1,8 +1,13 @@
 {{define "drive_coach_matches"}}
 <div id="drive-coach-matches-content">
+	{{if .DriveCoachUpdatedAt}}
+	<div class="mb-3 text-xs text-gray-500">Last updated: {{.DriveCoachUpdatedAt}}</div>
+	{{end}}
 	{{if .DriveCoachError}}
 	<div class="rounded-lg border border-red-600 bg-red-900/30 px-4 py-3 text-sm text-red-200">
-		{{.DriveCoachError}}
+		<div class="font-semibold">Unable to load team schedule</div>
+		<div class="mt-1">{{.DriveCoachError}}</div>
+		<div class="mt-2 text-xs text-red-300/90">Try these checks: confirm event is selected, verify internet connectivity, and ensure FIRST API credentials are configured on the server.</div>
 	</div>
 	{{else if .DriveCoachMatches}}
 	<div class="space-y-4">
@@ -58,9 +63,15 @@
 		</div>
 		{{end}}
 	</div>
+	{{else if .DriveCoachInfo}}
+	<div class="rounded-lg border border-amber-600 bg-amber-900/20 px-4 py-6 text-center text-sm text-amber-200">
+		<div class="font-semibold">Schedule not ready yet</div>
+		<div class="mt-1">{{.DriveCoachInfo}}</div>
+	</div>
 	{{else}}
 	<div class="rounded-lg border border-gray-700 bg-gray-900 px-4 py-6 text-center text-sm text-gray-400">
-		Select an event to load your team schedule.
+		<div class="font-semibold text-gray-300">Select an event to load your team schedule.</div>
+		<div class="mt-1 text-xs">If you already selected one, refresh the page and try again.</div>
 	</div>
 	{{end}}
 </div>

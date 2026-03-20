@@ -196,6 +196,7 @@ func (h *Handler) HandleSelectEvent(c *gin.Context) {
 		Model(&models.Session{}).
 		Where("session_id = ?", session.SessionID).
 		Update("selected_event_id", selectedEventID).Error; err != nil {
+		h.log.Error("failed to update selected event", "error", err, "session_id", session.SessionID, "event_id", selectedEventID)
 		if c.GetHeader("HX-Request") == "true" {
 			data := map[string]any{
 				"User":       user,
@@ -207,6 +208,14 @@ func (h *Handler) HandleSelectEvent(c *gin.Context) {
 		}
 		http.Error(c.Writer, "Failed to save event selection", http.StatusInternalServerError)
 		return
+	}
+
+	// Verify the update was persisted
+	var updatedSession models.Session
+	if err := h.db.WithContext(c.Request.Context()).
+		Where("session_id = ?", session.SessionID).
+		First(&updatedSession).Error; err == nil {
+		h.log.Info("event selection updated", "session_id", session.SessionID, "selected_event_id", updatedSession.SelectedEventID)
 	}
 
 	// TODO: If the user's team is in the event, hydrate match schedule and related data.

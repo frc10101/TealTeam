@@ -60,7 +60,11 @@ func (h *Handler) HandleCoachViewer(c *gin.Context) {
 		h.hydrateEventSelectionData(c, user, data)
 
 		session, err := h.GetSession(c)
-		if err == nil && session.SelectedEventID != nil {
+		if err != nil {
+			data["DriveCoachError"] = "Unable to read your session. Please sign out and sign in again."
+		} else if session.SelectedEventID == nil {
+			data["DriveCoachInfo"] = "Select an event above to load your team schedule."
+		} else {
 			selectedEventID := *session.SelectedEventID
 			data["SelectedEventID"] = selectedEventID
 			h.hydrateEventSummaryData(c, selectedEventID, data)
@@ -71,8 +75,13 @@ func (h *Handler) HandleCoachViewer(c *gin.Context) {
 			} else {
 				data["DriveCoachMatches"] = matches
 				data["DriveCoachSummary"] = summary
+				if len(matches) == 0 {
+					data["DriveCoachInfo"] = "No matches were returned for your team at the selected event yet."
+				}
 			}
 		}
+	} else {
+		data["DriveCoachError"] = "Database unavailable. Unable to load drive coach schedule."
 	}
 
 	h.render(c, "coach_viewer", data)
@@ -91,12 +100,17 @@ func (h *Handler) HandleDriveCoachMatches(c *gin.Context) {
 	}
 
 	data := map[string]any{
-		"User": user,
+		"User":               user,
+		"DriveCoachUpdatedAt": time.Now().Format("3:04:05 PM"),
 	}
 
 	if h.hasDB() {
 		session, err := h.GetSession(c)
-		if err == nil && session.SelectedEventID != nil {
+		if err != nil {
+			data["DriveCoachError"] = "Unable to read your session. Please refresh and try again."
+		} else if session.SelectedEventID == nil {
+			data["DriveCoachInfo"] = "Select an event above to load your team schedule."
+		} else {
 			selectedEventID := *session.SelectedEventID
 			matches, summary, loadErr := h.loadDriveCoachMatches(c.Request.Context(), selectedEventID, user.TeamNumber)
 			if loadErr != nil {
@@ -104,8 +118,13 @@ func (h *Handler) HandleDriveCoachMatches(c *gin.Context) {
 			} else {
 				data["DriveCoachMatches"] = matches
 				data["DriveCoachSummary"] = summary
+				if len(matches) == 0 {
+					data["DriveCoachInfo"] = "No matches were returned for your team at the selected event yet."
+				}
 			}
 		}
+	} else {
+		data["DriveCoachError"] = "Database unavailable. Unable to load drive coach schedule."
 	}
 
 	h.renderPartial(c, "drive_coach_matches", data)
