@@ -560,7 +560,7 @@ func (h *Handler) HandleViewSubmission(c *gin.Context) {
 
 // PickListEntry represents a team in the pick list
 type pickListEntryDB struct {
-	ID               int        `gorm:"primaryKey"`
+	ID               int `gorm:"primaryKey"`
 	TeamNumber       int
 	EventID          int
 	PickedTeamNumber int
