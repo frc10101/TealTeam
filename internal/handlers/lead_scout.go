@@ -5,11 +5,14 @@ import (
 	"errors"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/frc10101/TealTeam/internal/frc"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type pendingSubmissionRow struct {
@@ -553,4 +556,172 @@ func (h *Handler) HandleViewSubmission(c *gin.Context) {
 	}
 
 	h.render(c, "submission_detail", data)
+}
+
+// PickListEntry represents a team in the pick list
+type pickListEntryDB struct {
+	ID               int        `gorm:"primaryKey"`
+	TeamNumber       int
+	EventID          int
+	PickedTeamNumber int
+	Color            *string
+	Crossed          bool
+	Position         int
+	CreatedAt        time.Time `gorm:"autoCreateTime"`
+	UpdatedAt        time.Time `gorm:"autoUpdateTime"`
+}
+
+// TableName specifies the table name for GORM
+func (pickListEntryDB) TableName() string {
+	return "pick_list_entries"
+}
+
+// HandleSavePickListEntry saves a pick list entry to the database
+func (h *Handler) HandleSavePickListEntry(c *gin.Context) {
+	user, err := h.GetSessionUser(c)
+	if err != nil || user == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "not authenticated"})
+		return
+	}
+
+	if user.TeamNumber == nil || *user.TeamNumber == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user has no team assigned"})
+		return
+	}
+
+	session, err := h.GetSession(c)
+	if err != nil || session == nil || session.SelectedEventID == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no event selected"})
+		return
+	}
+
+	var req struct {
+		PickedTeamNumber int     `json:"picked_team_number" binding:"required"`
+		Color            *string `json:"color"`
+		Crossed          bool    `json:"crossed"`
+		Position         int     `json:"position"`
+	}
+
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	entry := pickListEntryDB{
+		TeamNumber:       *user.TeamNumber,
+		EventID:          *session.SelectedEventID,
+		PickedTeamNumber: req.PickedTeamNumber,
+		Color:            req.Color,
+		Crossed:          req.Crossed,
+		Position:         req.Position,
+	}
+
+	// Upsert the entry using the database unique constraint
+	if err := h.db.WithContext(ctx).
+		Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "team_number"}, {Name: "event_id"}, {Name: "picked_team_number"}},
+			UpdateAll: true,
+		}).
+		Create(&entry).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save entry"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "saved"})
+}
+
+// HandleDeletePickListEntry deletes a pick list entry from the database
+func (h *Handler) HandleDeletePickListEntry(c *gin.Context) {
+	user, err := h.GetSessionUser(c)
+	if err != nil || user == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "not authenticated"})
+		return
+	}
+
+	if user.TeamNumber == nil || *user.TeamNumber == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user has no team assigned"})
+		return
+	}
+
+	session, err := h.GetSession(c)
+	if err != nil || session == nil || session.SelectedEventID == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no event selected"})
+		return
+	}
+
+	pickedTeamNumber := c.Query("team")
+	if pickedTeamNumber == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "team number required"})
+		return
+	}
+
+	// Convert to int
+	pickedTeamNumberInt, parseErr := strconv.Atoi(pickedTeamNumber)
+	if parseErr != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid team number"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	if err := h.db.WithContext(ctx).
+		Where("team_number = ? AND event_id = ? AND picked_team_number = ?",
+			*user.TeamNumber, *session.SelectedEventID, pickedTeamNumberInt).
+		Delete(&pickListEntryDB{}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete entry"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
+}
+
+// HandleGetPickList retrieves the team's pick list from the database
+func (h *Handler) HandleGetPickList(c *gin.Context) {
+	user, err := h.GetSessionUser(c)
+	if err != nil || user == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "not authenticated"})
+		return
+	}
+
+	if user.TeamNumber == nil || *user.TeamNumber == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user has no team assigned"})
+		return
+	}
+
+	session, err := h.GetSession(c)
+	if err != nil || session == nil || session.SelectedEventID == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no event selected"})
+		return
+	}
+
+	var entries []pickListEntryDB
+	ctx := c.Request.Context()
+	if err := h.db.WithContext(ctx).
+		Where("team_number = ? AND event_id = ?",
+			*user.TeamNumber, *session.SelectedEventID).
+		Order("position").
+		Find(&entries).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load pick list"})
+		return
+	}
+
+	// Transform to frontend format
+	type entry struct {
+		PickedTeamNumber int     `json:"picked_team_number"`
+		Color            *string `json:"color"`
+		Crossed          bool    `json:"crossed"`
+		Position         int     `json:"position"`
+	}
+
+	result := make([]entry, len(entries))
+	for i, e := range entries {
+		result[i] = entry{
+			PickedTeamNumber: e.PickedTeamNumber,
+			Color:            e.Color,
+			Crossed:          e.Crossed,
+			Position:         e.Position,
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"entries": result})
 }

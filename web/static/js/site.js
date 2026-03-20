@@ -163,7 +163,28 @@ function loadPickListState() {
     }
 }
 function savePickListState(state) {
+    // Save to localStorage immediately for UI responsiveness
     localStorage.setItem(pickListKey, JSON.stringify(state));
+    // Sync individual entries to backend
+    Object.entries(state).forEach(([teamNumber, entry]) => {
+        const position = selectedTeamNumbers.indexOf(teamNumber);
+        fetch('/api/pick-list/entry', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                picked_team_number: parseInt(teamNumber),
+                color: entry.color || null,
+                crossed: entry.crossed || false,
+                position: position >= 0 ? position : 0
+            })
+        }).then((response) => {
+            if (!response.ok) {
+                console.warn(`Failed to sync pick list entry for team ${teamNumber}: ${response.status}`);
+            }
+        }).catch((error) => console.warn('Failed to sync pick list entry', error));
+    });
 }
 function loadPickListSelectedTeams() {
     const raw = localStorage.getItem(pickListSelectedKey);
@@ -180,7 +201,72 @@ function loadPickListSelectedTeams() {
     }
 }
 function savePickListSelectedTeams(teamNumbers) {
+    // Save to localStorage immediately
     localStorage.setItem(pickListSelectedKey, JSON.stringify(teamNumbers));
+    // Sync each team as an entry to backend
+    teamNumbers.forEach((teamNumber, position) => {
+        const entry = state[teamNumber] || {};
+        fetch('/api/pick-list/entry', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                picked_team_number: parseInt(teamNumber),
+                color: entry.color || null,
+                crossed: entry.crossed || false,
+                position: position
+            })
+        }).then((response) => {
+            if (!response.ok) {
+                console.warn(`Failed to sync pick list for team ${teamNumber}: ${response.status}`);
+            }
+        }).catch((error) => console.warn('Failed to sync pick list entry', error));
+    });
+}
+async function loadPickListFromServer() {
+    try {
+        const response = await fetch('/api/pick-list');
+        if (!response.ok) {
+            console.warn('Failed to load pick list from server, using cached data');
+            // Fall back to rendering from localStorage
+            state = loadPickListState();
+            selectedTeamNumbers = loadPickListSelectedTeams().filter((teamNumber) => allTeams.has(teamNumber));
+            renderPickList();
+            return;
+        }
+        const data = await response.json();
+        if (!data.entries || data.entries.length === 0) {
+            // Empty list from server is fine
+            state = {};
+            selectedTeamNumbers = [];
+            renderPickList();
+            return;
+        }
+        // Rebuild state and selected teams from server data
+        const newState = {};
+        const newSelectedTeamNumbers = [];
+        data.entries.forEach((entry) => {
+            const teamNumberStr = String(entry.picked_team_number);
+            newSelectedTeamNumbers[entry.position] = teamNumberStr;
+            newState[teamNumberStr] = {
+                color: entry.color,
+                crossed: entry.crossed || false
+            };
+        });
+        selectedTeamNumbers = newSelectedTeamNumbers.filter((t) => t !== undefined);
+        Object.assign(state, newState);
+        localStorage.setItem(pickListKey, JSON.stringify(state));
+        localStorage.setItem(pickListSelectedKey, JSON.stringify(selectedTeamNumbers));
+        renderPickList();
+    }
+    catch (error) {
+        console.warn('Failed to load pick list from server:', error);
+        // Fall back to localStorage
+        state = loadPickListState();
+        selectedTeamNumbers = loadPickListSelectedTeams().filter((teamNumber) => allTeams.has(teamNumber));
+        renderPickList();
+    }
 }
 function clearPickListColors(element) {
     Object.values(pickListColorClasses).forEach((classes) => {
@@ -277,7 +363,8 @@ if (pickList) {
         addPanel.classList.toggle('flex', visible);
         addToggle.textContent = visible ? 'Cancel' : '+ Add Team';
     }
-    renderPickList();
+    // Load pick list from server first, falling back to localStorage
+    loadPickListFromServer();
     if (addToggle && addPanel) {
         addToggle.addEventListener('click', () => {
             const isHidden = addPanel.classList.contains('hidden');
@@ -315,6 +402,12 @@ if (pickList) {
         }
         if (target.dataset.action === 'remove') {
             selectedTeamNumbers = selectedTeamNumbers.filter((value) => value !== teamNumber);
+            // Delete from server
+            fetch(`/api/pick-list/entry?team=${teamNumber}`, {
+                method: 'DELETE'
+            }).catch((error) => console.warn('Failed to delete pick list entry', error));
+            // Delete from local state
+            delete state[teamNumber];
             savePickListSelectedTeams(selectedTeamNumbers);
             renderPickList();
             return;

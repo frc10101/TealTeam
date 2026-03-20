@@ -158,6 +158,11 @@ func main() {
 	router.POST("/hx/lead-scout/submissions/:id/approve", h.HandleApproveSubmission)
 	router.POST("/hx/lead-scout/submissions/:id/decline", h.HandleDeclineSubmission)
 
+	// Pick list persistence
+	router.GET("/api/pick-list", h.HandleGetPickList)
+	router.POST("/api/pick-list/entry", h.HandleSavePickListEntry)
+	router.DELETE("/api/pick-list/entry", h.HandleDeletePickListEntry)
+
 	// TODO: Add more routes here
 	// Full pages: router.GET("/yourpage", h.HandleYourPage)
 	// HTMX fragments: router.GET("/hx/yourfeature/fragment", h.HandleYourFragment)

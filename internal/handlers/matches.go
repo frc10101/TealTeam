@@ -267,12 +267,13 @@ func (h *Handler) loadStaleMatchesFromDB(ctx context.Context, eventID int) ([]Ma
 
 // extractEventCode extracts the event code from a TBA key
 // TBA key format: {year}{event_code} (e.g., "2026mndu" -> "mndu")
+// FIRST API expects event codes in lowercase
 func extractEventCode(tbaKey string) string {
 	// Remove year prefix (first 4 digits)
 	re := regexp.MustCompile(`^\d{4}(.+)$`)
 	matches := re.FindStringSubmatch(tbaKey)
 	if len(matches) > 1 {
-		return strings.ToUpper(matches[1])
+		return strings.ToLower(matches[1])
 	}
 	return ""
 }

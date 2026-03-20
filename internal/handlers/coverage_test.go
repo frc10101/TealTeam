@@ -65,8 +65,8 @@ func TestExtractEventCode(t *testing.T) {
 		input  string
 		output string
 	}{
-		{name: "normal lowercase key", input: "2026mndu", output: "MNDU"},
-		{name: "already uppercase", input: "2026TXAUS", output: "TXAUS"},
+		{name: "normal lowercase key", input: "2026mndu", output: "mndu"},
+		{name: "already uppercase", input: "2026TXAUS", output: "txaus"},
 		{name: "missing year prefix", input: "mndu", output: ""},
 		{name: "year only", input: "2026", output: ""},
 	}
