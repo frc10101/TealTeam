@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if title.is_empty() %}Teal Team{% else %}{{ title }} | Teal Team{% endif %}</title>
+
+    <!-- Tailwind CSS (compiled) -->
+    <link rel="stylesheet" href="/static/css/site.css">
+
+    <!-- HTMX (vendored locally so the app works on an offline LAN) -->
+    <script src="/static/js/htmx.min.js"></script>
+</head>
+<body class="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 text-gray-100 dark">
+    <nav class="bg-gray-900 border-b border-gray-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center gap-8">
+                    <a href="/" class="text-xl font-semibold text-gray-100 hover:text-teal-300 transition-colors">Teal Team</a>
+                    <div class="hidden sm:flex sm:gap-6">
+                        <a href="/" class="text-gray-300 hover:text-teal-300 transition-colors text-sm font-medium">Home</a>
+                        <a href="/submission" class="text-gray-300 hover:text-teal-300 transition-colors text-sm font-medium">Scouting Submission</a>
+                        {% if nav.show_lead() %}
+                        <a href="/lead-scout" class="text-gray-300 hover:text-teal-300 transition-colors text-sm font-medium">Lead Scout Panel</a>
+                        {% endif %}
+                        {% if nav.show_coach() %}
+                        <a href="/drive-coach" class="text-gray-300 hover:text-teal-300 transition-colors text-sm font-medium">Drive Coach Panel</a>
+                        {% endif %}
+                        <a href="/help" class="text-gray-300 hover:text-teal-300 transition-colors text-sm font-medium">Help</a>
+                    </div>
+                </div>
+                <div class="flex items-center gap-4">
+                    <form action="/teams" method="get" class="hidden md:flex items-center gap-2">
+                        <label for="nav-team-search" class="sr-only">Search team</label>
+                        <input id="nav-team-search" name="team" type="number" min="1" inputmode="numeric" placeholder="Team #"
+                            class="w-28 rounded-lg border border-gray-700 bg-gray-900 px-3 py-1.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500" />
+                        <button type="submit" class="btn btn-secondary btn-sm">Search</button>
+                    </form>
+                    {% if nav.signed_in %}
+                    <div class="hidden sm:flex items-center gap-4">
+                        <a href="/account" class="text-sm font-medium text-gray-300 hover:text-teal-300 transition-colors px-3 py-1.5 rounded-lg border border-gray-700 hover:border-teal-500">Account</a>
+                        <button hx-post="/api/auth/logout" hx-swap="none" class="text-sm font-medium text-gray-300 hover:text-teal-300 transition-colors px-3 py-1.5 rounded-lg border border-gray-700 hover:border-teal-500">Logout</button>
+                    </div>
+                    {% else %}
+                    <div class="hidden sm:flex items-center gap-4">
+                        <a href="/sign-in" class="text-sm font-medium text-gray-300 hover:text-teal-300 transition-colors">Sign In</a>
+                    </div>
+                    {% endif %}
+                    <button id="mobile-menu-btn" class="text-gray-300 hover:text-teal-300 p-2 sm:hidden">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div id="mobile-menu" class="hidden sm:hidden pb-4">
+                <form action="/teams" method="get" class="px-2 py-2">
+                    <div class="flex gap-2">
+                        <input name="team" type="number" min="1" inputmode="numeric" placeholder="Team #"
+                            class="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500" />
+                        <button type="submit" class="btn btn-secondary btn-sm">Search</button>
+                    </div>
+                </form>
+                <a href="/" class="block px-2 py-2 text-gray-300 hover:text-teal-300 hover:bg-gray-800 rounded transition-colors text-sm font-medium">Home</a>
+                <a href="/submission" class="block px-2 py-2 text-gray-300 hover:text-teal-300 hover:bg-gray-800 rounded transition-colors text-sm font-medium">Scouting Submission</a>
+                {% if nav.show_lead() %}
+                <a href="/lead-scout" class="block px-2 py-2 text-gray-300 hover:text-teal-300 hover:bg-gray-800 rounded transition-colors text-sm font-medium">Lead Scout Panel</a>
+                {% endif %}
+                {% if nav.show_coach() %}
+                <a href="/drive-coach" class="block px-2 py-2 text-gray-300 hover:text-teal-300 hover:bg-gray-800 rounded transition-colors text-sm font-medium">Drive Coach Panel</a>
+                {% endif %}
+                <a href="/help" class="block px-2 py-2 text-gray-300 hover:text-teal-300 hover:bg-gray-800 rounded transition-colors text-sm font-medium">Help</a>
+                {% if nav.signed_in %}
+                <div class="mt-2 pt-2 border-t border-gray-700">
+                    <a href="/account" class="block px-2 py-2 text-gray-300 hover:text-teal-300 hover:bg-gray-800 rounded transition-colors text-sm font-medium">Account</a>
+                    <button hx-post="/api/auth/logout" hx-swap="none" class="w-full text-left px-2 py-2 text-gray-300 hover:text-teal-300 hover:bg-gray-800 rounded transition-colors text-sm font-medium">Logout</button>
+                </div>
+                {% else %}
+                <a href="/sign-in" class="block px-2 py-2 text-gray-300 hover:text-teal-300 hover:bg-gray-800 rounded transition-colors text-sm font-medium">Sign In</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="bg-gray-900 border-t border-gray-800 mt-auto">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <p class="text-center text-gray-400 text-sm">&copy; 2026 TealTeam FRC Scouting. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="/static/js/site.js"></script>
+    <script src="/static/js/device.js"></script>
+</body>
+</html>

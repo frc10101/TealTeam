@@ -1,0 +1,72 @@
+<div id="drive-coach-matches-content">
+    {% if !updated_at.is_empty() %}
+    <div class="mb-3 text-xs text-gray-500">Last updated: {{ updated_at }}</div>
+    {% endif %}
+    {% if !error.is_empty() %}
+    <div class="rounded-lg border border-red-600 bg-red-900/30 px-4 py-3 text-sm text-red-200">
+        <div class="font-semibold">Unable to load team schedule</div>
+        <div class="mt-1">{{ error }}</div>
+        <div class="mt-2 text-xs text-red-300/90">Confirm the event is selected, verify internet connectivity, and ensure FIRST API credentials are configured on the server.</div>
+    </div>
+    {% else if !matches.is_empty() %}
+    <div class="space-y-4">
+        {% for m in matches %}
+        <div class="rounded-lg border p-4 {{ m.status_class }} transition-colors">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h2 class="text-lg font-semibold text-gray-100">{{ m.description }}</h2>
+                        <span class="rounded-full px-2 py-0.5 text-xs font-semibold {{ m.badge_class }}">{{ m.status_label }}</span>
+                    </div>
+                    <div class="mt-1 text-sm text-gray-400">
+                        Match {{ m.match_number }}
+                        {% if !m.time_display.is_empty() %} • {{ m.time_display }}{% endif %}
+                        {% if m.our_alliance == "Red" %} • You are Red{% else if m.our_alliance == "Blue" %} • You are Blue{% endif %}
+                    </div>
+                    {% if !m.our_partners.is_empty() %}
+                    <div class="mt-2 text-sm text-gray-300">Partners:
+                        {% for partner in m.our_partners %}
+                        <a href="/teams?team={{ partner }}" class="ml-1 text-teal-300 hover:text-teal-200">{{ partner }}</a>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="mt-4 grid gap-3 md:grid-cols-2">
+                <div class="rounded-lg border border-red-700 bg-red-900/20 p-3">
+                    <div class="text-xs font-semibold uppercase tracking-wide text-red-300">Red Alliance</div>
+                    <ul class="mt-2 space-y-1">
+                        {% for team in m.red_teams %}
+                        <li class="flex items-center justify-between text-sm">
+                            <a href="/teams?team={{ team.team_number }}" class="font-mono text-gray-100 hover:text-teal-200">Team {{ team.team_number }}</a>
+                            <span class="text-xs text-gray-400">OPR {{ team.opr_display() }} • DPR {{ team.dpr_display() }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                <div class="rounded-lg border border-blue-700 bg-blue-900/20 p-3">
+                    <div class="text-xs font-semibold uppercase tracking-wide text-blue-300">Blue Alliance</div>
+                    <ul class="mt-2 space-y-1">
+                        {% for team in m.blue_teams %}
+                        <li class="flex items-center justify-between text-sm">
+                            <a href="/teams?team={{ team.team_number }}" class="font-mono text-gray-100 hover:text-teal-200">Team {{ team.team_number }}</a>
+                            <span class="text-xs text-gray-400">OPR {{ team.opr_display() }} • DPR {{ team.dpr_display() }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else if !info.is_empty() %}
+    <div class="rounded-lg border border-amber-600 bg-amber-900/20 px-4 py-6 text-center text-sm text-amber-200">
+        <div class="font-semibold">Schedule not ready yet</div>
+        <div class="mt-1">{{ info }}</div>
+    </div>
+    {% else %}
+    <div class="rounded-lg border border-gray-700 bg-gray-900 px-4 py-6 text-center text-sm text-gray-400">
+        <div class="font-semibold text-gray-300">Select an event to load your team schedule.</div>
+    </div>
+    {% endif %}
+</div>

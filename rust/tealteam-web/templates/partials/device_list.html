@@ -1,0 +1,24 @@
+<div id="device-list" class="fade-swap">
+    {% if devices.is_empty() %}
+    <div class="text-sm text-gray-500">No devices have connected yet. Open the site on a scouting tablet to register it.</div>
+    {% else %}
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {% for device in devices %}
+        <div class="rounded-lg border border-gray-700 bg-gray-900 px-4 py-3">
+            <div class="flex items-center justify-between gap-2">
+                <div class="font-semibold text-gray-100">{{ device.name }}</div>
+                {% if device.online %}
+                <span class="text-teal-300 text-xs">● online</span>
+                {% else %}
+                <span class="text-gray-500 text-xs">offline</span>
+                {% endif %}
+            </div>
+            <form class="mt-2 flex gap-2" hx-post="/hx/devices/{{ device.id }}/rename" hx-target="#device-list" hx-swap="outerHTML">
+                <input type="text" name="name" placeholder="Rename device" class="flex-1 rounded border border-gray-700 bg-gray-950 px-2 py-1 text-xs text-gray-200" />
+                <button type="submit" class="btn btn-secondary btn-sm">Save</button>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>

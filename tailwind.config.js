@@ -9,6 +9,9 @@ module.exports = {
     // Scan ASP.NET Razor views (dotnet port)
     "./dotnet/TealTeam.Web/Views/**/*.cshtml",
     "./dotnet/TealTeam.Web/Controllers/**/*.cs",
+    // Scan Askama templates and handlers (rust/axum port)
+    "./rust/tealteam-web/templates/**/*.html",
+    "./rust/tealteam-web/src/**/*.rs",
   ],
   theme: {
     extend: {

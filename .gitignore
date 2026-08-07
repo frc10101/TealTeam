@@ -70,3 +70,6 @@ build/
 
 # .NET build output (dotnet/ port)
 obj/
+
+# Rust build output (rust/ port)
+/rust/*/target/

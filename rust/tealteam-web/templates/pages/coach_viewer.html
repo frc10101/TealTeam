@@ -1,0 +1,48 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="space-y-8">
+    <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-100">{{ title }}</h1>
+            <p class="mt-2 text-gray-400">{{ description }}</p>
+        </div>
+        {% if summary.present %}
+        <div class="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
+            <div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-center">
+                <div class="text-xs uppercase tracking-wider text-gray-400">Event</div>
+                <div class="text-sm font-semibold text-gray-100 truncate">{{ summary.event_name }}</div>
+            </div>
+            <div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-center">
+                <div class="text-xs uppercase tracking-wider text-gray-400">Team</div>
+                <div class="text-sm font-semibold text-teal-300">{{ summary.team_number }}</div>
+            </div>
+            <div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-center">
+                <div class="text-xs uppercase tracking-wider text-gray-400">Current</div>
+                <div class="text-sm font-semibold text-yellow-300">{{ summary.current_matches }}</div>
+            </div>
+            <div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-center">
+                <div class="text-xs uppercase tracking-wider text-gray-400">Upcoming</div>
+                <div class="text-sm font-semibold text-gray-100">{{ summary.upcoming_matches }}</div>
+            </div>
+            <div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-center">
+                <div class="text-xs uppercase tracking-wider text-gray-400">Completed</div>
+                <div class="text-sm font-semibold text-gray-500">{{ summary.completed_matches }}</div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <div class="card-header accent-teal">
+            <h2 class="text-lg font-semibold text-gray-100">Event Selection</h2>
+        </div>
+        <div class="card-body">
+            {{ event_selection_html|safe }}
+        </div>
+    </div>
+
+    <div id="drive-coach-matches-container" hx-get="/hx/drive-coach/matches" hx-trigger="reload-matches from:body" hx-target="#drive-coach-matches-content" hx-swap="outerHTML transition:true">
+        {{ matches_html|safe }}
+    </div>
+</div>
+{% endblock %}

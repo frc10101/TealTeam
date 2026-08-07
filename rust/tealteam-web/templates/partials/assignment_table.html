@@ -1,0 +1,94 @@
+{% macro slot_row(slot, match_id, scouts, devices, accent) %}
+<div class="flex items-center gap-3 px-4 py-2 border-b border-gray-800 last:border-0">
+    <div class="w-5 text-xs text-{{ accent }}-500 font-bold text-center">{{ slot.position }}</div>
+    <div class="flex-1 min-w-0">
+        {% if let Some(_tid) = slot.team_id %}
+        <a href="/teams?team={{ slot.team_number }}" class="font-semibold text-teal-300 hover:text-teal-200 text-sm">{{ slot.team_number }}</a>
+        <span class="text-gray-400 text-xs ml-1 truncate">{{ slot.team_name }}</span>
+        {% else %}
+        <span class="text-gray-600 text-sm italic">TBD</span>
+        {% endif %}
+    </div>
+    {% if let Some(tid) = slot.team_id %}
+    <form class="shrink-0" hx-post="/hx/assignments/set" hx-target="#assignment-table" hx-swap="outerHTML transition:true" hx-trigger="change from:find select">
+        <input type="hidden" name="match_id" value="{{ match_id }}" />
+        <input type="hidden" name="team_id" value="{{ tid }}" />
+        <select name="assignee" class="rounded border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-gray-200 max-w-[10rem] sm:max-w-[14rem]">
+            <option value="" {% if slot.is_unassigned() %}selected{% endif %}>— Unassigned —</option>
+            {% if !scouts.is_empty() %}
+            <optgroup label="Scouts">
+                {% for scout in scouts %}
+                <option value="u:{{ scout.id }}" {% if slot.is_scouter(scout.id) %}selected{% endif %}>{{ scout.name }}{% if scout.online %} ●{% endif %}</option>
+                {% endfor %}
+            </optgroup>
+            {% endif %}
+            {% if !devices.is_empty() %}
+            <optgroup label="Devices">
+                {% for device in devices %}
+                <option value="d:{{ device.id }}" {% if slot.is_device(device.id) %}selected{% endif %}>{{ device.name }}{% if device.online %} ●{% endif %}</option>
+                {% endfor %}
+            </optgroup>
+            {% endif %}
+        </select>
+    </form>
+    {% endif %}
+</div>
+{% endmacro %}
+
+<div id="assignment-table" class="space-y-4 fade-swap">
+    <div class="card">
+        <div class="card-header accent-teal">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+                    <h2 class="text-lg font-semibold text-gray-100">Match Assignments</h2>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button class="btn btn-primary btn-sm" hx-post="/hx/assignments/auto" hx-target="#assignment-table" hx-swap="outerHTML transition:true" hx-confirm="Distribute all unassigned slots across online scouts and devices?">Auto-distribute</button>
+                    <button class="btn btn-danger btn-sm" hx-post="/hx/assignments/clear-all" hx-target="#assignment-table" hx-swap="outerHTML transition:true" hx-confirm="Remove ALL assignments for this event?">Clear all</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if !data.info.is_empty() %}
+    <div class="rounded-lg border border-amber-600 bg-amber-900/20 px-4 py-3 text-sm text-amber-200">{{ data.info }}</div>
+    {% endif %}
+
+    {% if data.match_rows.is_empty() %}
+    <div class="rounded-lg border border-gray-700 bg-gray-900/40 py-10 text-center text-sm text-gray-500">
+        No matches loaded for this event yet — run a TBA sync first.
+    </div>
+    {% else %}
+    {% for match in data.match_rows %}
+    <div class="card {% if match.played %}opacity-50{% endif %}">
+        <div class="card-header flex items-center justify-between py-2 {% if !match.played %}border-b-accent-teal{% endif %}">
+            <div class="flex flex-wrap items-center gap-3">
+                <span class="font-bold text-gray-100">{{ match.label() }}</span>
+                {% if !match.scheduled_display().is_empty() %}
+                <span class="text-xs text-gray-400">{{ match.scheduled_display() }}</span>
+                {% endif %}
+                {% if match.played %}
+                <span class="badge badge-gray">Played</span>
+                {% endif %}
+                <span class="text-xs text-gray-500">{{ match.assigned_count() }}/{{ match.total_count() }} assigned</span>
+            </div>
+            <button class="btn btn-secondary btn-sm" hx-post="/hx/assignments/clear-match/{{ match.match_id }}" hx-target="#assignment-table" hx-swap="outerHTML transition:true" hx-confirm="Clear assignments for this match?">Clear</button>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-gray-700">
+            <div>
+                <div class="px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-red-400 bg-red-950/40 border-b border-red-900/50">Red Alliance</div>
+                {% for slot in match.red_slots %}
+                {% call slot_row(slot, match.match_id, data.scouts, data.devices, "red") %}
+                {% endfor %}
+            </div>
+            <div>
+                <div class="px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-blue-400 bg-blue-950/40 border-b border-blue-900/50">Blue Alliance</div>
+                {% for slot in match.blue_slots %}
+                {% call slot_row(slot, match.match_id, data.scouts, data.devices, "blue") %}
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+</div>

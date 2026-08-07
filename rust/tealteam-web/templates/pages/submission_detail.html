@@ -1,0 +1,77 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-100">Submission Details</h1>
+            <p class="mt-2 text-gray-400">Review submission before approval or denial</p>
+        </div>
+    </div>
+
+    {% if let Some(s) = submission %}
+    <div class="card">
+        <div class="card-header accent-teal">
+            <h2 class="text-lg font-semibold text-gray-100">Submission Information</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div><label class="text-xs text-gray-400">Event</label><div class="text-gray-200">{{ s.event_name }}</div></div>
+                <div><label class="text-xs text-gray-400">Team</label><div class="text-gray-200"><a href="/teams?team={{ s.team_number }}" class="text-teal-300 hover:text-teal-200">{{ s.team_number }}</a> - {{ s.team_name }}</div></div>
+                <div><label class="text-xs text-gray-400">Scout</label><div class="text-gray-200">{{ s.scout_name }}</div></div>
+                <div><label class="text-xs text-gray-400">Alliance Color</label><div class="text-gray-200">{% if s.alliance_color.is_empty() %}Not specified{% else %}{{ s.alliance_color }}{% endif %}</div></div>
+                <div><label class="text-xs text-gray-400">Submitted At</label><div class="text-gray-200">{{ s.created_at }}</div></div>
+                <div><label class="text-xs text-gray-400">Status</label><div class="{{ s.flag_class }}">{{ s.flag_label }}</div></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header accent-yellow">
+            <h2 class="text-lg font-semibold text-gray-100">Scouting Details</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div><label class="text-xs text-gray-400">Starting Position</label><div class="text-gray-200">{% if s.starting_position.is_empty() %}Not specified{% else %}{{ s.starting_position }}{% endif %}</div></div>
+                <div><label class="text-xs text-gray-400">Defense Rating</label><div class="text-gray-200">{% if s.defense_rating.is_empty() %}Not specified{% else %}{{ s.defense_rating }}{% endif %}</div></div>
+                <div><label class="text-xs text-gray-400">Traversal</label><div class="text-gray-200">{% if s.traversal.is_empty() %}Not specified{% else %}{{ s.traversal }}{% endif %}</div></div>
+                <div><label class="text-xs text-gray-400">Shooting Speed</label><div class="text-gray-200">{% if s.shooting_speed.is_empty() %}Not specified{% else %}{{ s.shooting_speed }}{% endif %}</div></div>
+                <div><label class="text-xs text-gray-400">Capacity</label><div class="text-gray-200">{% if s.capacity.is_empty() %}Not specified{% else %}{{ s.capacity }}{% endif %}</div></div>
+                <div><label class="text-xs text-gray-400">Defendability</label><div class="text-gray-200">{% if s.defendability.is_empty() %}Not specified{% else %}{{ s.defendability }}{% endif %}</div></div>
+                <div><label class="text-xs text-gray-400">Scoring Strategy</label><div class="text-gray-200">{% if s.scoring_strategy.is_empty() %}Not specified{% else %}{{ s.scoring_strategy }}{% endif %}</div></div>
+                <div><label class="text-xs text-gray-400">Hang Level</label><div class="text-gray-200">{% if s.hang_level.is_empty() %}Not specified{% else %}{{ s.hang_level }}{% endif %}</div></div>
+                <div><label class="text-xs text-gray-400">Auto Hang</label><div class="text-gray-200">{% if s.auto_hang.is_empty() %}Not specified{% else %}{{ s.auto_hang }}{% endif %}</div></div>
+                <div><label class="text-xs text-gray-400">Hang Position</label><div class="text-gray-200">{% if s.hang_position.is_empty() %}Not specified{% else %}{{ s.hang_position }}{% endif %}</div></div>
+            </div>
+            <div class="border-t border-gray-700 pt-4">
+                <label class="text-xs text-gray-400">Notes</label>
+                <div class="mt-2 rounded-lg bg-gray-900 p-3 text-gray-200">
+                    {% if s.notes.is_empty() %}<span class="text-gray-500 italic">No notes provided</span>{% else %}{{ s.notes }}{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="flex items-end justify-end gap-3">
+                <button class="btn btn-danger" onclick="window.close()">Close Window</button>
+                <form action="/hx/lead-scout/submissions/{{ s.id }}/decline" method="post" class="flex items-end gap-2">
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Rejection reason</label>
+                        <input type="text" name="reason" placeholder="Optional reason..." class="px-3 py-2 text-sm bg-gray-800 border border-gray-600 rounded-lg text-gray-200 placeholder-gray-500 focus:ring-2 focus:ring-red-500 focus:border-transparent">
+                    </div>
+                    <button type="submit" class="btn btn-danger">Decline Submission</button>
+                </form>
+                <form action="/hx/lead-scout/submissions/{{ s.id }}/approve" method="post" style="display: inline;">
+                    <button type="submit" class="btn btn-primary">Approve Submission</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="card">
+        <div class="card-body text-center text-gray-400"><p>Submission not found.</p></div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

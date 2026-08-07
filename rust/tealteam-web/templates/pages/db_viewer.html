@@ -1,0 +1,65 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="space-y-6">
+    <div class="flex justify-between items-center">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-100">{{ title }}</h1>
+            <p class="mt-1 text-gray-400">Browse and explore your database tables</p>
+        </div>
+        <div class="flex items-center space-x-2">
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-teal-900 text-teal-200">Connected</span>
+        </div>
+    </div>
+
+    <div id="db-container" class="fade-swap">
+        <div class="card mb-6">
+            <div class="flex border-b border-gray-700 overflow-x-auto">
+                <button hx-get="/development/db?tab=core" hx-target="#db-container" hx-swap="innerHTML transition:true" hx-push-url="/development/db?tab=core" class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{ self.tab_class("core", "teal") }}"><span class="text-teal-300">●</span> Core Entities</button>
+                <button hx-get="/development/db?tab=relationships" hx-target="#db-container" hx-swap="innerHTML transition:true" hx-push-url="/development/db?tab=relationships" class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{ self.tab_class("relationships", "red") }}"><span class="text-red-300">●</span> Relationships</button>
+                <button hx-get="/development/db?tab=match_data" hx-target="#db-container" hx-swap="innerHTML transition:true" hx-push-url="/development/db?tab=match_data" class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{ self.tab_class("match_data", "yellow") }}"><span class="text-yellow-300">●</span> Match Data</button>
+                <button hx-get="/development/db?tab=submissions" hx-target="#db-container" hx-swap="innerHTML transition:true" hx-push-url="/development/db?tab=submissions" class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {{ self.tab_class("submissions", "purple") }}"><span class="text-purple-300">●</span> Submissions</button>
+            </div>
+        </div>
+
+        {% if tables.is_empty() %}
+        <div class="card"><div class="card-body text-center py-12 text-gray-500">No tables found</div></div>
+        {% else %}
+        <div class="space-y-6">
+            <div class="card">
+                <div class="card-header"><h2 class="text-lg font-semibold">Available Tables</h2></div>
+                <div class="card-body">
+                    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                        {% for table in tables %}
+                        {% if table.visible %}
+                        <a href="#" hx-get="/hx/development/db/table/{{ table.name }}" hx-target="#table-content" hx-swap="innerHTML transition:true" hx-push-url="/development/db?table={{ table.name }}" hx-indicator="#table-content-indicator"
+                            class="p-3 rounded-lg border border-gray-700 hover:border-gray-600 hover:bg-gray-800 transition-colors {% if table.selected %}bg-gray-800 border-teal-500{% endif %}">
+                            <div class="font-medium text-gray-200 text-sm">{{ table.name }}</div>
+                            <div class="text-xs text-gray-400 mt-1">{{ table.description }}</div>
+                            <div class="text-xs text-teal-400 font-semibold mt-2">{{ table.row_count }} rows</div>
+                        </a>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div id="table-content" class="fade-swap">
+                {% if selected_table.is_empty() %}
+                <div class="card"><div class="card-body text-center py-12">
+                    <h3 class="mt-4 text-lg font-medium text-gray-200">Select a table</h3>
+                    <p class="mt-2 text-sm text-gray-400">Click on a table above to view its contents</p>
+                </div></div>
+                {% else %}
+                <div hx-get="/hx/development/db/table/{{ selected_table }}" hx-trigger="load" hx-swap="innerHTML transition:true" hx-indicator="#table-content-indicator">
+                    <div class="card"><div class="card-body text-center py-8"><span class="loading-spinner mx-auto"></span><p class="mt-2 text-sm text-gray-400">Loading table data...</p></div></div>
+                </div>
+                {% endif %}
+            </div>
+            <div class="mt-4 flex items-center gap-2 text-xs text-gray-400">
+                <div id="table-content-indicator" class="htmx-indicator flex items-center gap-2"><span class="loading-spinner"></span> Loading table data...</div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

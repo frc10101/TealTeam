@@ -1,0 +1,39 @@
+<div id="event-selection-panel" class="space-y-3 fade-swap">
+    {% if d.signed_in %}
+    <form action="/api/events/select" method="post" hx-post="/api/events/select" hx-target="#event-selection-panel" hx-swap="outerHTML transition:true" hx-indicator="#event-selection-indicator" hx-trigger="change, submit"
+        hx-on::after-request="htmx.trigger(document.body, 'eventSelected'); htmx.trigger(document.body, 'reload-matches')"
+        class="flex flex-col gap-4 sm:flex-row sm:items-end">
+        <div class="flex-1">
+            <label for="event-selection" class="block text-sm font-medium text-gray-300 mb-2">Current Event</label>
+            <select id="event-selection" name="event_id" required class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled {% if d.selected_event_id.is_none() %}selected{% endif %}>Select event</option>
+                {% if d.events.is_empty() %}
+                <option value="" disabled>No events available</option>
+                {% else %}
+                {% for evt in d.events %}
+                <option value="{{ evt.id }}" {% if d.is_selected(evt.id) %}selected{% endif %}>{{ evt.name }}</option>
+                {% endfor %}
+                {% endif %}
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Set Event</button>
+    </form>
+
+    <div class="flex flex-wrap items-center gap-3 text-xs text-gray-400">
+        <div id="event-selection-indicator" class="htmx-indicator flex items-center gap-2">
+            <span class="loading-spinner"></span> Saving selection...
+        </div>
+        {% if d.event_updated %}
+        <span class="text-teal-300">Event saved.</span>
+        {% endif %}
+    </div>
+
+    {% if !d.event_error.is_empty() %}
+    <div class="rounded-lg border border-red-600 bg-red-900/30 px-4 py-2 text-sm text-red-200">{{ d.event_error }}</div>
+    {% endif %}
+
+    {{ summary_html|safe }}
+    {% else %}
+    <div class="text-sm text-gray-400">Sign in to choose your active event.</div>
+    {% endif %}
+</div>
