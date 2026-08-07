@@ -37,7 +37,7 @@
         <div class="bg-gray-800 border border-gray-700 rounded-lg p-6">
             <h2 class="text-xl font-semibold text-gray-100 mb-4">Change Password</h2>
             <div id="password-response" class="mb-4"></div>
-            <form id="change-password-form" hx-post="/api/account/change-password" hx-swap="innerHTML" hx-target="#password-response" class="space-y-4">
+            <form id="change-password-form" action="/api/account/change-password" method="post" up-submit up-target="#password-response" class="space-y-4">
                 <div>
                     <label for="current-password" class="block text-sm font-medium text-gray-300 mb-2">Current Password</label>
                     <input type="password" id="current-password" name="current-password" required

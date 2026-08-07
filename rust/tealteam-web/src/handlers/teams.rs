@@ -141,7 +141,7 @@ pub async fn team_search(
     match build_team_info(&state.pool, user.as_ref(), &team).await {
         Ok(html) => Ok(Html(html).into_response()),
         Err(msg) => Ok(Html(format!(
-            r#"<div class="card"><div class="card-body text-center text-red-400 py-8">{}</div></div>"#,
+            r#"<div id="team-info-container"><div class="card"><div class="card-body text-center text-red-400 py-8">{}</div></div></div>"#,
             html_escape::encode_text(&msg)
         ))
         .into_response()),
@@ -172,7 +172,7 @@ pub async fn fetch_past_events(
         Err(msg) => Ok((
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             Html(format!(
-                r#"<div class="card"><div class="card-body text-center text-red-400 py-8">{}</div></div>"#,
+                r#"<div id="team-info-container"><div class="card"><div class="card-body text-center text-red-400 py-8">{}</div></div></div>"#,
                 html_escape::encode_text(&msg)
             )),
         )

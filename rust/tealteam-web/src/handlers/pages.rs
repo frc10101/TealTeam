@@ -112,7 +112,7 @@ pub async fn select_event(
     let selected_event_id = parse_required_int(form_str(&form, "event_id"));
 
     let Some(selected_event_id) = selected_event_id else {
-        if is_htmx(&headers) {
+        if is_unpoly(&headers) {
             let session = current_session(&state.pool, &jar).await;
             let html = render_event_selection(
                 &state.pool,
@@ -148,7 +148,7 @@ pub async fn select_event(
                 "failed to update selected event (session {}, event {selected_event_id}): {e}",
                 session.session_id
             );
-            if is_htmx(&headers) {
+            if is_unpoly(&headers) {
                 let html = render_event_selection(
                     &state.pool,
                     Some(&user),
@@ -168,7 +168,7 @@ pub async fn select_event(
         }
     }
 
-    if is_htmx(&headers) {
+    if is_unpoly(&headers) {
         let html = render_event_selection(
             &state.pool,
             Some(&user),
@@ -178,12 +178,9 @@ pub async fn select_event(
             true,
         )
         .await;
-        // Trigger match schedule reload via HTMX event.
-        let mut response = axum::response::Html(html).into_response();
-        response
-            .headers_mut()
-            .insert("HX-Trigger", "eventSelected".parse().unwrap());
-        return Ok(response);
+        // The event-selection form re-emits `eventSelected`/`reload-matches`
+        // client-side via up-on-inserted, so no server trigger header is needed.
+        return Ok(axum::response::Html(html).into_response());
     }
 
     Ok(redirect("/"))

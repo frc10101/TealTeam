@@ -184,7 +184,7 @@ pub async fn submit(
     };
 
     if let Some(error) = error {
-        if is_htmx(&headers) {
+        if is_unpoly(&headers) {
             let html = render_panel(&state.pool, &user, &jar, error, "").await;
             return Ok(Html(html).into_response());
         }
@@ -235,7 +235,7 @@ pub async fn submit(
             "failed to create scouting submission (event {event_id:?}, team {team_id:?}, scouter {}): {e}",
             user.id
         );
-        if is_htmx(&headers) {
+        if is_unpoly(&headers) {
             let msg = format!("Failed to queue submission: {e}");
             let html = render_panel(&state.pool, &user, &jar, &msg, "").await;
             return Ok(Html(html).into_response());
@@ -247,7 +247,7 @@ pub async fn submit(
             .into_response());
     }
 
-    if is_htmx(&headers) {
+    if is_unpoly(&headers) {
         let html = render_panel(
             &state.pool,
             &user,
@@ -296,6 +296,11 @@ pub async fn event_teams(
     .await
     .unwrap_or_default();
 
+    // Unpoly matches this response against up-target="#team-id", so the whole
+    // <select> is returned (not just <option>s) and swapped as one element.
+    let select_open = r#"<select id="team-id" name="team_id" required class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">"#;
+    let wrap = |options: &str| Html(format!("{select_open}{options}</select>"));
+
     let mut html = String::from(r#"<option value="" disabled selected>Select team</option>"#);
 
     if !teams.is_empty() {
@@ -307,7 +312,7 @@ pub async fn event_teams(
                 html_escape::encode_text(&team.name)
             ));
         }
-        return Ok(Html(html).into_response());
+        return Ok(wrap(&html).into_response());
     }
 
     // No teams locally; fall back to the FIRST API and upsert results.
@@ -339,7 +344,7 @@ pub async fn event_teams(
 
     if first_teams.is_empty() {
         html.push_str(r#"<option value="" disabled>No teams available for this event</option>"#);
-        return Ok(Html(html).into_response());
+        return Ok(wrap(&html).into_response());
     }
 
     for first_team in &first_teams {
@@ -356,5 +361,5 @@ pub async fn event_teams(
         }
     }
 
-    Ok(Html(html).into_response())
+    Ok(wrap(&html).into_response())
 }

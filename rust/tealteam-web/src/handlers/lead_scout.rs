@@ -503,7 +503,7 @@ pub async fn approve_submission(
         }
     });
 
-    Ok(hx_redirect_header(().into_response(), "/lead-scout"))
+    Ok(up_navigate("/lead-scout"))
 }
 
 pub async fn decline_submission(
@@ -527,7 +527,7 @@ pub async fn decline_submission(
         return Ok((axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to decline submission").into_response());
     }
 
-    Ok(hx_redirect_header(().into_response(), "/lead-scout"))
+    Ok(up_navigate("/lead-scout"))
 }
 
 pub async fn weights_page(

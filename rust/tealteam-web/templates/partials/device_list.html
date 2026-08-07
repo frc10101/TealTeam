@@ -13,7 +13,7 @@
                 <span class="text-gray-500 text-xs">offline</span>
                 {% endif %}
             </div>
-            <form class="mt-2 flex gap-2" hx-post="/hx/devices/{{ device.id }}/rename" hx-target="#device-list" hx-swap="outerHTML">
+            <form class="mt-2 flex gap-2" action="/hx/devices/{{ device.id }}/rename" method="post" up-submit up-target="#device-list">
                 <input type="text" name="name" placeholder="Rename device" class="flex-1 rounded border border-gray-700 bg-gray-950 px-2 py-1 text-xs text-gray-200" />
                 <button type="submit" class="btn btn-secondary btn-sm">Save</button>
             </form>

@@ -31,9 +31,8 @@
         </div>
     </div>
 
-    <div hx-get="/lead-scout/assignments" hx-select="#assignment-table" hx-target="#assignment-table" hx-swap="outerHTML" hx-trigger="every 30s">
-        {{ assignment_table_html|safe }}
-    </div>
+    {# #assignment-table refreshes itself via up-poll (see the partial) #}
+    {{ assignment_table_html|safe }}
     {% endif %}
 </div>
 {% endblock %}

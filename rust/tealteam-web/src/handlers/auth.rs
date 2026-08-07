@@ -68,7 +68,7 @@ pub async fn login(
     let password = form_str(&form, "password").to_string();
 
     if email.is_empty() || password.is_empty() {
-        return Ok(auth_response(false, "Email and password are required", ""));
+        return Ok(auth_error("Email and password are required"));
     }
 
     let user: Option<User> = match sqlx::query_as("SELECT * FROM users WHERE email = $1")
@@ -79,23 +79,23 @@ pub async fn login(
         Ok(u) => u,
         Err(e) => {
             error!("database error during login: {e}");
-            return Ok(auth_response(false, "An error occurred. Please try again.", ""));
+            return Ok(auth_error("An error occurred. Please try again."));
         }
     };
 
     // Generic error message to prevent user enumeration.
     let Some(user) = user else {
-        return Ok(auth_response(false, "Invalid email or password", ""));
+        return Ok(auth_error("Invalid email or password"));
     };
     if !session::check_password_hash(&password, &user.password_hash) {
-        return Ok(auth_response(false, "Invalid email or password", ""));
+        return Ok(auth_error("Invalid email or password"));
     }
 
     let session_id = match session::create_session(&state.pool, user.id).await {
         Ok(id) => id,
         Err(e) => {
             error!("failed to create session: {e}");
-            return Ok(auth_response(false, "Failed to create session", ""));
+            return Ok(auth_error("Failed to create session"));
         }
     };
 
@@ -121,7 +121,7 @@ pub async fn login(
     }
 
     let jar = jar.add(session::session_cookie(session_id));
-    Ok((jar, auth_response(true, "Login successful", "/")).into_response())
+    Ok((jar, up_navigate("/")).into_response())
 }
 
 pub async fn signup(
@@ -139,16 +139,16 @@ pub async fn signup(
     let coach = !form_str(&form, "coach").trim().is_empty();
 
     if name.is_empty() || email.is_empty() || password.is_empty() || confirm_password.is_empty() {
-        return Ok(auth_response(false, "All fields are required", ""));
+        return Ok(auth_error("All fields are required"));
     }
     if password != confirm_password {
-        return Ok(auth_response(false, "Passwords do not match", ""));
+        return Ok(auth_error("Passwords do not match"));
     }
     if password.len() < 8 {
-        return Ok(auth_response(false, "Password must be at least 8 characters long", ""));
+        return Ok(auth_error("Password must be at least 8 characters long"));
     }
     if !email.contains('@') || !email.contains('.') {
-        return Ok(auth_response(false, "Invalid email format", ""));
+        return Ok(auth_error("Invalid email format"));
     }
 
     let existing: Result<Option<i32>, _> =
@@ -158,12 +158,12 @@ pub async fn signup(
             .await;
     match existing {
         Ok(Some(_)) => {
-            return Ok(auth_response(false, "An account with this email already exists", ""));
+            return Ok(auth_error("An account with this email already exists"));
         }
         Ok(None) => {}
         Err(e) => {
             error!("database error checking existing user: {e}");
-            return Ok(auth_response(false, "An error occurred. Please try again.", ""));
+            return Ok(auth_error("An error occurred. Please try again."));
         }
     }
 
@@ -203,7 +203,7 @@ pub async fn signup(
             } else {
                 "Failed to create account. Please try again."
             };
-            return Ok(auth_response(false, msg, ""));
+            return Ok(auth_error(msg));
         }
     };
 
@@ -227,16 +227,12 @@ pub async fn signup(
         Ok(id) => id,
         Err(e) => {
             error!("failed to create session on signup: {e}");
-            return Ok(auth_response(
-                true,
-                "Account created! Redirecting to sign in...",
-                "/sign-in",
-            ));
+            return Ok(up_navigate("/sign-in"));
         }
     };
 
     let jar = jar.add(session::session_cookie(session_id));
-    Ok((jar, auth_response(true, "Account created successfully!", "/")).into_response())
+    Ok((jar, up_navigate("/")).into_response())
 }
 
 pub async fn logout(State(state): State<SharedState>, jar: CookieJar) -> HandlerResult {
@@ -250,7 +246,7 @@ pub async fn logout(State(state): State<SharedState>, jar: CookieJar) -> Handler
     }
 
     let jar = jar.add(session::clear_session_cookie());
-    Ok((jar, auth_response(true, "Logged out successfully", "/sign-in")).into_response())
+    Ok((jar, up_navigate("/sign-in")).into_response())
 }
 
 pub async fn account_page(State(state): State<SharedState>, jar: CookieJar) -> HandlerResult {
@@ -341,28 +337,32 @@ pub async fn change_password(
 
 fn password_change_response(success: bool, message: &str) -> axum::response::Response {
     let encoded = html_escape::encode_text(message);
+    // Wrapped so the response root matches up-target="#password-response". On
+    // success, up-on-inserted resets the form (Unpoly does not run <script> in
+    // swapped fragments).
     let html = if success {
         format!(
-            r##"<div class="bg-green-900/20 border border-green-500 text-green-300 px-4 py-3 rounded" role="alert">
-    <div class="flex items-center gap-2">
-        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-        </svg>
-        <span class="block sm:inline font-medium">{encoded}</span>
+            r##"<div id="password-response" up-on-inserted="document.getElementById('change-password-form').reset()">
+    <div class="bg-green-900/20 border border-green-500 text-green-300 px-4 py-3 rounded" role="alert">
+        <div class="flex items-center gap-2">
+            <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <span class="block sm:inline font-medium">{encoded}</span>
+        </div>
     </div>
-</div>
-<script>
-    document.getElementById('change-password-form').reset();
-</script>"##
+</div>"##
         )
     } else {
         format!(
-            r##"<div class="bg-red-900/20 border border-red-500 text-red-300 px-4 py-3 rounded" role="alert">
-    <div class="flex items-center gap-2">
-        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-        </svg>
-        <span class="block sm:inline font-medium">{encoded}</span>
+            r##"<div id="password-response">
+    <div class="bg-red-900/20 border border-red-500 text-red-300 px-4 py-3 rounded" role="alert">
+        <div class="flex items-center gap-2">
+            <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <span class="block sm:inline font-medium">{encoded}</span>
+        </div>
     </div>
 </div>"##
         )

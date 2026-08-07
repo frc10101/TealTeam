@@ -10,7 +10,7 @@
         {% endif %}
     </div>
     {% if let Some(tid) = slot.team_id %}
-    <form class="shrink-0" hx-post="/hx/assignments/set" hx-target="#assignment-table" hx-swap="outerHTML transition:true" hx-trigger="change from:find select">
+    <form class="shrink-0" action="/hx/assignments/set" method="post" up-submit up-autosubmit up-target="#assignment-table">
         <input type="hidden" name="match_id" value="{{ match_id }}" />
         <input type="hidden" name="team_id" value="{{ tid }}" />
         <select name="assignee" class="rounded border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-gray-200 max-w-[10rem] sm:max-w-[14rem]">
@@ -35,7 +35,7 @@
 </div>
 {% endmacro %}
 
-<div id="assignment-table" class="space-y-4 fade-swap">
+<div id="assignment-table" class="space-y-4 fade-swap" up-poll up-interval="30000" up-source="/lead-scout/assignments">
     <div class="card">
         <div class="card-header accent-teal">
             <div class="flex flex-wrap items-center justify-between gap-3">
@@ -43,8 +43,8 @@
                     <h2 class="text-lg font-semibold text-gray-100">Match Assignments</h2>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                    <button class="btn btn-primary btn-sm" hx-post="/hx/assignments/auto" hx-target="#assignment-table" hx-swap="outerHTML transition:true" hx-confirm="Distribute all unassigned slots across online scouts and devices?">Auto-distribute</button>
-                    <button class="btn btn-danger btn-sm" hx-post="/hx/assignments/clear-all" hx-target="#assignment-table" hx-swap="outerHTML transition:true" hx-confirm="Remove ALL assignments for this event?">Clear all</button>
+                    <button class="btn btn-primary btn-sm" up-href="/hx/assignments/auto" up-method="post" up-target="#assignment-table" up-confirm="Distribute all unassigned slots across online scouts and devices?">Auto-distribute</button>
+                    <button class="btn btn-danger btn-sm" up-href="/hx/assignments/clear-all" up-method="post" up-target="#assignment-table" up-confirm="Remove ALL assignments for this event?">Clear all</button>
                 </div>
             </div>
         </div>
@@ -72,7 +72,7 @@
                 {% endif %}
                 <span class="text-xs text-gray-500">{{ match.assigned_count() }}/{{ match.total_count() }} assigned</span>
             </div>
-            <button class="btn btn-secondary btn-sm" hx-post="/hx/assignments/clear-match/{{ match.match_id }}" hx-target="#assignment-table" hx-swap="outerHTML transition:true" hx-confirm="Clear assignments for this match?">Clear</button>
+            <button class="btn btn-secondary btn-sm" up-href="/hx/assignments/clear-match/{{ match.match_id }}" up-method="post" up-target="#assignment-table" up-confirm="Clear assignments for this match?">Clear</button>
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-gray-700">
             <div>

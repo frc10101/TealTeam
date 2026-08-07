@@ -118,59 +118,47 @@ pub fn render_html<T: Template>(t: &T) -> String {
     })
 }
 
-pub fn is_htmx(headers: &HeaderMap) -> bool {
-    headers
-        .get("HX-Request")
-        .map(|v| v.as_bytes() == b"true")
-        .unwrap_or(false)
+/// True when the request came from Unpoly (any up-follow/up-submit/up.render).
+pub fn is_unpoly(headers: &HeaderMap) -> bool {
+    headers.get("X-Up-Version").is_some()
 }
 
 pub fn redirect(to: &str) -> Response {
     Redirect::to(to).into_response()
 }
 
-pub fn hx_redirect_header(response: Response, to: &str) -> Response {
-    let mut response = response;
-    if let Ok(value) = to.parse() {
-        response.headers_mut().insert("HX-Redirect", value);
+/// Server-driven full navigation — the Unpoly analog of htmx's HX-Redirect.
+/// Emits a `tt:navigate` event via X-Up-Events (tt-unpoly.js turns it into
+/// window.location) and skips fragment rendering with X-Up-Target: :none.
+pub fn up_navigate(to: &str) -> Response {
+    let mut response = ().into_response();
+    let events = format!(r#"[{{"type":"tt:navigate","url":"{to}"}}]"#);
+    if let Ok(value) = events.parse() {
+        response.headers_mut().insert("X-Up-Events", value);
     }
+    response
+        .headers_mut()
+        .insert("X-Up-Target", ":none".parse().unwrap());
     response
 }
 
-/// HTML fragments returned by the auth endpoints (port of sendAuthResponse).
-pub fn auth_response(success: bool, message: &str, hx_redirect: &str) -> Response {
+/// Failure fragment for the auth forms, wrapped so its root matches the
+/// up-target (`#form-response`). On success the handlers navigate instead.
+pub fn auth_error(message: &str) -> Response {
     let encoded = html_escape::encode_text(message);
-    let html = if success {
-        format!(
-            r##"<div class="bg-green-900/20 border border-green-500 text-green-300 px-4 py-3 rounded mb-4" role="alert">
-    <div class="flex items-center gap-2">
-        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-        </svg>
-        <span class="block sm:inline font-medium">{encoded}</span>
+    let html = format!(
+        r##"<div id="form-response" class="fade-swap">
+    <div class="bg-red-900/20 border border-red-500 text-red-300 px-4 py-3 rounded mb-4" role="alert">
+        <div class="flex items-center gap-2">
+            <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            <span class="block sm:inline font-medium">{encoded}</span>
+        </div>
     </div>
 </div>"##
-        )
-    } else {
-        format!(
-            r##"<div class="bg-red-900/20 border border-red-500 text-red-300 px-4 py-3 rounded mb-4" role="alert">
-    <div class="flex items-center gap-2">
-        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-        </svg>
-        <span class="block sm:inline font-medium">{encoded}</span>
-    </div>
-</div>"##
-        )
-    };
-
-    let mut response = Html(html).into_response();
-    if !hx_redirect.is_empty() {
-        if let Ok(value) = hx_redirect.parse() {
-            response.headers_mut().insert("HX-Redirect", value);
-        }
-    }
-    response
+    );
+    Html(html).into_response()
 }
 
 // ── Form parsing ──────────────────────────────────────────────────────────

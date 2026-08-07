@@ -13,7 +13,7 @@
             <h2 class="text-lg font-semibold text-gray-100">Team Search</h2>
         </div>
         <div class="card-body space-y-4">
-            <form hx-get="/hx/teams/search" hx-target="#team-info-container" hx-swap="innerHTML" hx-trigger="submit" class="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <form action="/hx/teams/search" method="get" up-submit up-target="#team-info-container" class="flex flex-col gap-3 sm:flex-row sm:items-end">
                 <div class="flex-1">
                     <label for="team-search" class="block text-sm font-medium text-gray-300 mb-2">Team Number</label>
                     <input id="team-search" name="team" type="number" min="1" inputmode="numeric" placeholder="e.g. 10101" value="{{ team_search_value }}" required
@@ -27,14 +27,15 @@
         </div>
     </div>
 
+    {% if team_info_html.is_empty() %}
     <div id="team-info-container">
-        {% if team_info_html.is_empty() %}
         <div class="card">
             <div class="card-body text-center text-gray-400 py-12"><p>Enter a team number above to get started</p></div>
         </div>
-        {% else %}
-        {{ team_info_html|safe }}
-        {% endif %}
     </div>
+    {% else %}
+    {# team_info fragment root carries id="team-info-container" #}
+    {{ team_info_html|safe }}
+    {% endif %}
 </div>
 {% endblock %}
