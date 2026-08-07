@@ -1,5 +1,13 @@
 # Team Page Analysis
 
+```mermaid
+flowchart LR
+   User --> Search[HandleTeamSearch]
+   Search --> GetEvents[GetEventsForTeam]
+   GetEvents -->|none| FIRSTSync[frc.SyncTeamForUser]
+   GetEvents --> Render[Render partials (team_info, team_data)]
+```
+
 ## Scope
 
 This document describes how the `/teams` experience works in the current codebase.

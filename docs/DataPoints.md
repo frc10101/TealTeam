@@ -1,5 +1,13 @@
 # Data Points for Scouting
 
+```mermaid
+flowchart LR
+	Scouts[Scouts] --> Form[Scouting Form]
+	Form --> DB[scouting_submissions / scouting_data]
+	DB --> TeamPage[Team Page Aggregates]
+	DB --> API[Reports / Exports]
+```
+
 ## Scouting Form Inputs (Current)
 
 Fields submitted by scouts in the current flow:

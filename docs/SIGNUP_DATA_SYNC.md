@@ -1,5 +1,16 @@
 # Team Data Sync on Signup and Login
 
+```mermaid
+sequenceDiagram
+	participant U as User
+	participant S as Server
+	U->>S: Signup / Login (with team)
+	S->>S: goroutine: frc.SyncTeamForUser(ctx, db, teamNumber)
+	S->>FIRST: FIRST API calls
+	FIRST-->>S: events / teams
+	S->>TBA: background TBA sync (if configured)
+```
+
 ## Overview
 
 When a user has a team number, auth flows can trigger team-scoped data sync so pages are quickly populated for that team context.

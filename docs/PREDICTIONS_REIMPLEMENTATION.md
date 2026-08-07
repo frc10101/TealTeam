@@ -1,5 +1,12 @@
 # Predictions Analysis — Reimplementation Guide
 
+```mermaid
+flowchart LR
+    Stats[Team Stats (OPR/DPR)] --> Calc[Prediction functions]
+    Calc --> UI[Drive Coach / Coach Viewer]
+    UI --> Users[Coaches]
+```
+
 This document captures the removed predictions feature and the steps to reimplement it.
 
 ## What Was Removed

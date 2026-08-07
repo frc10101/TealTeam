@@ -1,5 +1,15 @@
 # TBA API Schema Mapping Fix Summary
 
+```mermaid
+flowchart TD
+  TBA[(TBA API)] --> Parser[TBA parser with fallbacks]
+  Parser --> DB[team_event_stats / matches]
+  Parser -->|component OPRs| Component[Component OPR lookup]
+  Component --> DB
+  Parser -->|rankings| Rankings[Effective ranking helpers]
+  Rankings --> DB
+```
+
 ## Overview
 
 This document summarizes the comprehensive fixes applied to resolve data mapping issues between The Blue Alliance (TBA) API v3 and the TealTeam application. The investigation revealed three critical schema mismatches causing data loss during sync operations.
@@ -46,9 +56,9 @@ This document summarizes the comprehensive fixes applied to resolve data mapping
 **Before**:
 ```go
 type ComponentOPRData struct {
-	AutoOPRs     map[string]float64 `json:"auto_oprs"`
-	TeleopOPRs   map[string]float64 `json:"teleop_oprs"`
-	EndgameOPRs  map[string]float64 `json:"endgame_oprs"`
+    AutoOPRs     map[string]float64 `json:"auto_oprs"`
+    TeleopOPRs   map[string]float64 `json:"teleop_oprs"`
+    EndgameOPRs  map[string]float64 `json:"endgame_oprs"`
 }
 ```
 
@@ -57,8 +67,8 @@ type ComponentOPRData struct {
 type ComponentOPRData map[string]map[string]float64
 
 func (c ComponentOPRData) TeamPhaseOPRs(teamKey string) (auto, teleop, endgame float64) {
-	// Dynamic lookup with preferred name matching and fallbacks
-	// Returns best-effort OPR values for auto/teleop/endgame phases
+    // Dynamic lookup with preferred name matching and fallbacks
+    // Returns best-effort OPR values for auto/teleop/endgame phases
 }
 ```
 
@@ -99,16 +109,16 @@ stats.QualAverage = ranking.EffectiveQualAverage()
 ```go
 // For each match from API:
 record := dbMatch{
-	EventID:     eventID,
-	MatchNumber: normalizeMatchNumber(compLevel, setNumber, matchNumber),
-	RedScore:    match.Alliances.Red.Score,
-	BlueScore:   match.Alliances.Blue.Score,
-	Played:      played,
-	// ... additional fields
+    EventID:     eventID,
+    MatchNumber: normalizeMatchNumber(compLevel, setNumber, matchNumber),
+    RedScore:    match.Alliances.Red.Score,
+    BlueScore:   match.Alliances.Blue.Score,
+    Played:      played,
+    // ... additional fields
 }
 // Upsert to database with conflict handling
 db.Clauses(clause.OnConflict{
-	UpdateAll: true,
+    UpdateAll: true,
 }).Create(&record)
 ```
 
@@ -127,11 +137,11 @@ db.Clauses(clause.OnConflict{
 ```go
 // In tba_client.go:
 func (r RankingInfo) EffectiveAvgMatchPoints() *float64 {
-	if len(r.SortOrders) > 1 {
-		val := r.SortOrders[1]
-		return &val
-	}
-	return nil
+    if len(r.SortOrders) > 1 {
+        val := r.SortOrders[1]
+        return &val
+    }
+    return nil
 }
 
 // In all sync pipelines:

@@ -1,5 +1,13 @@
 # Team Stats Display Guide
 
+```mermaid
+flowchart LR
+	Page[/teams page] --> Search[Search team]
+	Search --> EventSelect[Select event]
+	EventSelect --> LoadStats[Load team_event_stats + scouting aggregates]
+	LoadStats --> Render[Render UI cards and notes]
+```
+
 ## Overview
 
 The `/teams` page displays synced event performance data from TBA plus local scouting aggregates.

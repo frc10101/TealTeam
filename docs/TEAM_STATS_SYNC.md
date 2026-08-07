@@ -1,5 +1,13 @@
 # Team Statistics Syncing
 
+```mermaid
+flowchart TB
+	Scheduler[Sync Scheduler] --> TBAClient[TBA Client]
+	TBAClient --> Upsert[Upsert team_event_stats / matches]
+	Upsert --> DB[(Postgres)]
+	DB --> UI[Teams page / Dashboards]
+```
+
 ## Overview
 
 TealTeam runs a background sync service that keeps `team_event_stats` and `matches` updated from The Blue Alliance (TBA) for active and nearby events.

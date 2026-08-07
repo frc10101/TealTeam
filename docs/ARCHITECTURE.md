@@ -1,5 +1,14 @@
 # TealTeam Architecture Overview
 
+```mermaid
+flowchart LR
+  Browser[Browser (pages + HTMX)] -->|Requests| Gin[Gin router & handlers]
+  Gin --> Services[Service logic: auth, sync, scoring]
+  Services --> Postgres[(PostgreSQL)]
+  Services --> ExternalAPIs[(External APIs: FIRST, TBA)]
+  ExternalAPIs --> Services
+```
+
 ## System Summary
 
 TealTeam is a server-rendered scouting platform for FRC teams. It combines manual scouting submissions with automated FIRST and TBA data sync, then serves team and event insights through HTML pages and HTMX fragments.
