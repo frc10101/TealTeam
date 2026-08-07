@@ -310,6 +310,67 @@
 }
 
 /*
- * TODO: Add more custom components as needed
- * Keep them generic and reusable across different page types.
+ * ============================================================
+ * MOBILE FRIENDLINESS
+ * ============================================================
+ * Scouts mostly use phones/tablets in the stands: 16px form controls
+ * (prevents iOS auto-zoom on focus), 44px minimum touch targets, and
+ * tighter paddings on small screens.
  */
+
+@media (max-width: 640px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+    min-height: 44px;
+  }
+
+  input[type="checkbox"],
+  input[type="radio"] {
+    min-height: 0;
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+
+  button,
+  .btn {
+    min-height: 44px;
+  }
+
+  .btn-sm {
+    min-height: 40px;
+  }
+
+  .card-body {
+    @apply px-4 py-3;
+  }
+
+  .card-header {
+    @apply px-4 py-3;
+  }
+
+  .data-table th,
+  .data-table td {
+    @apply px-3 py-2;
+  }
+
+  /* Tooltips flip to avoid running off the right edge of small screens */
+  .stat-info::after {
+    left: auto;
+    right: 0;
+    top: 100%;
+    margin-left: 0;
+    margin-top: 0.5rem;
+  }
+}
+
+/* Comfortable tap targets on touch devices regardless of width */
+@media (pointer: coarse) {
+  a,
+  button,
+  select,
+  summary {
+    touch-action: manipulation;
+  }
+}
