@@ -36,9 +36,8 @@
             </div>
         </div>
 
-        <!-- Assignment table (auto-refreshes so online status stays current) -->
-        <div id="assignment-table-container"
-             hx-get="/lead-scout/assignments"
+        <!-- Match assignment table (auto-refreshes online indicators) -->
+        <div hx-get="/lead-scout/assignments"
              hx-select="#assignment-table"
              hx-target="#assignment-table"
              hx-swap="outerHTML"

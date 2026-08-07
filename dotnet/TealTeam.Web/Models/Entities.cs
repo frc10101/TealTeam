@@ -125,6 +125,7 @@ public class Device
 public class ScoutAssignment
 {
     public int Id { get; set; }
+    public int MatchId { get; set; }
     public int EventId { get; set; }
     public int TeamId { get; set; }
     public int? ScouterId { get; set; }
@@ -143,6 +144,12 @@ public class Match
     public int RedScore { get; set; }
     public int BlueScore { get; set; }
     public bool Played { get; set; }
+    public int? Red1 { get; set; }
+    public int? Red2 { get; set; }
+    public int? Red3 { get; set; }
+    public int? Blue1 { get; set; }
+    public int? Blue2 { get; set; }
+    public int? Blue3 { get; set; }
     public DateTime? ScheduledTime { get; set; }
     public DateTime? ActualTime { get; set; }
     public DateTime CreatedAt { get; set; }

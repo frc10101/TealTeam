@@ -1,97 +1,129 @@
 @using TealTeam.Web.Controllers
 @{
-    var rows = ViewData["AssignmentRows"] as List<AssignmentsController.AssignmentRow> ?? new();
+    var matchRows = ViewData["MatchRows"] as List<AssignmentsController.MatchAssignmentRow> ?? new();
     var scouts = ViewData["ScoutOptions"] as List<AssignmentsController.ScoutOption> ?? new();
     var devices = ViewData["DeviceOptions"] as List<AssignmentsController.DeviceOption> ?? new();
-    var assignedCount = rows.Count(r => r.AssignmentId != null);
+
+    var totalSlots    = matchRows.SelectMany(m => m.Slots).Count(s => s.TeamId != null);
+    var assignedSlots = matchRows.SelectMany(m => m.Slots).Count(s => s.AssignmentId != null);
 }
-<div id="assignment-table" class="card fade-swap">
-    <div class="card-header accent-teal">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-            <h2 class="text-lg font-semibold text-gray-100">Robot Assignments</h2>
-            <div class="flex flex-wrap items-center gap-2">
-                <span class="text-xs text-gray-400">@assignedCount / @rows.Count assigned</span>
-                <button class="btn btn-primary btn-sm"
-                        hx-post="/hx/assignments/auto"
-                        hx-target="#assignment-table"
-                        hx-swap="outerHTML transition:true"
-                        hx-confirm="Distribute all unassigned robots across online scouts and devices?">
-                    Auto-distribute
-                </button>
-                <button class="btn btn-danger btn-sm"
-                        hx-post="/hx/assignments/clear-all"
-                        hx-target="#assignment-table"
-                        hx-swap="outerHTML transition:true"
-                        hx-confirm="Remove ALL assignments for this event?">
-                    Clear all
-                </button>
+<div id="assignment-table" class="space-y-4 fade-swap">
+
+    {{!-- Header / global actions --}}
+    <div class="card">
+        <div class="card-header accent-teal">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+                    <h2 class="text-lg font-semibold text-gray-100">Match Assignments</h2>
+                    <span class="badge badge-gray text-xs">@assignedSlots / @totalSlots slots assigned</span>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button class="btn btn-primary btn-sm"
+                            hx-post="/hx/assignments/auto"
+                            hx-target="#assignment-table"
+                            hx-swap="outerHTML transition:true"
+                            hx-confirm="Distribute all unassigned slots across online scouts and devices?">
+                        Auto-distribute
+                    </button>
+                    <button class="btn btn-danger btn-sm"
+                            hx-post="/hx/assignments/clear-all"
+                            hx-target="#assignment-table"
+                            hx-swap="outerHTML transition:true"
+                            hx-confirm="Remove ALL assignments for this event?">
+                        Clear all
+                    </button>
+                </div>
             </div>
         </div>
     </div>
-    <div class="card-body">
-        @if (ViewData["AssignmentsInfo"] is string info && info != "")
+
+    @if (ViewData["AssignmentsInfo"] is string info && info != "")
+    {
+        <div class="rounded-lg border border-amber-600 bg-amber-900/20 px-4 py-3 text-sm text-amber-200">@info</div>
+    }
+
+    @if (matchRows.Count == 0)
+    {
+        <div class="rounded-lg border border-gray-700 bg-gray-900/40 py-10 text-center text-sm text-gray-500">
+            No matches loaded for this event yet — run a TBA sync first.
+        </div>
+    }
+    else
+    {
+        @foreach (var match in matchRows)
         {
-            <div class="mb-3 rounded-lg border border-amber-600 bg-amber-900/20 px-4 py-2 text-sm text-amber-200">@info</div>
-        }
-        @if (rows.Count == 0)
-        {
-            <div class="text-center text-sm text-gray-500 py-6">No teams loaded for this event yet. Run a sync first.</div>
-        }
-        else
-        {
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm text-left">
-                    <thead class="text-xs uppercase text-gray-400 border-b border-gray-700">
-                        <tr>
-                            <th class="py-2 pr-4">Robot</th>
-                            <th class="py-2 pr-4">Assigned To</th>
-                            <th class="py-2 pr-4">Change</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-800">
-                        @foreach (var row in rows)
+            var redSlots  = match.Slots.Where(s => s.Alliance == "red").ToList();
+            var blueSlots = match.Slots.Where(s => s.Alliance == "blue").ToList();
+            var assignedInMatch = match.Slots.Count(s => s.AssignmentId != null);
+            var totalInMatch    = match.Slots.Count(s => s.TeamId != null);
+
+            <div class="card @(match.Played ? "opacity-50" : "")">
+                <div class="card-header flex items-center justify-between py-2 @(match.Played ? "" : "border-b-accent-teal")">
+                    <div class="flex flex-wrap items-center gap-3">
+                        <span class="font-bold text-gray-100">@match.Label</span>
+                        @if (match.ScheduledTime.HasValue)
                         {
-                            var currentValue = row.ScouterId != null ? $"u:{row.ScouterId}"
-                                : row.DeviceId != null ? $"d:{row.DeviceId}" : "";
-                            <tr>
-                                <td class="py-3 pr-4">
-                                    <a href="/teams?team=@row.TeamNumber" class="text-teal-300 hover:text-teal-200 font-semibold">@row.TeamNumber</a>
-                                    <span class="text-gray-400 ml-2">@row.TeamName</span>
-                                </td>
-                                <td class="py-3 pr-4">
-                                    @if (row.ScouterName != null)
+                            <span class="text-xs text-gray-400">@match.ScheduledTime.Value.ToLocalTime().ToString("h:mm tt")</span>
+                        }
+                        @if (match.Played)
+                        {
+                            <span class="badge badge-gray">Played</span>
+                        }
+                        <span class="text-xs text-gray-500">@assignedInMatch/@totalInMatch assigned</span>
+                    </div>
+                    <button class="btn btn-secondary btn-sm"
+                            hx-post="/hx/assignments/clear-match/@match.MatchId"
+                            hx-target="#assignment-table"
+                            hx-swap="outerHTML transition:true"
+                            hx-confirm="Clear assignments for @match.Label?">
+                        Clear
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-gray-700">
+                    {{!-- Red alliance --}}
+                    <div>
+                        <div class="px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-red-400 bg-red-950/40 border-b border-red-900/50">
+                            Red Alliance
+                        </div>
+                        @foreach (var slot in redSlots)
+                        {
+                            var currentValue = slot.ScouterId != null ? $"u:{slot.ScouterId}"
+                                             : slot.DeviceId  != null ? $"d:{slot.DeviceId}" : "";
+                            <div class="flex items-center gap-3 px-4 py-2 border-b border-gray-800 last:border-0">
+                                <div class="w-5 text-xs text-red-500 font-bold text-center">@slot.Position</div>
+                                <div class="flex-1 min-w-0">
+                                    @if (slot.TeamId != null)
                                     {
-                                        <span class="badge badge-teal">@row.ScouterName</span>
-                                    }
-                                    else if (row.DeviceName != null)
-                                    {
-                                        <span class="badge badge-yellow">
-                                            @row.DeviceName
-                                            @if (row.AssigneeOnline)
-                                            {
-                                                <span class="ml-1 text-teal-300">●</span>
-                                            }
-                                        </span>
+                                        <a href="/teams?team=@slot.TeamNumber"
+                                           class="font-semibold text-teal-300 hover:text-teal-200 text-sm">@slot.TeamNumber</a>
+                                        <span class="text-gray-400 text-xs ml-1 truncate">@slot.TeamName</span>
                                     }
                                     else
                                     {
-                                        <span class="text-gray-500">Unassigned</span>
+                                        <span class="text-gray-600 text-sm italic">TBD</span>
                                     }
-                                </td>
-                                <td class="py-3 pr-4">
-                                    <form hx-post="/hx/assignments/set"
+                                </div>
+                                @if (slot.TeamId != null)
+                                {
+                                    <form class="shrink-0"
+                                          hx-post="/hx/assignments/set"
                                           hx-target="#assignment-table"
                                           hx-swap="outerHTML transition:true"
                                           hx-trigger="change from:find select">
-                                        <input type="hidden" name="team_id" value="@row.TeamId" />
-                                        <select name="assignee" class="w-full max-w-xs rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-200">
+                                        <input type="hidden" name="match_id" value="@match.MatchId" />
+                                        <input type="hidden" name="team_id" value="@slot.TeamId" />
+                                        <select name="assignee"
+                                                class="rounded border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-gray-200 max-w-[10rem] sm:max-w-[14rem]">
                                             <option value="" selected="@(currentValue == "")">— Unassigned —</option>
                                             @if (scouts.Count > 0)
                                             {
                                                 <optgroup label="Scouts">
                                                     @foreach (var scout in scouts)
                                                     {
-                                                        <option value="u:@scout.Id" selected="@(currentValue == $"u:{scout.Id}")">@scout.Name @(scout.Online ? "●" : "")</option>
+                                                        <option value="u:@scout.Id" selected="@(currentValue == $"u:{scout.Id}")">
+                                                            @scout.Name @(scout.Online ? "●" : "")
+                                                        </option>
                                                     }
                                                 </optgroup>
                                             }
@@ -100,18 +132,84 @@
                                                 <optgroup label="Devices">
                                                     @foreach (var device in devices)
                                                     {
-                                                        <option value="d:@device.Id" selected="@(currentValue == $"d:{device.Id}")">@device.Name @(device.Online ? "●" : "")</option>
+                                                        <option value="d:@device.Id" selected="@(currentValue == $"d:{device.Id}")">
+                                                            @device.Name @(device.Online ? "●" : "")
+                                                        </option>
                                                     }
                                                 </optgroup>
                                             }
                                         </select>
                                     </form>
-                                </td>
-                            </tr>
+                                }
+                            </div>
                         }
-                    </tbody>
-                </table>
+                    </div>
+
+                    {{!-- Blue alliance --}}
+                    <div>
+                        <div class="px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-blue-400 bg-blue-950/40 border-b border-blue-900/50">
+                            Blue Alliance
+                        </div>
+                        @foreach (var slot in blueSlots)
+                        {
+                            var currentValue = slot.ScouterId != null ? $"u:{slot.ScouterId}"
+                                             : slot.DeviceId  != null ? $"d:{slot.DeviceId}" : "";
+                            <div class="flex items-center gap-3 px-4 py-2 border-b border-gray-800 last:border-0">
+                                <div class="w-5 text-xs text-blue-500 font-bold text-center">@slot.Position</div>
+                                <div class="flex-1 min-w-0">
+                                    @if (slot.TeamId != null)
+                                    {
+                                        <a href="/teams?team=@slot.TeamNumber"
+                                           class="font-semibold text-teal-300 hover:text-teal-200 text-sm">@slot.TeamNumber</a>
+                                        <span class="text-gray-400 text-xs ml-1 truncate">@slot.TeamName</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-gray-600 text-sm italic">TBD</span>
+                                    }
+                                </div>
+                                @if (slot.TeamId != null)
+                                {
+                                    <form class="shrink-0"
+                                          hx-post="/hx/assignments/set"
+                                          hx-target="#assignment-table"
+                                          hx-swap="outerHTML transition:true"
+                                          hx-trigger="change from:find select">
+                                        <input type="hidden" name="match_id" value="@match.MatchId" />
+                                        <input type="hidden" name="team_id" value="@slot.TeamId" />
+                                        <select name="assignee"
+                                                class="rounded border border-gray-700 bg-gray-900 px-2 py-1 text-xs text-gray-200 max-w-[10rem] sm:max-w-[14rem]">
+                                            <option value="" selected="@(currentValue == "")">— Unassigned —</option>
+                                            @if (scouts.Count > 0)
+                                            {
+                                                <optgroup label="Scouts">
+                                                    @foreach (var scout in scouts)
+                                                    {
+                                                        <option value="u:@scout.Id" selected="@(currentValue == $"u:{scout.Id}")">
+                                                            @scout.Name @(scout.Online ? "●" : "")
+                                                        </option>
+                                                    }
+                                                </optgroup>
+                                            }
+                                            @if (devices.Count > 0)
+                                            {
+                                                <optgroup label="Devices">
+                                                    @foreach (var device in devices)
+                                                    {
+                                                        <option value="d:@device.Id" selected="@(currentValue == $"d:{device.Id}")">
+                                                            @device.Name @(device.Online ? "●" : "")
+                                                        </option>
+                                                    }
+                                                </optgroup>
+                                            }
+                                        </select>
+                                    </form>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
             </div>
         }
-    </div>
+    }
 </div>

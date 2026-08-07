@@ -10,7 +10,7 @@ namespace TealTeam.Web.Controllers;
 public class SubmissionController(Db db, SessionService sessions, ILogger<SubmissionController> logger)
     : AppController(db, sessions)
 {
-    public record AssignedTeam(int TeamId, int TeamNumber, string TeamName, int EventId);
+    public record AssignedTeam(int TeamId, int TeamNumber, string TeamName, int EventId, int? MatchNumber = null);
 
     public record TeamOption(int Id, int TeamNumber, string Name);
 
@@ -36,39 +36,36 @@ public class SubmissionController(Db db, SessionService sessions, ILogger<Submis
                 new { eventIds })).ToList();
         }
 
-        // Robot assignments for this scout (by user, or by this device's
-        // permanent id), preferring the session's selected event.
+        // Find the scout's next unplayed match assignment for the selected event
+        // (matched by signed-in user OR by this device's permanent UUID).
         Request.Cookies.TryGetValue(AssignmentsController.DeviceCookieName, out var deviceUuid);
-        var assignments = (await conn.QueryAsync<AssignedTeam>("""
-            SELECT sa.team_id, teams.team_number, teams.name AS team_name, sa.event_id
-            FROM scout_assignments sa
-            JOIN teams ON teams.id = sa.team_id
-            LEFT JOIN devices ON devices.id = sa.device_id
-            WHERE sa.scouter_id = @userId OR (devices.device_uuid = @deviceUuid AND @deviceUuid IS NOT NULL)
-            ORDER BY (sa.event_id = @selectedEventId) DESC, sa.updated_at DESC, teams.team_number
-            """, new
-        {
-            userId = user.Id,
-            deviceUuid = string.IsNullOrEmpty(deviceUuid) ? null : deviceUuid,
-            selectedEventId = session?.SelectedEventId ?? -1,
-        })).ToList();
+        var prefillEventId = session?.SelectedEventId;
 
-        // Pre-fill the event (session selection wins, else the assignment's
-        // event) and, when assigned, the robot — so scouts don't re-enter data.
-        var prefillEventId = session?.SelectedEventId ?? assignments.FirstOrDefault()?.EventId;
         if (prefillEventId != null)
         {
-            var eventAssignments = assignments.Where(a => a.EventId == prefillEventId.Value).ToList();
-            if (eventAssignments.Count == 0 && session?.SelectedEventId == null)
+            var assignments = (await conn.QueryAsync<AssignedTeam>("""
+                SELECT sa.team_id, teams.team_number, teams.name AS team_name,
+                       m.event_id, m.match_number
+                FROM scout_assignments sa
+                JOIN matches m ON m.id = sa.match_id
+                JOIN teams ON teams.id = sa.team_id
+                LEFT JOIN devices ON devices.id = sa.device_id
+                WHERE m.event_id = @eventId
+                  AND m.played = FALSE
+                  AND (sa.scouter_id = @userId
+                       OR (devices.device_uuid = @deviceUuid AND @deviceUuid IS NOT NULL))
+                ORDER BY m.match_number ASC
+                """, new
             {
-                eventAssignments = assignments;
-            }
+                eventId = prefillEventId.Value,
+                userId = user.Id,
+                deviceUuid = string.IsNullOrEmpty(deviceUuid) ? null : deviceUuid,
+            })).ToList();
 
             ViewData["PrefillEventID"] = prefillEventId.Value;
-            ViewData["AssignedTeams"] = eventAssignments;
+            ViewData["AssignedTeams"] = assignments;
 
-            // Server-render team options for the pre-filled event (HTMX only
-            // reloads them when the scout changes the event).
+            // Server-render team options for the pre-filled event
             ViewData["TeamOptions"] = (await conn.QueryAsync<TeamOption>("""
                 SELECT teams.id, teams.team_number, teams.name
                 FROM teams
@@ -77,9 +74,10 @@ public class SubmissionController(Db db, SessionService sessions, ILogger<Submis
                 ORDER BY teams.team_number
                 """, new { eventId = prefillEventId.Value })).ToList();
 
-            if (eventAssignments.Count > 0)
+            if (assignments.Count > 0)
             {
-                ViewData["PrefillTeamID"] = eventAssignments[0].TeamId;
+                ViewData["PrefillTeamID"] = assignments[0].TeamId;
+                ViewData["PrefillMatchNumber"] = assignments[0].MatchNumber;
             }
         }
     }

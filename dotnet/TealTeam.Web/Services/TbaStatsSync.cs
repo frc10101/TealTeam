@@ -188,18 +188,31 @@ public class TbaStatsSync(Db db, ILogger<TbaStatsSync> logger)
                 (match.ScoreBreakdown is { ValueKind: not System.Text.Json.JsonValueKind.Null } &&
                  match.Alliances.Red.Score >= 0 && match.Alliances.Blue.Score >= 0);
 
+            // Parse alliance team numbers from TBA keys ("frc1234" → 1234)
+            var red1 = ParseTbaTeamNumber(match.Alliances.Red.Teams, 0);
+            var red2 = ParseTbaTeamNumber(match.Alliances.Red.Teams, 1);
+            var red3 = ParseTbaTeamNumber(match.Alliances.Red.Teams, 2);
+            var blue1 = ParseTbaTeamNumber(match.Alliances.Blue.Teams, 0);
+            var blue2 = ParseTbaTeamNumber(match.Alliances.Blue.Teams, 1);
+            var blue3 = ParseTbaTeamNumber(match.Alliances.Blue.Teams, 2);
+
             try
             {
                 await conn.ExecuteAsync("""
                     INSERT INTO matches (event_id, match_number, match_type, red_score, blue_score, played,
-                        tba_key, comp_level, set_number, scheduled_time, actual_time, winning_alliance)
+                        tba_key, comp_level, set_number, scheduled_time, actual_time, winning_alliance,
+                        red1, red2, red3, blue1, blue2, blue3)
                     VALUES (@eventId, @matchNumber, @matchType, @redScore, @blueScore, @played,
-                        @tbaKey, @compLevel, @setNumber, @scheduledTime, @actualTime, @winningAlliance)
+                        @tbaKey, @compLevel, @setNumber, @scheduledTime, @actualTime, @winningAlliance,
+                        @red1, @red2, @red3, @blue1, @blue2, @blue3)
                     ON CONFLICT (event_id, match_number, match_type) DO UPDATE SET
                         red_score = EXCLUDED.red_score, blue_score = EXCLUDED.blue_score, played = EXCLUDED.played,
                         tba_key = EXCLUDED.tba_key, comp_level = EXCLUDED.comp_level, set_number = EXCLUDED.set_number,
                         scheduled_time = EXCLUDED.scheduled_time, actual_time = EXCLUDED.actual_time,
-                        winning_alliance = EXCLUDED.winning_alliance, updated_at = CURRENT_TIMESTAMP
+                        winning_alliance = EXCLUDED.winning_alliance,
+                        red1 = EXCLUDED.red1, red2 = EXCLUDED.red2, red3 = EXCLUDED.red3,
+                        blue1 = EXCLUDED.blue1, blue2 = EXCLUDED.blue2, blue3 = EXCLUDED.blue3,
+                        updated_at = CURRENT_TIMESTAMP
                     """, new
                 {
                     eventId,
@@ -214,6 +227,7 @@ public class TbaStatsSync(Db db, ILogger<TbaStatsSync> logger)
                     scheduledTime = UnixToUtc(match.ScheduledTime),
                     actualTime = UnixToUtc(match.ActualTime),
                     winningAlliance,
+                    red1, red2, red3, blue1, blue2, blue3,
                 });
             }
             catch (Exception ex)
@@ -238,4 +252,13 @@ public class TbaStatsSync(Db db, ILogger<TbaStatsSync> logger)
 
     private static DateTime? UnixToUtc(long ts)
         => ts <= 0 ? null : DateTimeOffset.FromUnixTimeSeconds(ts).UtcDateTime;
+
+    private static int? ParseTbaTeamNumber(List<string> teams, int index)
+    {
+        if (index >= teams.Count) return null;
+        var key = teams[index].Trim();
+        if (key.StartsWith("frc", StringComparison.OrdinalIgnoreCase) &&
+            int.TryParse(key[3..], out var n)) return n;
+        return null;
+    }
 }

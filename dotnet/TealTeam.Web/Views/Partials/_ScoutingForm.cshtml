@@ -5,22 +5,35 @@
     var teamOptions = ViewData["TeamOptions"] as List<SubmissionController.TeamOption>;
     var prefillEventId = ViewData["PrefillEventID"] as int?;
     var prefillTeamId = ViewData["PrefillTeamID"] as int?;
+    var prefillMatchNumber = ViewData["PrefillMatchNumber"] as int?;
 }
 @if (assignedTeams is { Count: > 0 })
 {
+    var nextAssignment = assignedTeams[0];
+    var matchLabel = prefillMatchNumber.HasValue ? $"Q{prefillMatchNumber}" : null;
     <div class="mb-4 rounded-lg border border-teal-600 bg-teal-900/30 px-4 py-3 text-sm text-teal-100">
-        <div class="font-semibold">Your assigned robot@(assignedTeams.Count > 1 ? "s" : ""):</div>
+        <div class="font-semibold">
+            @if (matchLabel != null)
+            {
+                <span>Your assignment for <span class="text-teal-300">@matchLabel</span>:</span>
+            }
+            else
+            {
+                <span>Your assigned robot@(assignedTeams.Count > 1 ? "s" : ""):</span>
+            }
+        </div>
         <div class="mt-2 flex flex-wrap gap-2">
             @foreach (var assigned in assignedTeams)
             {
+                var chipMatchLabel = assigned.MatchNumber.HasValue ? $"Q{assigned.MatchNumber} · " : "";
                 <button type="button"
                         class="assigned-team-chip rounded-full border border-teal-500 bg-teal-800/60 px-3 py-1.5 text-sm font-semibold text-teal-100 hover:bg-teal-700"
                         data-team-id="@assigned.TeamId">
-                    @assigned.TeamNumber — @assigned.TeamName
+                    @chipMatchLabel@assigned.TeamNumber — @assigned.TeamName
                 </button>
             }
         </div>
-        <div class="mt-2 text-xs text-teal-300/80">Event and team are pre-filled below. Tap a robot to switch between your assignments.</div>
+        <div class="mt-2 text-xs text-teal-300/80">Team is pre-filled below. Tap a chip to switch if you have multiple upcoming assignments.</div>
     </div>
     <script>
         document.querySelectorAll('.assigned-team-chip').forEach(function (chip) {
