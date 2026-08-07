@@ -1,0 +1,236 @@
+@using TealTeam.Web.Controllers
+@{
+    var events = ViewData["Events"] as List<EventOption>;
+    var assignedTeams = ViewData["AssignedTeams"] as List<SubmissionController.AssignedTeam>;
+    var teamOptions = ViewData["TeamOptions"] as List<SubmissionController.TeamOption>;
+    var prefillEventId = ViewData["PrefillEventID"] as int?;
+    var prefillTeamId = ViewData["PrefillTeamID"] as int?;
+}
+@if (assignedTeams is { Count: > 0 })
+{
+    <div class="mb-4 rounded-lg border border-teal-600 bg-teal-900/30 px-4 py-3 text-sm text-teal-100">
+        <div class="font-semibold">Your assigned robot@(assignedTeams.Count > 1 ? "s" : ""):</div>
+        <div class="mt-2 flex flex-wrap gap-2">
+            @foreach (var assigned in assignedTeams)
+            {
+                <button type="button"
+                        class="assigned-team-chip rounded-full border border-teal-500 bg-teal-800/60 px-3 py-1.5 text-sm font-semibold text-teal-100 hover:bg-teal-700"
+                        data-team-id="@assigned.TeamId">
+                    @assigned.TeamNumber — @assigned.TeamName
+                </button>
+            }
+        </div>
+        <div class="mt-2 text-xs text-teal-300/80">Event and team are pre-filled below. Tap a robot to switch between your assignments.</div>
+    </div>
+    <script>
+        document.querySelectorAll('.assigned-team-chip').forEach(function (chip) {
+            chip.addEventListener('click', function () {
+                var select = document.getElementById('team-id');
+                if (select) { select.value = chip.dataset.teamId; }
+            });
+        });
+    </script>
+}
+
+<details class="mb-4 rounded-lg border border-gray-700 bg-gray-900/60">
+    <summary class="cursor-pointer px-4 py-3 text-sm font-semibold text-gray-200">📖 How to fill out this form</summary>
+    <div class="px-4 pb-4 text-sm text-gray-400 space-y-2">
+        <p><span class="text-gray-200 font-medium">1. Event &amp; Team</span> — pre-filled if your lead assigned you a robot. Only change these if your lead tells you to.</p>
+        <p><span class="text-gray-200 font-medium">2. Alliance Color</span> — the bumper color of the robot you're watching <em>this match</em> (it changes match to match).</p>
+        <p><span class="text-gray-200 font-medium">3. Watch one robot for the whole match.</span> Pick the closest option for each field — a best guess beats a blank. Required fields are Event, Team, Alliance Color, and Starting Position.</p>
+        <p><span class="text-gray-200 font-medium">4. Notes</span> — one or two specific observations ("dropped 3 pieces at the feeder", "fast defense recovery"). These go to your team's strategists.</p>
+        <p><span class="text-gray-200 font-medium">5. Submit once per robot per match.</span> Your lead scout reviews every submission before it counts, so don't resubmit if you make a mistake — tell your lead instead.</p>
+        <p class="text-xs text-gray-500">More detail on every field is on the <a href="/help" class="text-teal-300 hover:text-teal-200">Help page</a>.</p>
+    </div>
+</details>
+
+<form
+    action="/submission"
+    method="post"
+    hx-post="/submission"
+    hx-target="#submission-panel"
+    hx-swap="outerHTML transition:true"
+    hx-indicator="#submission-spinner"
+    class="space-y-6"
+    id="scouting-form"
+    data-history-form="scouting">
+    <div class="grid gap-6 md:grid-cols-2">
+        <div>
+            <label for="event-id" class="block text-sm font-medium text-gray-300 mb-2">Event</label>
+            <select
+                id="event-id"
+                name="event_id"
+                required
+                hx-get="/submission/event-teams"
+                hx-target="#team-id"
+                hx-swap="innerHTML"
+                hx-trigger="change"
+                class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled selected="@(prefillEventId == null)">Select event</option>
+                @if (events is { Count: > 0 })
+                {
+                    foreach (var evt in events)
+                    {
+                        <option value="@evt.Id" selected="@(evt.Id == prefillEventId)">@evt.Name</option>
+                    }
+                }
+                else
+                {
+                    <option value="" disabled>No events available</option>
+                }
+            </select>
+        </div>
+
+        <div>
+            <label for="team-id" class="block text-sm font-medium text-gray-300 mb-2">Team</label>
+            <select id="team-id" name="team_id" required class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                @if (teamOptions is { Count: > 0 })
+                {
+                    <option value="" disabled selected="@(prefillTeamId == null)">Select team</option>
+                    foreach (var teamOption in teamOptions)
+                    {
+                        <option value="@teamOption.Id" selected="@(teamOption.Id == prefillTeamId)">@teamOption.TeamNumber - @teamOption.Name</option>
+                    }
+                }
+                else
+                {
+                    <option value="" disabled selected>Select event first</option>
+                }
+            </select>
+        </div>
+
+        <div>
+            <label for="alliance-color" class="block text-sm font-medium text-gray-300 mb-2">Alliance Color</label>
+            <select id="alliance-color" name="alliance_color" required class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled selected>Select color</option>
+                <option value="red">Red</option>
+                <option value="blue">Blue</option>
+            </select>
+        </div>
+
+
+        <div>
+            <label for="starting-position" class="block text-sm font-medium text-gray-300 mb-2">Starting Position</label>
+            <select id="starting-position" name="starting_position" required class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled selected>Select position</option>
+                <option value="left">Left</option>
+                <option value="center">Center</option>
+                <option value="right">Right</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="defense-rating" class="block text-sm font-medium text-gray-300 mb-2">Defense Rating</label>
+            <select id="defense-rating" name="defense_rating" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled selected>Select rating</option>
+                <option value="low">Low</option>
+                <option value="mid">Mid</option>
+                <option value="high">High</option>
+            </select>
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">Traversal</label>
+            <div class="flex flex-col gap-2">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" name="traversal" value="bump" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500">
+                    <span class="text-sm text-gray-200">Bump</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" name="traversal" value="trench" class="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500">
+                    <span class="text-sm text-gray-200">Trench</span>
+                </label>
+            </div>
+        </div>
+
+        <div>
+            <label for="shooting-speed" class="block text-sm font-medium text-gray-300 mb-2">Shooting Speed</label>
+            <select id="shooting-speed" name="shooting_speed" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled selected>Select speed</option>
+                <option value="fast">Fast</option>
+                <option value="medium">Medium</option>
+                <option value="slow">Slow</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="capacity" class="block text-sm font-medium text-gray-300 mb-2">Capacity</label>
+            <select id="capacity" name="capacity" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled selected>Select capacity</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="teleop-strategy" class="block text-sm font-medium text-gray-300 mb-2">Teleop Strategy</label>
+            <select id="teleop-strategy" name="teleop_strategy" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled selected>Select strategy</option>
+                <option value="scoring">Scoring</option>
+                <option value="defending">Defending</option>
+                <option value="passing">Passing</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="hang-level" class="block text-sm font-medium text-gray-300 mb-2">Hang Level</label>
+            <select id="hang-level" name="hang_level" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled selected>Select level</option>
+                <option value="none">None</option>
+                <option value="l1">L1</option>
+                <option value="l2">L2</option>
+                <option value="l3">L3</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="auto-hang" class="block text-sm font-medium text-gray-300 mb-2">Auto Hang</label>
+            <select id="auto-hang" name="auto_hang" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled selected>Select option</option>
+                <option value="yes">Yes</option>
+                <option value="no">No</option>
+            </select>
+        </div>
+
+        <div>
+            <label for="hang-position" class="block text-sm font-medium text-gray-300 mb-2">Hang Position</label>
+            <select id="hang-position" name="hang_position" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+                <option value="" disabled selected>Select position</option>
+                <option value="left">Left</option>
+                <option value="right">Right</option>
+                <option value="center">Center</option>
+            </select>
+        </div>
+    </div>
+
+    <div>
+        <label for="accuracy-rating" class="block text-sm font-medium text-gray-300 mb-2">Accuracy Rating</label>
+        <select id="accuracy-rating" name="accuracy_rating" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
+            <option value="" disabled selected>Select confidence level</option>
+            <option value="low">Low</option>
+            <option value="med">Medium</option>
+            <option value="high">High</option>
+        </select>
+    </div>
+
+    <div>
+        <label for="notes" class="block text-sm font-medium text-gray-300 mb-2">Notes</label>
+        <textarea id="notes" name="notes" rows="4" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors" placeholder="Observations and qualitative notes"></textarea>
+    </div>
+
+    <div>
+        <label for="defendability" class="block text-sm font-medium text-gray-300 mb-2">Defendability</label>
+        <textarea id="defendability" name="defendability" rows="3" class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors" placeholder="How would we defend against them?"></textarea>
+    </div>
+
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <div id="submission-spinner" class="htmx-indicator flex items-center gap-2 text-xs text-gray-400">
+            <span class="loading-spinner"></span>
+            Saving submission...
+        </div>
+        <button type="submit" class="px-6 py-2 rounded-lg text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 focus:ring-offset-gray-900 transition-colors">
+            Submit Scouting Data
+        </button>
+    </div>
+</form>

@@ -1,0 +1,190 @@
+@{
+    var dbConnected = ViewData["DBConnected"] is true;
+    var activeTab = ViewData["ActiveTab"] as string ?? "core";
+    var tables = ViewData["Tables"] as List<TableInfo>;
+    var selectedTable = ViewData["SelectedTable"] as string;
+
+    // Table groups per tab, mirroring the Go template's inline conditions.
+    var tabTables = new Dictionary<string, string[]>
+    {
+        ["core"] = new[] { "teams", "events", "users" },
+        ["relationships"] = new[] { "event_teams" },
+        ["match_data"] = new[] { "matches", "scouting_data" },
+        ["submissions"] = new[] { "scouting_submissions", "sessions" },
+    };
+    var visibleTables = tabTables.GetValueOrDefault(activeTab == "" ? "core" : activeTab, Array.Empty<string>());
+
+    var tableDescriptions = new Dictionary<string, string>
+    {
+        ["scouting_data"] = "Scouting data",
+        ["event_teams"] = "Team-event mapping",
+        ["scouting_submissions"] = "Pending submissions",
+        ["sessions"] = "User sessions",
+    };
+
+    string TabClass(string tab, string accent) =>
+        (activeTab == tab || (tab == "core" && activeTab == ""))
+            ? $"border-{accent}-500 text-{accent}-300"
+            : "border-transparent text-gray-400 hover:text-gray-300";
+}
+<div class="space-y-6">
+    <!-- Page Header -->
+    <div class="flex justify-between items-center">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-100">@ViewData["Title"]</h1>
+            <p class="mt-1 text-gray-400">Browse and explore your database tables</p>
+        </div>
+        <div class="flex items-center space-x-2">
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium @(dbConnected ? "bg-teal-900 text-teal-200" : "bg-red-900 text-red-200")">
+                @(dbConnected ? "Connected" : "Disconnected")
+            </span>
+        </div>
+    </div>
+
+    @if (!dbConnected)
+    {
+        <div class="bg-yellow-900 border border-yellow-600 rounded-lg p-4">
+            <div class="flex">
+                <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                </svg>
+                <div class="ml-3">
+                    <h3 class="text-sm font-medium text-yellow-200">Database Not Connected</h3>
+                    <p class="mt-1 text-sm text-yellow-300">Please ensure DATABASE_URL is set and the database is running.</p>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <!-- Tab Navigation and Content Container -->
+        <div id="db-container" class="fade-swap">
+            <!-- Tab Navigation -->
+            <div class="card mb-6">
+                <div class="flex border-b border-gray-700 overflow-x-auto">
+                    <button
+                        hx-get="/development/db?tab=core"
+                        hx-target="#db-container"
+                        hx-swap="innerHTML transition:true"
+                        hx-push-url="/development/db?tab=core"
+                        class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap @TabClass("core", "teal")"
+                    >
+                        <span class="text-teal-300">●</span> Core Entities
+                    </button>
+                    <button
+                        hx-get="/development/db?tab=relationships"
+                        hx-target="#db-container"
+                        hx-swap="innerHTML transition:true"
+                        hx-push-url="/development/db?tab=relationships"
+                        class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap @TabClass("relationships", "red")"
+                    >
+                        <span class="text-red-300">●</span> Relationships
+                    </button>
+                    <button
+                        hx-get="/development/db?tab=match_data"
+                        hx-target="#db-container"
+                        hx-swap="innerHTML transition:true"
+                        hx-push-url="/development/db?tab=match_data"
+                        class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap @TabClass("match_data", "yellow")"
+                    >
+                        <span class="text-yellow-300">●</span> Match Data
+                    </button>
+                    <button
+                        hx-get="/development/db?tab=submissions"
+                        hx-target="#db-container"
+                        hx-swap="innerHTML transition:true"
+                        hx-push-url="/development/db?tab=submissions"
+                        class="px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap @TabClass("submissions", "purple")"
+                    >
+                        <span class="text-purple-300">●</span> Submissions
+                    </button>
+                </div>
+            </div>
+
+            <div class="mb-4 flex items-center gap-2 text-xs text-gray-400">
+                <div id="db-tabs-indicator" class="htmx-indicator flex items-center gap-2">
+                    <span class="loading-spinner"></span>
+                    Updating view...
+                </div>
+            </div>
+
+            @if (tables is { Count: > 0 })
+            {
+                <div class="space-y-6">
+                    <!-- Table List -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="text-lg font-semibold">Available Tables</h2>
+                        </div>
+                        <div class="card-body">
+                            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                                @foreach (var table in tables.Where(t => visibleTables.Contains(t.Name)))
+                                {
+                                    <a
+                                        href="#"
+                                        hx-get="/hx/development/db/table/@table.Name"
+                                        hx-target="#table-content"
+                                        hx-swap="innerHTML transition:true"
+                                        hx-push-url="/development/db?table=@table.Name"
+                                        hx-indicator="#table-content-indicator"
+                                        class="p-3 rounded-lg border border-gray-700 hover:border-gray-600 hover:bg-gray-800 transition-colors @(selectedTable == table.Name ? "bg-gray-800 border-teal-500" : "")"
+                                    >
+                                        <div class="font-medium text-gray-200 text-sm">@table.Name</div>
+                                        <div class="text-xs text-gray-400 mt-1">
+                                            @(tableDescriptions.TryGetValue(table.Name, out var desc) ? desc : $"{table.RowCount} rows")
+                                        </div>
+                                        <div class="text-xs text-teal-400 font-semibold mt-2">@table.RowCount rows</div>
+                                    </a>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Table Content -->
+                    <div id="table-content" class="fade-swap">
+                        @if (!string.IsNullOrEmpty(selectedTable))
+                        {
+                            <div
+                                hx-get="/hx/development/db/table/@selectedTable"
+                                hx-trigger="load"
+                                hx-swap="innerHTML transition:true"
+                                hx-indicator="#table-content-indicator"
+                            >
+                                <div class="card">
+                                    <div class="card-body text-center py-8">
+                                        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-500 mx-auto"></div>
+                                        <p class="mt-2 text-sm text-gray-400">Loading table data...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="card">
+                                <div class="card-body text-center py-12">
+                                    <svg class="mx-auto h-12 w-12 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/>
+                                    </svg>
+                                    <h3 class="mt-4 text-lg font-medium text-gray-200">Select a table</h3>
+                                    <p class="mt-2 text-sm text-gray-400">Click on a table above to view its contents</p>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                    <div class="mt-4 flex items-center gap-2 text-xs text-gray-400">
+                        <div id="table-content-indicator" class="htmx-indicator flex items-center gap-2">
+                            <span class="loading-spinner"></span>
+                            Loading table data...
+                        </div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="card">
+                    <div class="card-body text-center py-12 text-gray-500">No tables found</div>
+                </div>
+            }
+        </div>
+    }
+</div>

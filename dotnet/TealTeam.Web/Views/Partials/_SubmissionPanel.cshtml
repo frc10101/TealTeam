@@ -1,0 +1,39 @@
+<div id="submission-panel" class="space-y-4 fade-swap">
+    <div class="rounded-lg border border-gray-700 bg-gray-900/60 px-4 py-3">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="text-xs text-gray-400">Offline mode: choose an event, then submit scouting data when network is available.</div>
+            <div class="flex items-center gap-3">
+                <div
+                    id="network-status-container"
+                    hx-get="/hx/network/status"
+                    hx-trigger="load, networkStatusRefresh from:body"
+                    hx-swap="innerHTML">
+                </div>
+                <button
+                    type="button"
+                    hx-get="/hx/network/status"
+                    hx-target="#network-status-container"
+                    hx-swap="innerHTML"
+                    class="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 focus:ring-offset-gray-900 transition-colors">
+                    Refresh Status
+                </button>
+            </div>
+        </div>
+    </div>
+
+    @if (ViewData["SubmissionError"] is string submissionError && submissionError != "")
+    {
+        <div class="rounded-lg border border-red-600 bg-red-900/30 px-4 py-2 text-sm text-red-200">
+            @submissionError
+        </div>
+    }
+
+    @if (ViewData["SubmissionSuccess"] is string submissionSuccess && submissionSuccess != "")
+    {
+        <div class="rounded-lg border border-teal-600 bg-teal-900/30 px-4 py-2 text-sm text-teal-200">
+            @submissionSuccess
+        </div>
+    }
+
+    <partial name="~/Views/Partials/_ScoutingForm.cshtml" />
+</div>

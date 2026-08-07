@@ -1,0 +1,59 @@
+@{
+    var selectedEventId = ViewData["SelectedEventID"] as int?;
+    var eventTeams = ViewData["EventTeams"] as List<EventTeamRow>;
+}
+<div id="event-summary" class="space-y-3 fade-swap">
+    @if (ViewData["EventSummaryError"] is string summaryError && summaryError != "")
+    {
+        <div class="rounded-lg border border-red-600 bg-red-900/30 px-4 py-2 text-sm text-red-200">
+            @summaryError
+        </div>
+    }
+    else if (selectedEventId != null)
+    {
+        <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+                <div class="text-xs uppercase tracking-wider text-gray-500">Active Event</div>
+                <div class="text-lg font-semibold text-gray-100">@ViewData["SelectedEventName"]</div>
+            </div>
+            <div class="text-xs text-gray-500">Event ID @selectedEventId</div>
+        </div>
+
+        <div class="grid gap-3 sm:grid-cols-2">
+            <div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2">
+                <div class="text-xs text-gray-400">Teams</div>
+                <div class="text-sm font-semibold text-gray-100">@ViewData["EventTeamsCount"]</div>
+            </div>
+            <div class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2">
+                <div class="text-xs text-gray-400">Matches</div>
+                <div class="text-sm font-semibold text-gray-100">@ViewData["EventMatchesCount"]</div>
+            </div>
+        </div>
+
+        @if (eventTeams is { Count: > 0 })
+        {
+            <div class="rounded-lg border border-gray-700 bg-gray-900 px-4 py-3">
+                <div class="text-xs uppercase tracking-wider text-gray-400 mb-3">Teams at Event</div>
+                <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    @foreach (var team in eventTeams)
+                    {
+                        <div class="rounded border border-gray-600 bg-gray-800 px-2 py-1 text-sm text-gray-200">
+                            <a href="/teams?team=@team.TeamNumber" class="text-teal-300 hover:text-teal-200">@team.TeamNumber</a> - @team.Name
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (ViewData["EventWarning"] is string eventWarning && eventWarning != "")
+        {
+            <div class="rounded-lg border border-yellow-600 bg-yellow-900/30 px-4 py-2 text-sm text-yellow-200">
+                @eventWarning
+            </div>
+        }
+    }
+    else
+    {
+        <div class="text-sm text-gray-400">Select an event to see details.</div>
+    }
+</div>

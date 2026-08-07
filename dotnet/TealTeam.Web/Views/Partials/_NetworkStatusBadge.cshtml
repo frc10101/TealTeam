@@ -1,0 +1,18 @@
+@{
+    var status = ViewData["NetworkStatus"] as string ?? "";
+}
+<div id="network-status-badge" class="rounded-lg border px-3 py-2 text-xs @ViewData["NetworkStatusClass"]">
+    <div class="flex flex-wrap items-center gap-3">
+        <span class="font-semibold uppercase tracking-wide">@ViewData["NetworkStatusLabel"]</span>
+        <span class="opacity-85">Last Sync: @ViewData["LastSyncText"]</span>
+        <span class="opacity-85">Last API OK: @ViewData["LastAPISuccessText"]</span>
+    </div>
+    @if (status == "api-error" && ViewData["LastAPIError"] is string apiError && apiError != "")
+    {
+        <div class="mt-1 opacity-90">API: @apiError</div>
+    }
+    @if (status == "offline" && ViewData["InternetError"] is string netError && netError != "")
+    {
+        <div class="mt-1 opacity-90">Network: @netError</div>
+    }
+</div>

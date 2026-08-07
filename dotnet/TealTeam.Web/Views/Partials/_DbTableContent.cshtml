@@ -1,0 +1,167 @@
+@{
+    var selectedTable = ViewData["SelectedTable"] as string ?? "";
+    var columns = ViewData["Columns"] as List<ColumnInfo> ?? new List<ColumnInfo>();
+    var rows = ViewData["Rows"] as List<List<string>> ?? new List<List<string>>();
+    var totalRows = ViewData["TotalRows"] as long? ?? 0;
+    var offset = ViewData["Offset"] as int? ?? 0;
+    var limit = ViewData["Limit"] as int? ?? 50;
+}
+<div class="space-y-4 fade-swap">
+    <!-- Table Header -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <div>
+                <h2 class="text-xl font-semibold text-gray-100">@selectedTable</h2>
+                <p class="text-sm text-gray-400 mt-1">@totalRows total rows</p>
+            </div>
+            <div class="flex items-center space-x-2">
+                <button
+                    hx-get="/hx/development/db/table/@selectedTable"
+                    hx-target="#table-content"
+                    hx-swap="innerHTML transition:true"
+                    hx-indicator="#table-content-indicator"
+                    class="btn btn-secondary text-sm"
+                >
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    Refresh
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Column Info -->
+    <div class="card">
+        <div class="card-header accent-red">
+            <h3 class="font-medium text-gray-100">Schema</h3>
+        </div>
+        <div class="card-body p-0">
+            <div class="overflow-x-auto">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Column</th>
+                            <th>Type</th>
+                            <th>Nullable</th>
+                            <th>Default</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var column in columns)
+                        {
+                            <tr>
+                                <td class="font-medium text-gray-100">@column.Name</td>
+                                <td class="text-gray-300">@column.Type</td>
+                                <td>
+                                    @if (column.Nullable)
+                                    {
+                                        <span class="text-gray-400">Yes</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-yellow-300 font-medium">No</span>
+                                    }
+                                </td>
+                                <td class="text-gray-400">@(string.IsNullOrEmpty(column.Default) ? "-" : column.Default)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Table -->
+    <div class="card">
+        <div class="card-header accent-yellow flex justify-between items-center">
+            <h3 class="font-medium text-gray-100">Data</h3>
+            <div class="flex items-center space-x-2">
+                <span class="text-sm text-gray-400">
+                    Showing @(offset + 1)-@(offset + rows.Count) of @totalRows
+                </span>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="overflow-x-auto">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            @foreach (var column in columns)
+                            {
+                                <th>@column.Name</th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (rows.Count > 0)
+                        {
+                            foreach (var row in rows)
+                            {
+                                <tr>
+                                    @foreach (var value in row)
+                                    {
+                                        <td>
+                                            <div class="max-w-xs truncate" title="@value">
+                                                @if (value != "")
+                                                {
+                                                    @value
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-gray-500 italic">NULL</span>
+                                                }
+                                            </div>
+                                        </td>
+                                    }
+                                </tr>
+                            }
+                        }
+                        else
+                        {
+                            <tr>
+                                <td colspan="@columns.Count" class="px-4 py-8 text-center text-gray-400">No data found</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Pagination -->
+        @if (totalRows > limit)
+        {
+            <div class="card-footer px-4 py-3 flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                    @if (offset > 0)
+                    {
+                        <button
+                            hx-get="/hx/development/db/table/@selectedTable?offset=@(Math.Max(offset - limit, 0))&limit=@limit"
+                            hx-target="#table-content"
+                            hx-swap="innerHTML transition:true"
+                            hx-indicator="#table-content-indicator"
+                            class="btn btn-secondary text-sm"
+                        >
+                            Previous
+                        </button>
+                    }
+                    @if (offset + rows.Count < totalRows)
+                    {
+                        <button
+                            hx-get="/hx/development/db/table/@selectedTable?offset=@(offset + limit)&limit=@limit"
+                            hx-target="#table-content"
+                            hx-swap="innerHTML transition:true"
+                            hx-indicator="#table-content-indicator"
+                            class="btn btn-secondary text-sm"
+                        >
+                            Next
+                        </button>
+                    }
+                </div>
+                <div class="text-sm text-gray-400">
+                    Page @(offset / limit + 1) of @(totalRows / limit + 1)
+                </div>
+            </div>
+        }
+    </div>
+</div>

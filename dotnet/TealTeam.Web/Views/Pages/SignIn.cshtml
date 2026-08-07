@@ -1,0 +1,115 @@
+<div class="min-h-[calc(100vh-4rem)] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-md w-full space-y-8">
+        <!-- Header -->
+        <div class="text-center">
+            <h2 class="text-3xl font-bold text-gray-100 mb-2">
+                Sign in to your account
+            </h2>
+            <p class="text-gray-400">
+                @ViewData["Description"]
+            </p>
+        </div>
+
+        <!-- Sign In Card -->
+        <div class="card">
+            <div class="card-header accent-teal">
+                <h3 class="text-lg font-semibold text-gray-100">Sign In</h3>
+            </div>
+            <div class="card-body">
+                <!-- Form response messages will appear here -->
+                <div id="form-response" class="fade-swap"></div>
+
+                <!-- Sign In Form -->
+                <form
+                    hx-post="/api/auth/login"
+                    hx-target="#form-response"
+                    hx-swap="innerHTML transition:true"
+                    hx-indicator="#signin-indicator"
+                    class="space-y-6 mt-4">
+
+                    <div>
+                        <label for="email" class="block text-sm font-medium text-gray-700 mb-2">
+                            Email address
+                        </label>
+                        <input
+                            id="email"
+                            name="email"
+                            type="email"
+                            autocomplete="email"
+                            required
+                            class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors"
+                            placeholder="email@example.com">
+                    </div>
+
+                    <div>
+                        <label for="password" class="block text-sm font-medium text-gray-300 mb-2">
+                            Password
+                        </label>
+                        <input
+                            id="password"
+                            name="password"
+                            type="password"
+                            autocomplete="current-password"
+                            required
+                            class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors"
+                            placeholder="••••••••">
+                    </div>
+
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <input
+                                id="remember-me"
+                                name="remember-me"
+                                type="checkbox"
+                                class="h-4 w-4 bg-gray-800 border-gray-700 rounded text-teal-500 focus:ring-teal-500 focus:ring-offset-gray-900">
+                            <label for="remember-me" class="ml-2 block text-sm text-gray-400">
+                                Remember me
+                            </label>
+                        </div>
+
+                        <div class="text-sm">
+                            <span class="text-gray-500">Contact your team lead to reset your password.</span>
+                        </div>
+                    </div>
+
+                    <button
+                        type="submit"
+                        class="w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 focus:ring-offset-gray-900 transition-colors">
+                        Sign in
+                    </button>
+                    <div id="signin-indicator" class="htmx-indicator flex items-center justify-center gap-2 text-xs text-gray-400">
+                        <span class="loading-spinner"></span>
+                        Signing in...
+                    </div>
+                </form>
+
+                <!-- Sign Up Link -->
+                <div class="mt-6 text-center">
+                    <p class="text-sm text-gray-400">
+                        Don't have an account?
+                        <a href="/sign-up" class="font-medium text-teal-400 hover:text-teal-300 transition-colors">
+                            Sign up here
+                        </a>
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Info Card -->
+        <div class="card">
+            <div class="card-body">
+                <div class="flex items-start gap-3">
+                    <svg class="w-5 h-5 text-teal-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <div>
+                        <h4 class="text-sm font-medium text-gray-300 mb-1">Secure Authentication</h4>
+                        <p class="text-xs text-gray-500">
+                            Your credentials are encrypted and stored securely. Sessions expire after 24 hours of inactivity.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
