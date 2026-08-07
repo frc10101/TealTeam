@@ -6,6 +6,9 @@ module.exports = {
     "./web/templates/**/*.html",
     // Scan Go files for class strings (if any)
     "./internal/**/*.go",
+    // Scan ASP.NET Razor views (dotnet port)
+    "./dotnet/TealTeam.Web/Views/**/*.cshtml",
+    "./dotnet/TealTeam.Web/Controllers/**/*.cs",
   ],
   theme: {
     extend: {

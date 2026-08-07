@@ -67,3 +67,6 @@ render-build.log
 coverage.out
 coverage.html
 build/
+
+# .NET build output (dotnet/ port)
+obj/
