@@ -67,16 +67,5 @@ pub async fn reset_migrations(pool: &PgPool) -> anyhow::Result<()> {
 }
 
 pub fn resolve_migrations_dir() -> std::path::PathBuf {
-    let candidates: [std::path::PathBuf; 4] = [
-        crate::exe_relative("migrations").unwrap_or_else(|| "migrations".into()),
-        "migrations".into(),
-        "../../migrations".into(),
-        "rust/tealteam-web/../../migrations".into(),
-    ];
-    for candidate in candidates {
-        if candidate.is_dir() {
-            return candidate;
-        }
-    }
-    "migrations".into()
+    crate::find_upwards("migrations").unwrap_or_else(|| "migrations".into())
 }

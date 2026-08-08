@@ -129,21 +129,31 @@ fn load_dotenv(path: &str) {
 }
 
 fn resolve_static_dir() -> std::path::PathBuf {
-    // Next to the binary in a publish layout, or the source tree in dev.
-    let candidates = [
-        exe_relative("static"),
-        Some("static".into()),
-        Some("rust/tealteam-web/static".into()),
-    ];
-    for candidate in candidates.into_iter().flatten() {
-        if candidate.is_dir() {
-            return candidate;
-        }
-    }
-    "static".into()
+    find_upwards("static").unwrap_or_else(|| "static".into())
 }
 
-fn exe_relative(name: &str) -> Option<std::path::PathBuf> {
-    let exe = std::env::current_exe().ok()?;
-    Some(exe.parent()?.join(name))
+/// Locate a directory named `name` by walking up from both the executable's
+/// location and the current working directory. This lets the binary find the
+/// shared `migrations/` and `static/` dirs whether it's launched via
+/// `cargo run` (cwd = crate root) or directly from `target/release/`, and finds
+/// a copy sitting next to the binary in a publish layout.
+pub fn find_upwards(name: &str) -> Option<std::path::PathBuf> {
+    let mut starts = Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            starts.push(dir.to_path_buf());
+        }
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        starts.push(cwd);
+    }
+    for start in starts {
+        for ancestor in start.ancestors() {
+            let candidate = ancestor.join(name);
+            if candidate.is_dir() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
 }
