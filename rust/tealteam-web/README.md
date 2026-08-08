@@ -2,14 +2,14 @@
 
 Rust port of the TealTeam FRC scouting server, built for a local LAN server with
 wired-ethernet clients (scouting tablets/laptops at a competition). It is a
-faithful port of the Go and ASP.NET Core apps: same routes, same HTMX-driven UI,
+faithful port of the Go and ASP.NET Core apps: same routes, same Unpoly-driven UI,
 the **same PostgreSQL schema and SQL migrations**, and the same session cookie —
 all three implementations can run side by side against one database.
 
 ## Stack decisions
 
 - **axum + Askama, not a heavier framework.** The app is server-rendered HTML
-  plus HTMX fragments. axum handlers returning rendered Askama templates map
+  plus Unpoly fragments. axum handlers returning rendered Askama templates map
   1:1 onto the Gin/MVC handlers. Askama is compile-time-checked templating (the
   closest analog to Razor), so a malformed template is a build error, not a
   runtime 500.
@@ -21,8 +21,12 @@ all three implementations can run side by side against one database.
   any of the three can log into the others.
 - **rustls** (no OpenSSL) for `reqwest` and `sqlx`, so the static binary has no
   system TLS dependency.
-- **HTMX is vendored locally** (`static/js/htmx.min.js`) so the UI works on an
-  offline event LAN.
+- **Unpoly is vendored locally** (`static/js/unpoly.min.js` + `.css`) so the UI
+  works on an offline event LAN. `static/js/tt-unpoly.js` is a small glue layer
+  that bridges the two places Unpoly differs from the previous HTMX fragments:
+  server-driven navigation (an `X-Up-Events: tt:navigate` response header, the
+  analog of HTMX's `HX-Redirect`) and the `[tt-src]` / `[tt-change]` self-load
+  helpers for regions whose responses are bare inner fragments.
 
 ## Layout
 
@@ -40,7 +44,7 @@ src/stats_syncer.rs    background TBA sync loop (tokio task)
 src/scouting_points.rs configurable ranking point weights
 src/handlers/*         one module per controller, same routes
 templates/*            Askama templates (layout + pages + partials)
-static/*               vendored HTMX, site JS/CSS, device.js
+static/*               vendored Unpoly, tt-unpoly.js glue, site JS/CSS, device.js
 ```
 
 Migrations are shared with the other ports: `../../migrations/*.sql` is applied

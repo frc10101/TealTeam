@@ -42,7 +42,7 @@ public class TeamsController(Db db, SessionService sessions, FirstSyncService fi
         if (errMsg != "")
         {
             return StatusCode(statusCode,
-                $"""<div class="card"><div class="card-body text-center text-red-400 py-8">{System.Net.WebUtility.HtmlEncode(errMsg)}</div></div>""");
+                $"""<div id="team-info-container"><div class="card"><div class="card-body text-center text-red-400 py-8">{System.Net.WebUtility.HtmlEncode(errMsg)}</div></div></div>""");
         }
 
         return Fragment("_TeamInfo");
@@ -139,7 +139,7 @@ public class TeamsController(Db db, SessionService sessions, FirstSyncService fi
         if (errMsg != "")
         {
             return StatusCode(500,
-                $"""<div class="card"><div class="card-body text-center text-red-400 py-8">{System.Net.WebUtility.HtmlEncode(errMsg)}</div></div>""");
+                $"""<div id="team-info-container"><div class="card"><div class="card-body text-center text-red-400 py-8">{System.Net.WebUtility.HtmlEncode(errMsg)}</div></div></div>""");
         }
 
         return Fragment("_TeamInfo");

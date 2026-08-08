@@ -21,10 +21,7 @@
 
                 <!-- Sign In Form -->
                 <form
-                    hx-post="/api/auth/login"
-                    hx-target="#form-response"
-                    hx-swap="innerHTML transition:true"
-                    hx-indicator="#signin-indicator"
+                    action="/api/auth/login" method="post" up-submit up-target="#form-response"
                     class="space-y-6 mt-4">
 
                     <div>

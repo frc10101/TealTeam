@@ -17,10 +17,10 @@
         </div>
         <div class="card-body space-y-4">
             <form
-                hx-get="/hx/teams/search"
-                hx-target="#team-info-container"
-                hx-swap="innerHTML"
-                hx-trigger="submit"
+                action="/hx/teams/search"
+                method="get"
+                up-submit
+                up-target="#team-info-container"
                 class="flex flex-col gap-3 sm:flex-row sm:items-end">
                 <div class="flex-1">
                     <label for="team-search" class="block text-sm font-medium text-gray-300 mb-2">Team Number</label>
@@ -47,19 +47,20 @@
         </div>
     </div>
 
-    <!-- Team Info Container (HTMX target) -->
-    <div id="team-info-container">
-        @if (teamNumber != null)
-        {
-            <partial name="~/Views/Partials/_TeamInfo.cshtml" />
-        }
-        else
-        {
+    <!-- Team Info Container (Unpoly target) -->
+    @* _TeamInfo self-wraps with id="team-info-container" *@
+    @if (teamNumber != null)
+    {
+        <partial name="~/Views/Partials/_TeamInfo.cshtml" />
+    }
+    else
+    {
+        <div id="team-info-container">
             <div class="card">
                 <div class="card-body text-center text-gray-400 py-12">
                     <p>Enter a team number above to get started</p>
                 </div>
             </div>
-        }
-    </div>
+        </div>
+    }
 </div>

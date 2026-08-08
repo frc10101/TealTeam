@@ -7,7 +7,7 @@
     var totalSlots    = matchRows.SelectMany(m => m.Slots).Count(s => s.TeamId != null);
     var assignedSlots = matchRows.SelectMany(m => m.Slots).Count(s => s.AssignmentId != null);
 }
-<div id="assignment-table" class="space-y-4 fade-swap">
+<div id="assignment-table" class="space-y-4 fade-swap" up-poll up-interval="30000" up-source="/lead-scout/assignments">
 
     {{!-- Header / global actions --}}
     <div class="card">
@@ -19,17 +19,11 @@
                 </div>
                 <div class="flex flex-wrap gap-2">
                     <button class="btn btn-primary btn-sm"
-                            hx-post="/hx/assignments/auto"
-                            hx-target="#assignment-table"
-                            hx-swap="outerHTML transition:true"
-                            hx-confirm="Distribute all unassigned slots across online scouts and devices?">
+                            up-href="/hx/assignments/auto" up-method="post" up-target="#assignment-table" up-confirm="Distribute all unassigned slots across online scouts and devices?">
                         Auto-distribute
                     </button>
                     <button class="btn btn-danger btn-sm"
-                            hx-post="/hx/assignments/clear-all"
-                            hx-target="#assignment-table"
-                            hx-swap="outerHTML transition:true"
-                            hx-confirm="Remove ALL assignments for this event?">
+                            up-href="/hx/assignments/clear-all" up-method="post" up-target="#assignment-table" up-confirm="Remove ALL assignments for this event?">
                         Clear all
                     </button>
                 </div>
@@ -72,10 +66,7 @@
                         <span class="text-xs text-gray-500">@assignedInMatch/@totalInMatch assigned</span>
                     </div>
                     <button class="btn btn-secondary btn-sm"
-                            hx-post="/hx/assignments/clear-match/@match.MatchId"
-                            hx-target="#assignment-table"
-                            hx-swap="outerHTML transition:true"
-                            hx-confirm="Clear assignments for @match.Label?">
+                            up-href="/hx/assignments/clear-match/@match.MatchId" up-method="post" up-target="#assignment-table" up-confirm="Clear assignments for @match.Label?">
                         Clear
                     </button>
                 </div>
@@ -107,10 +98,7 @@
                                 @if (slot.TeamId != null)
                                 {
                                     <form class="shrink-0"
-                                          hx-post="/hx/assignments/set"
-                                          hx-target="#assignment-table"
-                                          hx-swap="outerHTML transition:true"
-                                          hx-trigger="change from:find select">
+                                          action="/hx/assignments/set" method="post" up-submit up-autosubmit up-target="#assignment-table">
                                         <input type="hidden" name="match_id" value="@match.MatchId" />
                                         <input type="hidden" name="team_id" value="@slot.TeamId" />
                                         <select name="assignee"
@@ -171,10 +159,7 @@
                                 @if (slot.TeamId != null)
                                 {
                                     <form class="shrink-0"
-                                          hx-post="/hx/assignments/set"
-                                          hx-target="#assignment-table"
-                                          hx-swap="outerHTML transition:true"
-                                          hx-trigger="change from:find select">
+                                          action="/hx/assignments/set" method="post" up-submit up-autosubmit up-target="#assignment-table">
                                         <input type="hidden" name="match_id" value="@match.MatchId" />
                                         <input type="hidden" name="team_id" value="@slot.TeamId" />
                                         <select name="assignee"

@@ -36,13 +36,7 @@
             </div>
         </div>
 
-        <!-- Match assignment table (auto-refreshes online indicators) -->
-        <div hx-get="/lead-scout/assignments"
-             hx-select="#assignment-table"
-             hx-target="#assignment-table"
-             hx-swap="outerHTML"
-             hx-trigger="every 30s">
-            <partial name="~/Views/Partials/_AssignmentTable.cshtml" />
-        </div>
+        <!-- #assignment-table refreshes itself via up-poll (see the partial) -->
+        <partial name="~/Views/Partials/_AssignmentTable.cshtml" />
     }
 </div>

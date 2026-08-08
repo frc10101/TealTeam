@@ -6,7 +6,7 @@
     var offset = ViewData["Offset"] as int? ?? 0;
     var limit = ViewData["Limit"] as int? ?? 50;
 }
-<div class="space-y-4 fade-swap">
+<div id="table-content" class="space-y-4 fade-swap">
     <!-- Table Header -->
     <div class="card">
         <div class="card-header flex justify-between items-center">
@@ -16,10 +16,8 @@
             </div>
             <div class="flex items-center space-x-2">
                 <button
-                    hx-get="/hx/development/db/table/@selectedTable"
-                    hx-target="#table-content"
-                    hx-swap="innerHTML transition:true"
-                    hx-indicator="#table-content-indicator"
+                    up-follow up-href="/hx/development/db/table/@selectedTable"
+                    up-target="#table-content"
                     class="btn btn-secondary text-sm"
                 >
                     <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -136,10 +134,7 @@
                     @if (offset > 0)
                     {
                         <button
-                            hx-get="/hx/development/db/table/@selectedTable?offset=@(Math.Max(offset - limit, 0))&limit=@limit"
-                            hx-target="#table-content"
-                            hx-swap="innerHTML transition:true"
-                            hx-indicator="#table-content-indicator"
+                            up-follow up-href="/hx/development/db/table/@selectedTable?offset=@(Math.Max(offset - limit, 0))&limit=@limit" up-target="#table-content"
                             class="btn btn-secondary text-sm"
                         >
                             Previous
@@ -148,10 +143,7 @@
                     @if (offset + rows.Count < totalRows)
                     {
                         <button
-                            hx-get="/hx/development/db/table/@selectedTable?offset=@(offset + limit)&limit=@limit"
-                            hx-target="#table-content"
-                            hx-swap="innerHTML transition:true"
-                            hx-indicator="#table-content-indicator"
+                            up-follow up-href="/hx/development/db/table/@selectedTable?offset=@(offset + limit)&limit=@limit" up-target="#table-content"
                             class="btn btn-secondary text-sm"
                         >
                             Next

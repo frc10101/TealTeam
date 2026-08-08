@@ -17,9 +17,7 @@
         <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             @foreach (var device in deviceOptions)
             {
-                <form hx-post="/hx/devices/@device.Id/rename"
-                      hx-target="#device-list"
-                      hx-swap="outerHTML transition:true"
+                <form action="/hx/devices/@device.Id/rename" method="post" up-submit up-target="#device-list"
                       class="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 flex items-center gap-2">
                     <span class="@(device.Online ? "text-teal-300" : "text-gray-600")" title="@(device.Online ? "Connected" : "Offline")">●</span>
                     <input name="name" value="@device.Name"

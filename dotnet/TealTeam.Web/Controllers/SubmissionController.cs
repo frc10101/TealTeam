@@ -118,7 +118,7 @@ public class SubmissionController(Db db, SessionService sessions, ILogger<Submis
 
         if (error != null)
         {
-            if (IsHtmx)
+            if (IsUnpoly)
             {
                 await BuildSubmissionPageDataAsync(user);
                 ViewData["SubmissionError"] = error;
@@ -173,7 +173,7 @@ public class SubmissionController(Db db, SessionService sessions, ILogger<Submis
         {
             logger.LogError(ex, "failed to create scouting submission (event {Event}, team {Team}, scouter {Scouter})",
                 eventId, teamId, user.Id);
-            if (IsHtmx)
+            if (IsUnpoly)
             {
                 await BuildSubmissionPageDataAsync(user);
                 ViewData["SubmissionError"] = $"Failed to queue submission: {ex.Message}";
@@ -182,7 +182,7 @@ public class SubmissionController(Db db, SessionService sessions, ILogger<Submis
             return StatusCode(500, $"Failed to queue submission: {ex.Message}");
         }
 
-        if (IsHtmx)
+        if (IsUnpoly)
         {
             await BuildSubmissionPageDataAsync(user);
             ViewData["SubmissionSuccess"] = "Submission queued for team scouting. Thanks for scouting!";
@@ -241,7 +241,7 @@ public class SubmissionController(Db db, SessionService sessions, ILogger<Submis
             {
                 html.Append($"""<option value="{id}">{teamNumber} - {System.Net.WebUtility.HtmlEncode(name)}</option>""");
             }
-            return Content(html.ToString(), "text/html; charset=utf-8");
+            return Content(SelectWrap(html), "text/html; charset=utf-8");
         }
 
         // No teams locally; fall back to the FIRST API and upsert results.
@@ -265,7 +265,7 @@ public class SubmissionController(Db db, SessionService sessions, ILogger<Submis
         if (firstTeams.Count == 0)
         {
             html.Append("""<option value="" disabled>No teams available for this event</option>""");
-            return Content(html.ToString(), "text/html; charset=utf-8");
+            return Content(SelectWrap(html), "text/html; charset=utf-8");
         }
 
         await using (var conn = await Db.OpenAsync(ct))
@@ -330,6 +330,11 @@ public class SubmissionController(Db db, SessionService sessions, ILogger<Submis
             }
         }
 
-        return Content(html.ToString(), "text/html; charset=utf-8");
+        return Content(SelectWrap(html), "text/html; charset=utf-8");
     }
+
+    // Unpoly matches this response against up-target="#team-id", so the whole
+    // <select> is returned (not just <option>s) and swapped as one element.
+    private static string SelectWrap(System.Text.StringBuilder options)
+        => $"""<select id="team-id" name="team_id" required class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">{options}</select>""";
 }

@@ -7,6 +7,7 @@
 
     string Val(string key) => ViewData[key] as string ?? "";
 }
+<div id="team-data-container">
 <!-- Quick Summary Section -->
 @if (scoutingData is { Count: > 0 } || stats != null)
 {
@@ -543,3 +544,5 @@
         </div>
     </div>
 }
+
+</div>@* /team-data-container *@

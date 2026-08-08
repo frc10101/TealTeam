@@ -46,7 +46,7 @@ public class AuthController(Db db, SessionService sessions, FirstSyncService fir
 
         if (email == "" || password == "")
         {
-            return AuthResponse(false, "Email and password are required");
+            return AuthError("Email and password are required");
         }
 
         User? user;
@@ -59,13 +59,13 @@ public class AuthController(Db db, SessionService sessions, FirstSyncService fir
         catch (Exception ex)
         {
             logger.LogError(ex, "database error during login");
-            return AuthResponse(false, "An error occurred. Please try again.");
+            return AuthError("An error occurred. Please try again.");
         }
 
         // Generic error message to prevent user enumeration.
         if (user == null || !SessionService.CheckPasswordHash(password, user.PasswordHash))
         {
-            return AuthResponse(false, "Invalid email or password");
+            return AuthError("Invalid email or password");
         }
 
         string sessionId;
@@ -76,7 +76,7 @@ public class AuthController(Db db, SessionService sessions, FirstSyncService fir
         catch (Exception ex)
         {
             logger.LogError(ex, "failed to create session");
-            return AuthResponse(false, "Failed to create session");
+            return AuthError("Failed to create session");
         }
 
         try
@@ -109,7 +109,7 @@ public class AuthController(Db db, SessionService sessions, FirstSyncService fir
             });
         }
 
-        return AuthResponse(true, "Login successful", "/");
+        return UpNavigate("/");
     }
 
     [HttpPost("/api/auth/signup")]
@@ -125,22 +125,22 @@ public class AuthController(Db db, SessionService sessions, FirstSyncService fir
 
         if (name == "" || email == "" || password == "" || confirmPassword == "")
         {
-            return AuthResponse(false, "All fields are required");
+            return AuthError("All fields are required");
         }
 
         if (password != confirmPassword)
         {
-            return AuthResponse(false, "Passwords do not match");
+            return AuthError("Passwords do not match");
         }
 
         if (password.Length < 8)
         {
-            return AuthResponse(false, "Password must be at least 8 characters long");
+            return AuthError("Password must be at least 8 characters long");
         }
 
         if (!email.Contains('@') || !email.Contains('.'))
         {
-            return AuthResponse(false, "Invalid email format");
+            return AuthError("Invalid email format");
         }
 
         try
@@ -150,13 +150,13 @@ public class AuthController(Db db, SessionService sessions, FirstSyncService fir
                 "SELECT id FROM users WHERE email = @email LIMIT 1", new { email });
             if (existingId != null)
             {
-                return AuthResponse(false, "An account with this email already exists");
+                return AuthError("An account with this email already exists");
             }
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "database error checking existing user");
-            return AuthResponse(false, "An error occurred. Please try again.");
+            return AuthError("An error occurred. Please try again.");
         }
 
         var passwordHash = SessionService.HashPassword(password);
@@ -190,7 +190,7 @@ public class AuthController(Db db, SessionService sessions, FirstSyncService fir
             var msg = ex.Message.Contains("duplicate") || ex.Message.Contains("unique")
                 ? "An account with this email already exists"
                 : "Failed to create account. Please try again.";
-            return AuthResponse(false, msg);
+            return AuthError(msg);
         }
 
         if (parsedTeamNumber is > 0)
@@ -221,11 +221,11 @@ public class AuthController(Db db, SessionService sessions, FirstSyncService fir
         catch (Exception ex)
         {
             logger.LogError(ex, "failed to create session on signup");
-            return AuthResponse(true, "Account created! Redirecting to sign in...", "/sign-in");
+            return UpNavigate("/sign-in");
         }
 
         SessionService.SetSessionCookie(HttpContext, sessionId);
-        return AuthResponse(true, "Account created successfully!", "/");
+        return UpNavigate("/");
     }
 
     [HttpPost("/api/auth/logout")]
@@ -243,9 +243,7 @@ public class AuthController(Db db, SessionService sessions, FirstSyncService fir
             }
         }
 
-        SessionService.ClearSessionCookie(HttpContext);
-        Response.Headers["HX-Redirect"] = "/sign-in";
-        return AuthResponse(true, "Logged out successfully", "/sign-in");
+        SessionService.ClearSessionCookie(HttpContext);        return UpNavigate("/sign-in");
     }
 
     [HttpGet("/account")]
@@ -320,27 +318,31 @@ public class AuthController(Db db, SessionService sessions, FirstSyncService fir
     private ContentResult PasswordChangeResponse(bool success, string message)
     {
         var encoded = System.Net.WebUtility.HtmlEncode(message);
+        // Wrapped so the response root matches up-target="#password-response".
+        // On success, up-on-inserted resets the form (Unpoly does not run
+        // <script> in swapped fragments).
         var html = success
             ? $"""
-               <div class="bg-green-900/20 border border-green-500 text-green-300 px-4 py-3 rounded" role="alert">
-                   <div class="flex items-center gap-2">
-                       <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                       </svg>
-                       <span class="block sm:inline font-medium">{encoded}</span>
+               <div id="password-response" up-on-inserted="document.getElementById('change-password-form').reset()">
+                   <div class="bg-green-900/20 border border-green-500 text-green-300 px-4 py-3 rounded" role="alert">
+                       <div class="flex items-center gap-2">
+                           <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                           </svg>
+                           <span class="block sm:inline font-medium">{encoded}</span>
+                       </div>
                    </div>
                </div>
-               <script>
-                   document.getElementById('change-password-form').reset();
-               </script>
                """
             : $"""
-               <div class="bg-red-900/20 border border-red-500 text-red-300 px-4 py-3 rounded" role="alert">
-                   <div class="flex items-center gap-2">
-                       <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                       </svg>
-                       <span class="block sm:inline font-medium">{encoded}</span>
+               <div id="password-response">
+                   <div class="bg-red-900/20 border border-red-500 text-red-300 px-4 py-3 rounded" role="alert">
+                       <div class="flex items-center gap-2">
+                           <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                           </svg>
+                           <span class="block sm:inline font-medium">{encoded}</span>
+                       </div>
                    </div>
                </div>
                """;

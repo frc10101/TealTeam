@@ -50,7 +50,7 @@ public class PagesController(Db db, SessionService sessions, ILogger<PagesContro
         var selectedEventId = ParseRequiredInt(Request.Form["event_id"]);
         if (selectedEventId == null)
         {
-            if (IsHtmx)
+            if (IsUnpoly)
             {
                 ViewData["User"] = user;
                 ViewData["EventError"] = "event_id is required";
@@ -79,7 +79,7 @@ public class PagesController(Db db, SessionService sessions, ILogger<PagesContro
         {
             logger.LogError(ex, "failed to update selected event (session {SessionId}, event {EventId})",
                 session.SessionId, selectedEventId);
-            if (IsHtmx)
+            if (IsUnpoly)
             {
                 ViewData["User"] = user;
                 ViewData["EventError"] = "Failed to save event selection";
@@ -89,14 +89,14 @@ public class PagesController(Db db, SessionService sessions, ILogger<PagesContro
             return StatusCode(500, "Failed to save event selection");
         }
 
-        if (IsHtmx)
+        if (IsUnpoly)
         {
             ViewData["User"] = user;
             ViewData["EventUpdated"] = true;
             await HydrateEventSelectionDataAsync(user, HttpContext.RequestAborted);
             await HydrateEventSummaryDataAsync(selectedEventId.Value, HttpContext.RequestAborted);
-            // Trigger match schedule reload via HTMX event.
-            Response.Headers["HX-Trigger"] = "eventSelected";
+            // The event-selection form re-emits eventSelected/reload-matches
+            // client-side via up-on-inserted, so no server trigger is needed.
             return Fragment("_EventSelection");
         }
 

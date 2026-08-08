@@ -44,10 +44,7 @@
     </div>
 
     <div id="drive-coach-matches-container"
-         hx-get="/hx/drive-coach/matches"
-         hx-trigger="reload-matches from:body"
-         hx-target="#drive-coach-matches-content"
-         hx-swap="outerHTML transition:true">
+         tt-src="/hx/drive-coach/matches" tt-on="reload-matches">
         <partial name="~/Views/Partials/_DriveCoachMatches.cshtml" />
     </div>
 </div>

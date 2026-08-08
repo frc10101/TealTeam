@@ -60,10 +60,8 @@
 <form
     action="/submission"
     method="post"
-    hx-post="/submission"
-    hx-target="#submission-panel"
-    hx-swap="outerHTML transition:true"
-    hx-indicator="#submission-spinner"
+    up-submit
+    up-target="#submission-panel"
     class="space-y-6"
     id="scouting-form"
     data-history-form="scouting">
@@ -74,10 +72,8 @@
                 id="event-id"
                 name="event_id"
                 required
-                hx-get="/submission/event-teams"
-                hx-target="#team-id"
-                hx-swap="innerHTML"
-                hx-trigger="change"
+                tt-change="/submission/event-teams?event_id={value}"
+                tt-target="#team-id"
                 class="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-colors">
                 <option value="" disabled selected="@(prefillEventId == null)">Select event</option>
                 @if (events is { Count: > 0 })

@@ -2,14 +2,14 @@
 
 ASP.NET Core (.NET 10) port of the Go/Gin TealTeam FRC scouting server, built
 for a local LAN server with wired-ethernet clients (scouting tablets/laptops
-at a competition). It is a faithful port: same routes, same HTMX-driven UI,
+at a competition). It is a faithful port: same routes, same Unpoly-driven UI,
 same PostgreSQL schema and SQL migrations, same session cookie — the Go app
 and this app can run side by side against the same database.
 
 ## Stack decisions
 
 - **ASP.NET Core MVC + Razor views, not Blazor.** The original app is
-  server-rendered HTML plus HTMX fragments. MVC controllers returning views
+  server-rendered HTML plus Unpoly fragments. MVC controllers returning views
   and partial views map 1:1 onto the Gin handlers and Go templates. Blazor
   Server would replace the stateless HTTP model with a persistent SignalR
   circuit per client — worse on a Pi-class LAN server with many tablets and
@@ -19,8 +19,9 @@ and this app can run side by side against the same database.
   project targets. Kestrel binds `0.0.0.0:$PORT` so LAN clients can connect.
 - **Dapper + Npgsql, not EF Core.** The Go code is hand-written SQL via GORM;
   Dapper keeps the queries nearly identical and the footprint small.
-- **HTMX is vendored locally** (`wwwroot/static/js/htmx.min.js`) instead of
-  loaded from unpkg, so the UI works on an offline event LAN.
+- **Unpoly is vendored locally** (`wwwroot/static/js/unpoly.min.js` + `.css`)
+  so the UI works on an offline event LAN. `tt-unpoly.js` is a small glue layer;
+  see the rust port's README for the full HTMX-to-Unpoly attribute mapping.
 
 ## Layout
 
@@ -32,7 +33,7 @@ Services/               internal/frc (FIRST client, TBA client, sync loops),
                         sessions/auth, scouting point weights
 Controllers/            internal/handlers (same routes)
 Views/Pages, Partials   web/templates/pages, partials (Razor)
-wwwroot/static          web/static + built Tailwind CSS + vendored HTMX
+wwwroot/static          web/static + built Tailwind CSS + vendored Unpoly
 ```
 
 SQL migrations are shared with the Go app: `../../migrations/*.sql` is copied

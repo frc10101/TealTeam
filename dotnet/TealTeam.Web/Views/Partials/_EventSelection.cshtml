@@ -9,12 +9,10 @@
         <form
             action="/api/events/select"
             method="post"
-            hx-post="/api/events/select"
-            hx-target="#event-selection-panel"
-            hx-swap="outerHTML transition:true"
-            hx-indicator="#event-selection-indicator"
-            hx-trigger="change, submit"
-            hx-on::after-request="htmx.trigger(document.body, 'eventSelected'); htmx.trigger(document.body, 'reload-matches')"
+            up-submit
+            up-autosubmit
+            up-target="#event-selection-panel"
+            up-on-inserted="up.emit('eventSelected'); up.emit('reload-matches')"
             class="flex flex-col gap-4 sm:flex-row sm:items-end">
             <div class="flex-1">
                 <label for="event-selection" class="block text-sm font-medium text-gray-300 mb-2">Current Event</label>

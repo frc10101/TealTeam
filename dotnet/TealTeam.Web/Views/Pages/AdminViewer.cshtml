@@ -59,8 +59,8 @@
                                             <td class="py-3 text-right">
                                                 <div class="flex justify-end gap-2">
                                                     <a href="/lead-scout/submissions/@submission.Id" target="_blank" class="btn btn-sm btn-secondary">View</a>
-                                                    <button class="btn btn-sm btn-primary" hx-post="/hx/lead-scout/submissions/@submission.Id/approve" hx-target="#submission-@submission.Id" hx-swap="outerHTML transition:true">Approve</button>
-                                                    <button class="btn btn-sm btn-danger" hx-post="/hx/lead-scout/submissions/@submission.Id/decline" hx-target="#submission-@submission.Id" hx-swap="outerHTML transition:true">Decline</button>
+                                                    <button class="btn btn-sm btn-primary" up-href="/hx/lead-scout/submissions/@submission.Id/approve" up-method="post" up-target=":none">Approve</button>
+                                                    <button class="btn btn-sm btn-danger" up-href="/hx/lead-scout/submissions/@submission.Id/decline" up-method="post" up-target=":none">Decline</button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -95,9 +95,7 @@
                     {
                         <div
                             id="admin-match-schedule-container"
-                            hx-get="/hx/matches/schedule"
-                            hx-trigger="load, every 30s, eventSelected from:body"
-                            hx-swap="innerHTML"
+                            tt-src="/hx/matches/schedule" tt-load tt-poll="30000" tt-on="eventSelected"
                             class="fade-swap">
                             <div class="flex justify-center py-6">
                                 <span class="loading-spinner"></span>

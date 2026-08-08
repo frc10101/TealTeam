@@ -81,7 +81,7 @@
             <!-- Message Container -->
             <div id="password-response" class="mb-4"></div>
 
-            <form id="change-password-form" hx-post="/api/account/change-password" hx-swap="innerHTML" hx-target="#password-response" class="space-y-4">
+            <form id="change-password-form" action="/api/account/change-password" method="post" up-submit up-target="#password-response" class="space-y-4">
                 <div>
                     <label for="current-password" class="block text-sm font-medium text-gray-300 mb-2">Current Password</label>
                     <input

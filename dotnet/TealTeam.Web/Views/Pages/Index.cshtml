@@ -21,9 +21,7 @@
     <!-- Match Schedule (auto-refreshes every 30 seconds) -->
     <div
         id="match-schedule-container"
-        hx-get="/hx/matches/schedule"
-        hx-trigger="load, every 30s, eventSelected from:body"
-        hx-swap="innerHTML"
+        tt-src="/hx/matches/schedule" tt-load tt-poll="30000" tt-on="eventSelected"
         class="fade-swap">
         <div class="flex justify-center py-8">
             <span class="loading-spinner"></span>

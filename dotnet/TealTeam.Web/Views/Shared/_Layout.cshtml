@@ -9,11 +9,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>@(string.IsNullOrEmpty(title) ? "" : title + " | ")Teal Team</title>
 
-    <!-- Tailwind CSS (compiled) -->
+    <!-- Unpoly + Tailwind CSS (vendored locally so the app works on an offline LAN) -->
+    <link rel="stylesheet" href="/static/css/unpoly.min.css">
     <link rel="stylesheet" href="/static/css/site.css">
-
-    <!-- HTMX (vendored locally so the app works on an offline LAN) -->
-    <script src="/static/js/htmx.min.js"></script>
+    <script src="/static/js/unpoly.min.js"></script>
+    <script src="/static/js/tt-unpoly.js"></script>
 </head>
 <body class="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-gray-950 text-gray-100 dark">
     <!-- Navigation -->
@@ -60,8 +60,7 @@
                                 Account
                             </a>
                             <button
-                                hx-post="/api/auth/logout"
-                                hx-swap="none"
+                                up-href="/api/auth/logout" up-method="post" up-target=":none"
                                 class="text-sm font-medium text-gray-300 hover:text-teal-300 transition-colors px-3 py-1.5 rounded-lg border border-gray-700 hover:border-teal-500">
                                 Logout
                             </button>
@@ -117,8 +116,7 @@
                     <div class="mt-2 pt-2 border-t border-gray-700">
                         <a href="/account" class="block px-2 py-2 text-gray-300 hover:text-teal-300 hover:bg-gray-800 rounded transition-colors text-sm font-medium">Account</a>
                         <button
-                            hx-post="/api/auth/logout"
-                            hx-swap="none"
+                            up-href="/api/auth/logout" up-method="post" up-target=":none"
                             class="w-full text-left px-2 py-2 text-gray-300 hover:text-teal-300 hover:bg-gray-800 rounded transition-colors text-sm font-medium">
                             Logout
                         </button>

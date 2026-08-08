@@ -16,7 +16,7 @@ public abstract class AppController(Db db, SessionService sessions) : Controller
     protected readonly Db Db = db;
     protected readonly SessionService Sessions = sessions;
 
-    protected bool IsHtmx => Request.Headers["HX-Request"] == "true";
+    protected bool IsUnpoly => Request.Headers.ContainsKey("X-Up-Version");
 
     protected ViewResult Page(string name) => View($"~/Views/Pages/{name}.cshtml");
 
@@ -139,36 +139,37 @@ public abstract class AppController(Db db, SessionService sessions) : Controller
         return match.Success ? match.Groups[1].Value.ToLowerInvariant() : "";
     }
 
-    // HTML fragments returned by the auth endpoints (port of sendAuthResponse).
-    protected ContentResult AuthResponse(bool success, string message, string redirect = "")
+    /// <summary>
+    /// Server-driven full navigation — the Unpoly analog of htmx's HX-Redirect.
+    /// Emits a tt:navigate event via X-Up-Events (tt-unpoly.js turns it into
+    /// window.location) and skips fragment rendering with X-Up-Target: :none.
+    /// </summary>
+    protected ContentResult UpNavigate(string to)
     {
-        if (redirect != "")
-        {
-            Response.Headers["HX-Redirect"] = redirect;
-        }
+        Response.Headers["X-Up-Events"] =
+            $$"""[{"type":"tt:navigate","url":"{{to}}"}]""";
+        Response.Headers["X-Up-Target"] = ":none";
+        return Content("", "text/html; charset=utf-8");
+    }
 
-        var html = success
-            ? $"""
-               <div class="bg-green-900/20 border border-green-500 text-green-300 px-4 py-3 rounded mb-4" role="alert">
-                   <div class="flex items-center gap-2">
-                       <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                       </svg>
-                       <span class="block sm:inline font-medium">{System.Net.WebUtility.HtmlEncode(message)}</span>
-                   </div>
-               </div>
-               """
-            : $"""
-               <div class="bg-red-900/20 border border-red-500 text-red-300 px-4 py-3 rounded mb-4" role="alert">
-                   <div class="flex items-center gap-2">
-                       <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                       </svg>
-                       <span class="block sm:inline font-medium">{System.Net.WebUtility.HtmlEncode(message)}</span>
-                   </div>
-               </div>
-               """;
-
+    /// <summary>
+    /// Failure fragment for the auth forms, wrapped so its root matches the
+    /// up-target (#form-response). On success the endpoints navigate instead.
+    /// </summary>
+    protected ContentResult AuthError(string message)
+    {
+        var html = $"""
+            <div id="form-response" class="fade-swap">
+                <div class="bg-red-900/20 border border-red-500 text-red-300 px-4 py-3 rounded mb-4" role="alert">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span class="block sm:inline font-medium">{System.Net.WebUtility.HtmlEncode(message)}</span>
+                    </div>
+                </div>
+            </div>
+            """;
         return Content(html, "text/html; charset=utf-8");
     }
 

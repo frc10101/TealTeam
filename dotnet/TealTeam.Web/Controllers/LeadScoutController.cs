@@ -336,8 +336,7 @@ public class LeadScoutController(
             }
         });
 
-        Response.Headers["HX-Redirect"] = "/lead-scout";
-        return Ok();
+        return UpNavigate("/lead-scout");
     }
 
     [HttpPost("/hx/lead-scout/submissions/{id:int}/decline")]
@@ -360,8 +359,7 @@ public class LeadScoutController(
             return StatusCode(500, "Failed to decline submission");
         }
 
-        Response.Headers["HX-Redirect"] = "/lead-scout";
-        return Ok();
+        return UpNavigate("/lead-scout");
     }
 
     [HttpGet("/lead-scout/weights")]
