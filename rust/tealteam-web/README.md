@@ -6,6 +6,22 @@ faithful port of the Go and ASP.NET Core apps: same routes, same Unpoly-driven U
 the **same PostgreSQL schema and SQL migrations**, and the same session cookie —
 all three implementations can run side by side against one database.
 
+## Documentation
+
+- **This file** — stack decisions, layout, configuration, how to run and deploy.
+- **[`docs/RUST_PORT.md`](../../docs/RUST_PORT.md)** — architecture in depth:
+  request model, route table, data model, the scouting data flow, offline
+  behaviour, and recipes for adding a page or a fragment.
+- **rustdoc** — reference for every module and item, including the invariants
+  each module is responsible for:
+
+  ```sh
+  cargo doc --no-deps --document-private-items --open
+  ```
+
+  `--document-private-items` is required: this is a binary crate, so most items
+  are private to it and are otherwise omitted.
+
 ## Stack decisions
 
 - **axum + Askama, not a heavier framework.** The app is server-rendered HTML
@@ -30,22 +46,41 @@ all three implementations can run side by side against one database.
 
 ## Layout
 
+The crate is organised as MVC, mirroring the C# port's
+Controllers/Models/Views split:
+
 ```
-src/main.rs            startup: env, migrations, boot sync, Kestrel-equivalent bind
-src/db.rs              SQL migration runner (schema_migrations, shared with Go/C#)
-src/models.rs          entity structs (sqlx::FromRow)
-src/session.rs         cookie + DB sessions, bcrypt
-src/connectivity.rs    internet/API health tracking for offline-aware behavior
-src/first_api.rs       FIRST Events API client
-src/tba.rs             The Blue Alliance API client
-src/tba_stats_sync.rs  shared stats/matches upsert
-src/first_sync.rs      FIRST sync (boot + on-login)
-src/stats_syncer.rs    background TBA sync loop (tokio task)
-src/scouting_points.rs configurable ranking point weights
-src/handlers/*         one module per controller, same routes
-templates/*            Askama templates (layout + pages + partials)
-static/*               vendored Unpoly, tt-unpoly.js glue, site JS/CSS, device.js
+src/main.rs              startup: config, migrations, boot sync, bind
+src/config.rs            env/.env config, migrations//static/ path lookup
+src/routes.rs            URL table — every route maps to one controller action
+src/state.rs             AppState (the sqlx pool) shared with every handler
+src/web.rs               HTTP plumbing: error type, forms, Unpoly helpers, current user
+src/db.rs                SQL migration runner (schema_migrations, shared with Go/C#)
+
+src/models/*             MODEL — entities (sqlx::FromRow) + every SQL statement
+  user, session            accounts, bcrypt, cookie + DB sessions
+  event, team, stats       events, rosters, synced TBA/FIRST statistics
+  scouting, scouting_points  submissions, approved data, ranking point weights
+  assignment, device       matches, per-match slot assignments, scouting tablets
+  pick_list, schema        pick list entries, DB-viewer introspection
+
+src/views/*              VIEW — Askama template structs + view models/formatting
+  home, auth, events, submission, lead_scout, assignments,
+  teams, matches, coach, db_viewer, network
+
+src/controllers/*        CONTROLLER — request handling, no SQL and no markup
+  home, auth, submission, lead_scout, assignments,
+  teams, matches, coach, db_viewer, api
+
+src/services/*           external world: FIRST/TBA clients, sync jobs, connectivity
+
+templates/*              Askama templates (layout + pages + partials)
+static/*                 vendored Unpoly, tt-unpoly.js glue, site JS/CSS, device.js
 ```
+
+The dependency direction is one-way: controllers use models, views and
+services; views use models (never the database); models and services know
+nothing about HTTP.
 
 Migrations are shared with the other ports: `../../migrations/*.sql` is applied
 through the same `schema_migrations` table.

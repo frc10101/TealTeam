@@ -23,7 +23,9 @@ internal/
   logging/                       # slog setup + request/recovery middleware
   middleware/                    # Shared middleware package
   models/                        # DB model structs
-migrations/                      # Ordered SQL migrations (0001, 0005-0012)
+migrations/                      # Ordered SQL migrations (0001, 0005-0012), shared by all ports
+rust/tealteam-web/               # Rust/axum port (see docs/RUST_PORT.md)
+dotnet/TealTeam.Web/             # ASP.NET Core port
 web/
   templates/                     # Full pages and partials
   static/                        # Built CSS/JS and static assets
@@ -222,6 +224,7 @@ For Raspberry Pi event deployment and autostart setup, see `docs/PI_EVENT_BOOT.m
 
 ## Additional Docs
 
+- `docs/RUST_PORT.md` — architecture of the Rust/axum port
 - `ARCHITECTURE.md`
 - `docs/ARCHITECTURE_DIAGRAM.md`
 - `docs/TIMEZONE_HANDLING.md`
