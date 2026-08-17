@@ -1,23 +1,68 @@
-// Rust/axum port of the TealTeam scouting server (cmd/web/main.go and
-// dotnet/TealTeam.Web/Program.cs). Same routes, same PostgreSQL schema and
-// migrations, same session cookie — all three ports can share one database.
+//! Rust/axum port of the TealTeam FRC scouting server.
+//!
+//! This is one of three interchangeable implementations of the same
+//! application — the others are the Go original (`cmd/web/main.go`) and the
+//! ASP.NET Core port (`dotnet/TealTeam.Web/Program.cs`). All three serve the
+//! same routes, run the same SQL migrations against the same PostgreSQL
+//! schema, and issue the same `session_id` cookie with bcrypt password hashes,
+//! so they can run side by side against one database and a user created in any
+//! of them can sign into the others.
+//!
+//! It is built to run on a LAN server at a competition (often a Raspberry Pi)
+//! with scouting tablets connected over wired ethernet, so every page degrades
+//! sensibly when the internet — or even the database — is unreachable.
+//!
+//! # Layers
+//!
+//! The crate is organised as MVC, mirroring the C# port's
+//! Controllers/Models/Views split:
+//!
+//! | Module | Role |
+//! |---|---|
+//! | [`models`] | Entities and **every** SQL statement in the app |
+//! | [`views`] | Askama template structs, view models, and all formatting |
+//! | [`controllers`] | Request handling: no SQL, no markup |
+//! | [`routes`] | The URL table — one route per controller action |
+//! | [`services`] | The outside world: FIRST/TBA clients and background sync |
+//! | [`web`] | HTTP plumbing shared by controllers |
+//! | [`config`], [`db`], [`state`] | Startup configuration, migrations, shared state |
+//!
+//! Dependencies run one way: controllers use models, views and services; views
+//! use models but never the database; models and services know nothing about
+//! HTTP.
+//!
+//! # Request flow
+//!
+//! ```text
+//! Browser ──▶ routes ──▶ controllers ──▶ models   ──▶ PostgreSQL
+//!                            │        └─▶ services ──▶ FIRST / TBA
+//!                            ▼
+//!                          views ──▶ Askama templates ──▶ HTML
+//! ```
+//!
+//! Most pages are full HTML documents; interactive regions are re-rendered as
+//! Unpoly fragments returned from the same controllers (see [`web::is_unpoly`]).
+//!
+//! # Startup
+//!
+//! [`main`] reads [`config::Config`] from the environment, opens a lazy
+//! connection pool, applies migrations from the shared `migrations/`
+//! directory, kicks off the boot-time FIRST sync and the background TBA sync
+//! loop, then serves [`routes::router`] plus `/static`.
 
 // Entity/view structs mirror the full DB schema; not every column is read back
 // out in every code path, which is expected for a faithful port.
 #![allow(dead_code)]
 
-mod connectivity;
+mod config;
+mod controllers;
 mod db;
-mod first_api;
-mod first_sync;
-mod handlers;
 mod models;
-mod scouting_points;
-mod session;
+mod routes;
+mod services;
 mod state;
-mod stats_syncer;
-mod tba;
-mod tba_stats_sync;
+mod views;
+mod web;
 
 use std::sync::Arc;
 
@@ -26,11 +71,15 @@ use state::AppState;
 use tower_http::services::ServeDir;
 use tracing::{info, warn};
 
+/// Boots the server: configuration, database, background jobs, then serve.
+///
+/// The pool is lazy and the boot-time `SELECT 1` is only a probe — if the
+/// database is down the server still starts (matching the Go app) and
+/// DB-backed pages degrade rather than the process refusing to run, which
+/// matters when the box powers on before the database container does.
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Load .env for local development (app dir first, then repo root).
-    load_dotenv(".env");
-    load_dotenv("../../.env");
+    let config = config::Config::from_environment()?;
 
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -39,39 +88,12 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    // "test" resets migration history on boot (like the Go app's -env=test).
-    let app_env = std::env::var("TEALTEAM_ENV")
-        .unwrap_or_else(|_| "test".into())
-        .trim()
-        .to_lowercase();
-    if app_env != "test" && app_env != "prod" {
-        anyhow::bail!("invalid environment: {app_env}");
-    }
-
-    let port = std::env::var("PORT")
-        .ok()
-        .filter(|p| !p.trim().is_empty())
-        .unwrap_or_else(|| "8080".into());
-
-    let database_url = if app_env == "prod" {
-        std::env::var("RENDER_DATABASE_URL")
-            .or_else(|_| std::env::var("DATABASE_URL"))
-            .map_err(|_| {
-                anyhow::anyhow!(
-                    "production mode requires RENDER_DATABASE_URL or DATABASE_URL environment variable"
-                )
-            })?
-    } else {
-        std::env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "postgres://user:password@127.0.0.1:5432/yourdb?sslmode=disable".into())
-    };
-
-    info!("running in {} mode", app_env.to_uppercase());
+    info!("running in {} mode", config.app_env.to_uppercase());
 
     let pool = PgPoolOptions::new()
         .max_connections(25)
         .acquire_timeout(std::time::Duration::from_secs(10))
-        .connect_lazy(&database_url)?;
+        .connect_lazy(&config.database_url)?;
 
     // Like the Go app, the server still starts if the database is unavailable;
     // DB-backed pages degrade.
@@ -79,12 +101,12 @@ async fn main() -> anyhow::Result<()> {
     if db_available {
         info!("database connected successfully");
 
-        if app_env == "test" {
+        if config.is_test() {
             db::reset_migrations(&pool).await?;
         }
-        db::apply_migrations(&pool, &db::resolve_migrations_dir()).await?;
+        db::apply_migrations(&pool, &config::migrations_dir()).await?;
 
-        first_sync::sync_on_boot(&pool).await;
+        services::first_sync::sync_on_boot(&pool).await;
     } else {
         warn!("database connection failed, running without database");
     }
@@ -92,68 +114,15 @@ async fn main() -> anyhow::Result<()> {
     let state = Arc::new(AppState { pool: pool.clone() });
 
     // Background TBA stats/matches sync loop.
-    tokio::spawn(stats_syncer::run(pool.clone()));
+    tokio::spawn(services::stats_syncer::run(pool.clone()));
 
-    let app = handlers::router(state)
-        .nest_service("/static", ServeDir::new(resolve_static_dir()))
+    let app = routes::router(state)
+        .nest_service("/static", ServeDir::new(config::static_dir()))
         .layer(tower_http::trace::TraceLayer::new_for_http());
 
-    let addr = format!("0.0.0.0:{port}");
+    let addr = format!("0.0.0.0:{}", config.port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     info!("server listening on http://{addr}");
     axum::serve(listener, app).await?;
     Ok(())
-}
-
-/// Minimal .env loader mirroring godotenv (ignored if missing; existing
-/// environment variables win).
-fn load_dotenv(path: &str) {
-    let Ok(content) = std::fs::read_to_string(path) else {
-        return;
-    };
-    for raw_line in content.lines() {
-        let line = raw_line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        let Some(idx) = line.find('=') else { continue };
-        if idx == 0 {
-            continue;
-        }
-        let key = line[..idx].trim();
-        let value = line[idx + 1..].trim().trim_matches('"');
-        if std::env::var(key).is_err() {
-            std::env::set_var(key, value);
-        }
-    }
-}
-
-fn resolve_static_dir() -> std::path::PathBuf {
-    find_upwards("static").unwrap_or_else(|| "static".into())
-}
-
-/// Locate a directory named `name` by walking up from both the executable's
-/// location and the current working directory. This lets the binary find the
-/// shared `migrations/` and `static/` dirs whether it's launched via
-/// `cargo run` (cwd = crate root) or directly from `target/release/`, and finds
-/// a copy sitting next to the binary in a publish layout.
-pub fn find_upwards(name: &str) -> Option<std::path::PathBuf> {
-    let mut starts = Vec::new();
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            starts.push(dir.to_path_buf());
-        }
-    }
-    if let Ok(cwd) = std::env::current_dir() {
-        starts.push(cwd);
-    }
-    for start in starts {
-        for ancestor in start.ancestors() {
-            let candidate = ancestor.join(name);
-            if candidate.is_dir() {
-                return Some(candidate);
-            }
-        }
-    }
-    None
 }

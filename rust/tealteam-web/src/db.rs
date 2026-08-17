@@ -1,10 +1,21 @@
-// SQL migration runner tracked in schema_migrations, shared with the Go and
-// .NET apps (port of internal/db/migrate.go).
+//! SQL migration runner, a port of `internal/db/migrate.go`.
+//!
+//! Migrations live in the repo-level `migrations/` directory and are shared
+//! with the Go and .NET apps: each file is applied once, in filename order,
+//! inside a transaction, and recorded in the `schema_migrations` table that
+//! all three implementations read. Whichever port boots first applies any
+//! pending files; the others then see them as already applied.
 
 use anyhow::Context;
 use sqlx::PgPool;
 use tracing::info;
 
+/// Applies every `*.sql` file in `dir` that is not yet recorded in
+/// `schema_migrations`, in filename order.
+///
+/// Each file runs in its own transaction together with its history row, so a
+/// failing migration leaves no partial schema change behind. Empty files are
+/// skipped. Errors if `dir` does not exist.
 pub async fn apply_migrations(pool: &PgPool, dir: &std::path::Path) -> anyhow::Result<()> {
     if !dir.is_dir() {
         anyhow::bail!("migrations directory not found: {}", dir.display());
@@ -58,14 +69,13 @@ pub async fn apply_migrations(pool: &PgPool, dir: &std::path::Path) -> anyhow::R
     Ok(())
 }
 
-/// Clears migration history (test databases only).
+/// Drops the migration history table so the next [`apply_migrations`] call
+/// re-runs everything.
+///
+/// Test databases only — [`crate::config::Config::is_test`] gates the call.
 pub async fn reset_migrations(pool: &PgPool) -> anyhow::Result<()> {
     sqlx::query("DROP TABLE IF EXISTS schema_migrations")
         .execute(pool)
         .await?;
     Ok(())
-}
-
-pub fn resolve_migrations_dir() -> std::path::PathBuf {
-    crate::find_upwards("migrations").unwrap_or_else(|| "migrations".into())
 }
