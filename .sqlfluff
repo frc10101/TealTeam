@@ -1,9 +1,0 @@
-[sqlfluff]
-dialect = postgres
-templater = raw
-max_line_length = 120
-# Hand-written migrations: don't fight existing layout choices.
-exclude_rules = LT05,LT09,AM04
-
-[sqlfluff:indentation]
-tab_space_size = 4
