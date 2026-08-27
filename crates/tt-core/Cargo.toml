@@ -1,0 +1,15 @@
+[package]
+name = "tt-core"
+version = "0.1.0"
+edition = "2024"
+description = "Pure TealTeam domain logic. Compiles to wasm32; no I/O, no database, no HTTP."
+
+[dependencies]
+chrono = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+# NOTE: this crate must never gain sqlx, axum, tokio, reqwest, or chrono's
+# "clock" feature. Functions that need the current time take it as a parameter
+# -- which is also what makes them testable. See the CI wasm32 gate.

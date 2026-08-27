@@ -1,0 +1,31 @@
+[package]
+name = "tt-web"
+version = "0.1.0"
+edition = "2024"
+description = "axum server binary. The only crate that knows about HTTP."
+
+[dependencies]
+tt-core = { workspace = true }
+tt-templates = { workspace = true }
+tt-repo = { workspace = true }
+tt-repo-sqlite = { workspace = true }
+
+anyhow = { workspace = true }
+argon2 = { workspace = true }
+axum = { workspace = true }
+axum-extra = { workspace = true }
+base64 = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+time = { workspace = true }
+chrono = { workspace = true, features = ["clock"] }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+tower-http = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }

@@ -1,0 +1,44 @@
+{% extends "layout.html" %}
+{% block content %}
+<section class="card narrow">
+  <div class="card-header"><h1>Create an account</h1></div>
+  <div class="card-body">
+    {% if !error.is_empty() %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endif %}
+    {% if first_account %}
+      <p class="alert alert-info">
+        This is the first account on this server, so it will be an administrator.
+      </p>
+    {% endif %}
+    <form method="post" action="/api/auth/signup" class="stack">
+      <label class="field">
+        <span class="form-label">Name</span>
+        <input class="form-input" name="name" value="{{ name }}" autocomplete="name" required autofocus>
+      </label>
+      <label class="field">
+        <span class="form-label">Email</span>
+        <input class="form-input" type="email" name="email" value="{{ email }}"
+               autocomplete="username" required>
+      </label>
+      <label class="field">
+        <span class="form-label">Team number</span>
+        <input class="form-input" name="team_number" value="{{ team_number }}"
+               inputmode="numeric" placeholder="10101">
+        <span class="hint">Optional. Used to show your team's events and notes.</span>
+      </label>
+      <label class="field">
+        <span class="form-label">Password</span>
+        <input class="form-input" type="password" name="password"
+               autocomplete="new-password" required>
+        <span class="hint">At least 8 characters.</span>
+      </label>
+      <label class="field">
+        <span class="form-label">Confirm password</span>
+        <input class="form-input" type="password" name="confirm_password"
+               autocomplete="new-password" required>
+      </label>
+      <button class="btn btn-primary" type="submit">Create account</button>
+    </form>
+    <p class="muted">Already have one? <a href="/sign-in">Sign in</a>.</p>
+  </div>
+</section>
+{% endblock %}

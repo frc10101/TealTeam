@@ -1,0 +1,20 @@
+{% extends "layout.html" %}
+{% block content %}
+<section class="card">
+  <div class="card-header"><h1>TealTeam Scouting</h1></div>
+  <div class="card-body">
+    {% if nav.signed_in %}
+      <p>Signed in as <strong>{{ nav.name }}</strong>{% if !team_display.is_empty() %} · team {{ team_display }}{% endif %}.</p>
+      <p class="muted">Season: {{ season_name }} ({{ season_year }})</p>
+      <p><a class="btn btn-primary" href="/submission">Start scouting</a></p>
+    {% else %}
+      <p>Scouting and analytics for FRC team 10101.</p>
+      <p class="muted">Season: {{ season_name }} ({{ season_year }})</p>
+      <p>
+        <a class="btn btn-primary" href="/sign-in">Sign in</a>
+        <a class="btn btn-secondary" href="/sign-up">Create an account</a>
+      </p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

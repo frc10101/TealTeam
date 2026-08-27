@@ -1,0 +1,58 @@
+{#
+  The one layout every page extends.
+
+  Nav links are role-gated: a scout never sees a Lead Scout tab, which is the
+  first half of access control. The second half is the typed guard on the
+  handler -- the nav hiding a link is a courtesy, not a permission check.
+#}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% if title.is_empty() %}TealTeam{% else %}{{ title }} · TealTeam{% endif %}</title>
+    {# Vendored, never CDN: this has to work on an event LAN with no internet. #}
+    <link rel="stylesheet" href="/static/css/site.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="nav">
+      <div class="nav-inner">
+        <a class="brand" href="/">TealTeam</a>
+
+        <nav class="nav-links" aria-label="Main">
+          <a href="/">Home</a>
+          {% if nav.signed_in %}<a href="/submission">Scout</a>{% endif %}
+          {% if nav.can_lead %}<a href="/lead-scout">Lead Scout</a>{% endif %}
+          {% if nav.can_coach %}<a href="/drive-coach">Drive Coach</a>{% endif %}
+        </nav>
+
+        <div class="nav-account">
+          {% if nav.signed_in %}
+            <a href="/account">{{ nav.name }}</a>
+            <form method="post" action="/api/auth/logout" class="inline">
+              <button type="submit" class="btn btn-secondary btn-sm">Sign out</button>
+            </form>
+          {% else %}
+            <a href="/sign-in" class="btn btn-secondary btn-sm">Sign in</a>
+          {% endif %}
+        </div>
+      </div>
+    </header>
+
+    <main id="main" class="page">
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+      <span>TealTeam · FRC 10101</span>
+      {# A visible storage indicator, because a degraded server must say so. #}
+      {% if !nav.storage_ready %}
+        <span class="badge badge-red">Storage unavailable — data is not being saved</span>
+      {% endif %}
+    </footer>
+
+    <script src="/static/js/device.js" defer></script>
+  </body>
+</html>

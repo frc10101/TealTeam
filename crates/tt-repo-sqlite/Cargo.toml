@@ -1,0 +1,15 @@
+[package]
+name = "tt-repo-sqlite"
+version = "0.1.0"
+edition = "2024"
+description = "Server-side Repo implementation over SQLite. The only crate that depends on sqlx."
+
+[dependencies]
+tt-core = { workspace = true }
+tt-repo = { workspace = true }
+sqlx = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

@@ -1,0 +1,14 @@
+{% extends "layout.html" %}
+{% block content %}
+<section class="card">
+  <div class="card-header"><h1>{{ heading }}</h1></div>
+  <div class="card-body">
+    <p>{{ summary }}.</p>
+    <p class="alert alert-info">
+      Not built yet. This page is reachable, and access to it is already
+      enforced — the content arrives with phase 2.
+    </p>
+    <p class="muted">Season: {{ season_name }}</p>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,11 @@
+[package]
+name = "tt-repo"
+version = "0.1.0"
+edition = "2024"
+description = "The Repo trait: the seam between domain logic and storage."
+
+[dependencies]
+tt-core = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+trait-variant = { workspace = true }

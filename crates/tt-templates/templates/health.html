@@ -1,0 +1,22 @@
+{#
+  Minimal render-path proof for the wasm32 gate.
+
+  Askama compiles templates at build time, so this file existing and compiling
+  for wasm32-unknown-unknown is what demonstrates the render layer can move
+  browser-side later (ACTION_ITEMS.md C5/C6) with no framework and no rewrite.
+
+  The real layout arrives with U1.
+#}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TealTeam status</title>
+  </head>
+  <body>
+    <h1>TealTeam</h1>
+    <p>Storage: {% if storage_ready %}ready{% else %}unavailable (serving degraded){% endif %}</p>
+    <p>Schema: {% match schema_version %}{% when Some(v) %}v{{ v }}{% when None %}not yet migrated{% endmatch %}</p>
+  </body>
+</html>

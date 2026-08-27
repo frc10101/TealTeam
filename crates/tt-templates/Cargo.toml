@@ -1,0 +1,10 @@
+[package]
+name = "tt-templates"
+version = "0.1.0"
+edition = "2024"
+description = "Askama templates and view models. Compiles to wasm32 so rendering can move browser-side."
+
+[dependencies]
+tt-core = { workspace = true }
+askama = { workspace = true }
+thiserror = { workspace = true }

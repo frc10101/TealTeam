@@ -1,0 +1,151 @@
+{
+  "season": 2026,
+  "version": 1,
+  "name": "Rebuilt",
+
+  "_comment": [
+    "The 2026 FRC game is REBUILT. These are the stats scouts record for it.",
+    "",
+    "This file is the single source of truth for three things at once: the",
+    "scouting form's fields, the validation applied to submitted payloads, and",
+    "the point values used for team ranking. Change it here and all three follow.",
+    "",
+    "To adjust scoring without touching this file, a lead scout can override any",
+    "point value at runtime (scouting_point_weights / L12). Use that for in-season",
+    "tuning; use this file for the field set itself.",
+    "",
+    "Field keys are payload keys. Renaming one breaks existing data -- add a new",
+    "field and bump 'version' instead. crates/tt-core/src/season.rs validates this",
+    "file on every test run, so a typo here is a red build, not an event-day",
+    "surprise. See docs/ACTION_ITEMS.md D4."
+  ],
+
+  "sections": [
+    {
+      "key": "match",
+      "label": "Match context",
+      "fields": [
+        {
+          "key": "starting_position",
+          "label": "Starting position",
+          "required": true,
+          "type": "select",
+          "options": [
+            { "key": "left",   "label": "Left",   "points": 0 },
+            { "key": "center", "label": "Center", "points": 0 },
+            { "key": "right",  "label": "Right",  "points": 0 }
+          ]
+        },
+        {
+          "key": "no_show",
+          "label": "Did not show / disabled all match",
+          "help": "Tick this and skip the rest.",
+          "type": "toggle",
+          "points": 0
+        }
+      ]
+    },
+
+    {
+      "key": "scoring",
+      "label": "Scoring",
+      "fields": [
+        {
+          "key": "auto_scored",
+          "label": "Pieces scored in auto",
+                    "type": "counter",
+          "min": 0,
+          "max": 20,
+          "points_each": 4
+        },
+        {
+          "key": "teleop_scored",
+          "label": "Pieces scored in teleop",
+                    "type": "counter",
+          "min": 0,
+          "max": 60,
+          "points_each": 2
+        },
+        {
+          "key": "endgame",
+          "label": "Endgame result",
+                    "type": "select",
+          "options": [
+            { "key": "none",    "label": "Nothing",  "points": 0 },
+            { "key": "partial", "label": "Partial",  "points": 3 },
+            { "key": "full",    "label": "Complete", "points": 6 }
+          ]
+        }
+      ]
+    },
+
+    {
+      "key": "robot",
+      "label": "Robot and driver",
+      "fields": [
+        {
+          "key": "defense_rating",
+          "label": "Defense played",
+          "help": "How much and how well did they defend?",
+          "type": "select",
+          "options": [
+            { "key": "none",      "label": "None",           "points": 0 },
+            { "key": "some",      "label": "Some",           "points": 2 },
+            { "key": "heavy",     "label": "Heavy",          "points": 4 },
+            { "key": "shutdown",  "label": "Shut down a bot", "points": 6 }
+          ]
+        },
+        {
+          "key": "driver_skill",
+          "label": "Driver skill",
+          "type": "select",
+          "options": [
+            { "key": "struggling", "label": "Struggling", "points": 0 },
+            { "key": "average",    "label": "Average",    "points": 2 },
+            { "key": "strong",     "label": "Strong",     "points": 4 },
+            { "key": "excellent",  "label": "Excellent",  "points": 6 }
+          ]
+        },
+        {
+          "key": "speed",
+          "label": "Speed across the field",
+          "type": "select",
+          "options": [
+            { "key": "slow",   "label": "Slow",   "points": 1 },
+            { "key": "medium", "label": "Medium", "points": 2 },
+            { "key": "fast",   "label": "Fast",   "points": 4 }
+          ]
+        },
+        {
+          "key": "broke_down",
+          "label": "Broke down or tipped",
+          "help": "Reliability matters more than peak scoring for alliance picks.",
+          "type": "toggle",
+          "points": -5
+        },
+        {
+          "key": "penalties",
+          "label": "Penalties drawn",
+          "type": "counter",
+          "min": 0,
+          "max": 10,
+          "points_each": -2
+        }
+      ]
+    },
+
+    {
+      "key": "notes",
+      "label": "Notes",
+      "fields": [
+        {
+          "key": "notes",
+          "label": "Anything the numbers miss",
+          "help": "Visible only to your own team.",
+          "type": "text",
+          "max_len": 2000
+        }
+      ]
+    }
+  ]
+}

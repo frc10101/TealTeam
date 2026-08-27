@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  # Fail on warnings in CI, but not in local development, where a warning while
+  # you are mid-thought is just noise.
+  RUSTFLAGS: -D warnings
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # The crate-boundary gate (F2).
+  #
+  # This is the most important job in the file and the cheapest. tt-core and
+  # tt-templates must compile to wasm32-unknown-unknown, which they can only do
+  # while they stay free of sqlx, axum, tokio's net/fs features, reqwest, and
+  # chrono's "clock" feature.
+  #
+  # That is not a hypothetical constraint. The retired Rust implementation put
+  # ~187 inline sqlx queries inside its handlers, which made moving any logic
+  # browser-side impossible without a rewrite -- the single largest item in the
+  # refurbish plan. This job is what stops that happening again, and it catches
+  # the leak on the commit that introduces it rather than six months later.
+  #
+  # If this fails: the code you just added belongs in an adapter crate
+  # (tt-repo-sqlite, tt-web), not in the domain.
+  # ---------------------------------------------------------------------------
+  wasm-boundary:
+    name: wasm32 boundary
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust with wasm32 target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: wasm32
+
+      - name: Build pure crates for wasm32
+        run: cargo build -p tt-core -p tt-templates --target wasm32-unknown-unknown --locked
+
+  test:
+    name: Test and lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Formatting
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked
+
+      - name: Tests
+        run: cargo test --workspace --locked
+
+      # Cargo.lock is committed, so --locked above already fails on drift. This
+      # names the problem when it happens.
+      - name: Lockfile is current
+        run: cargo metadata --format-version 1 --locked > /dev/null
