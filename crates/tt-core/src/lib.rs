@@ -9,9 +9,12 @@
 //! every push. If that job fails, a server-only dependency has leaked in and
 //! the code belongs in an adapter crate instead.
 
+pub mod connectivity;
 pub mod error;
 pub mod matches;
+pub mod records;
 pub mod season;
+pub mod upstream;
 pub mod user;
 
 pub use error::{DomainError, Result};

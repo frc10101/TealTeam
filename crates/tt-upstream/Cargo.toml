@@ -1,0 +1,21 @@
+[package]
+name = "tt-upstream"
+version = "0.1.0"
+edition = "2024"
+description = "FIRST and Blue Alliance HTTP clients, plus the sync that lands their data in a Repo."
+
+[dependencies]
+tt-core = { workspace = true }
+tt-repo = { workspace = true }
+
+chrono = { workspace = true, features = ["clock"] }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tt-repo-sqlite = { workspace = true }
+axum = { workspace = true }

@@ -46,10 +46,16 @@ pub fn classify(scheduled: Option<DateTime<Utc>>, now: DateTime<Utc>) -> MatchSt
 }
 
 /// Tournament round. Serialized as the TBA `comp_level` string.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "lowercase")]
 pub enum CompLevel {
+    #[serde(rename = "qm")]
     Qualification,
+    #[serde(rename = "sf")]
     Semifinal,
+    #[serde(rename = "f")]
     Final,
 }
 

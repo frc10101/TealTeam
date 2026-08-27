@@ -20,7 +20,7 @@ pub(crate) fn from_sql(raw: &str) -> Option<DateTime<Utc>> {
         .map(|dt| dt.with_timezone(&Utc))
 }
 
-fn query_err(context: &str, e: sqlx::Error) -> RepoError {
+pub(crate) fn query_err(context: &str, e: sqlx::Error) -> RepoError {
     // A closed pool or missing file means storage is gone, which callers treat
     // differently from a query that ran and failed.
     match &e {

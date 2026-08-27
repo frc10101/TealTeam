@@ -15,6 +15,7 @@
 //!
 //! The pool is capped at one connection deliberately -- see [`connect`].
 
+mod competition;
 pub mod migrate;
 mod users;
 
@@ -23,6 +24,7 @@ use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use std::str::FromStr;
 use std::time::Duration;
 use tracing::warn;
+use tt_core::records::{Event, MatchRecord, Team, TeamEventStats};
 use tt_core::user::{Session, User};
 use tt_repo::{Credentials, Device, Health, NewUser, Repo, RepoError, Result};
 
@@ -181,6 +183,79 @@ impl Repo for SqliteRepo {
 
     async fn rename_device(&self, id: i64, name: &str, now: DateTime<Utc>) -> Result<()> {
         self.rename_device_impl(id, name, now).await
+    }
+
+    async fn upsert_event(&self, event: &Event, now: DateTime<Utc>) -> Result<()> {
+        self.upsert_event_impl(event, now).await
+    }
+
+    async fn event(&self, key: &str) -> Result<Option<Event>> {
+        self.event_impl(key).await
+    }
+
+    async fn list_events(&self) -> Result<Vec<Event>> {
+        self.list_events_impl().await
+    }
+
+    async fn events_for_team(&self, team_number: i32) -> Result<Vec<Event>> {
+        self.events_for_team_impl(team_number).await
+    }
+
+    async fn active_events(
+        &self,
+        date: chrono::NaiveDate,
+        lookahead_days: i64,
+    ) -> Result<Vec<Event>> {
+        self.active_events_impl(date, lookahead_days).await
+    }
+
+    async fn upsert_team(&self, team: &Team, now: DateTime<Utc>) -> Result<()> {
+        self.upsert_team_impl(team, now).await
+    }
+
+    async fn team(&self, number: i32) -> Result<Option<Team>> {
+        self.team_impl(number).await
+    }
+
+    async fn event_teams(&self, event_key: &str) -> Result<Vec<Team>> {
+        self.event_teams_impl(event_key).await
+    }
+
+    async fn link_event_team(
+        &self,
+        event_key: &str,
+        team_number: i32,
+        now: DateTime<Utc>,
+    ) -> Result<()> {
+        self.link_event_team_impl(event_key, team_number, now).await
+    }
+
+    async fn upsert_match(&self, record: &MatchRecord, now: DateTime<Utc>) -> Result<()> {
+        self.upsert_match_impl(record, now).await
+    }
+
+    async fn event_matches(&self, event_key: &str) -> Result<Vec<MatchRecord>> {
+        self.event_matches_impl(event_key).await
+    }
+
+    async fn team_matches(&self, event_key: &str, team_number: i32) -> Result<Vec<MatchRecord>> {
+        self.team_matches_impl(event_key, team_number).await
+    }
+
+    async fn upsert_team_stats(&self, stats: &TeamEventStats, now: DateTime<Utc>) -> Result<()> {
+        self.upsert_team_stats_impl(stats, now).await
+    }
+
+    async fn team_stats(
+        &self,
+        event_key: &str,
+        team_number: i32,
+    ) -> Result<Option<TeamEventStats>> {
+        self.team_stats_impl(event_key, team_number).await
+    }
+
+    async fn event_stats(&self, event_key: &str) -> Result<Vec<TeamEventStats>> {
+        self.event_stats_impl(event_key).await
     }
 }
 

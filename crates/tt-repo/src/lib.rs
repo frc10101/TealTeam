@@ -23,6 +23,7 @@
 
 use chrono::{DateTime, Utc};
 use thiserror::Error;
+use tt_core::records::{Event, MatchRecord, Team, TeamEventStats};
 use tt_core::user::{Roles, Session, User};
 
 /// Anything that can go wrong reaching storage.
@@ -205,6 +206,67 @@ pub trait LocalRepo {
     async fn list_devices(&self) -> Result<Vec<Device>>;
 
     async fn rename_device(&self, id: i64, name: &str, now: DateTime<Utc>) -> Result<()>;
+
+    // ── Competition graph ───────────────────────────────────────────────────
+
+    /// Insert or update an event, keyed on its TBA key.
+    ///
+    /// A real upsert, not select-then-insert: the retired schema lacked the
+    /// unique constraint that makes this possible, and paid for it with a race
+    /// (REBUILD_SPEC.md 12.11).
+    async fn upsert_event(&self, event: &Event, now: DateTime<Utc>) -> Result<()>;
+
+    async fn event(&self, key: &str) -> Result<Option<Event>>;
+
+    /// Every event, earliest first.
+    async fn list_events(&self) -> Result<Vec<Event>>;
+
+    /// Events a given team is attending.
+    async fn events_for_team(&self, team_number: i32) -> Result<Vec<Event>>;
+
+    /// Events running on `date`, or starting within `lookahead_days` of it.
+    ///
+    /// Drives the sync cadence: fast during an event, slow between them (I7).
+    async fn active_events(
+        &self,
+        date: chrono::NaiveDate,
+        lookahead_days: i64,
+    ) -> Result<Vec<Event>>;
+
+    async fn upsert_team(&self, team: &Team, now: DateTime<Utc>) -> Result<()>;
+
+    async fn team(&self, number: i32) -> Result<Option<Team>>;
+
+    /// The roster for an event, by team number.
+    async fn event_teams(&self, event_key: &str) -> Result<Vec<Team>>;
+
+    /// Record that a team is attending an event. Idempotent.
+    async fn link_event_team(
+        &self,
+        event_key: &str,
+        team_number: i32,
+        now: DateTime<Utc>,
+    ) -> Result<()>;
+
+    // ── Matches ─────────────────────────────────────────────────────────────
+
+    async fn upsert_match(&self, record: &MatchRecord, now: DateTime<Utc>) -> Result<()>;
+
+    /// An event's matches in playing order.
+    async fn event_matches(&self, event_key: &str) -> Result<Vec<MatchRecord>>;
+
+    /// Matches involving a team, in playing order.
+    async fn team_matches(&self, event_key: &str, team_number: i32) -> Result<Vec<MatchRecord>>;
+
+    // ── Statistics ──────────────────────────────────────────────────────────
+
+    async fn upsert_team_stats(&self, stats: &TeamEventStats, now: DateTime<Utc>) -> Result<()>;
+
+    async fn team_stats(&self, event_key: &str, team_number: i32)
+    -> Result<Option<TeamEventStats>>;
+
+    /// Every team's stats at an event, best rank first.
+    async fn event_stats(&self, event_key: &str) -> Result<Vec<TeamEventStats>>;
 }
 
 #[cfg(test)]
