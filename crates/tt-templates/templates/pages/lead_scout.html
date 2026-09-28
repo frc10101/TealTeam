@@ -17,7 +17,7 @@
     {# Outside the live region: the outcome of the press that led here stays
        put while the status below moves on. #}
     {% if !upstream.result_headline.is_empty() %}
-      <div class="alert {% if upstream.result_ok %}alert-success{% else %}alert-error{% endif %}" role="status">
+      <div class="alert {% if upstream.result_ok %}alert-success" role="status"{% else %}alert-error" role="alert"{% endif %}>
         <p>{{ upstream.result_headline }}</p>
         {% if !upstream.result_problems.is_empty() %}
           <ul>{% for problem in upstream.result_problems %}<li>{{ problem }}</li>{% endfor %}</ul>

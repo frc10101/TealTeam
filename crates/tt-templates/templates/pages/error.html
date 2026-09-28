@@ -1,0 +1,32 @@
+{#
+  Every dead end a browser can reach outside a page's own form (U10): an
+  unknown address, a form's address opened as a page, a request the server
+  could not use, a server fault. The status code is the server's; this only
+  says what it means and how to go on.
+#}
+{% extends "layout.html" %}
+{% block content %}
+<section class="card">
+  <div class="card-header"><h1>{{ kind.heading() }}</h1></div>
+  <div class="card-body stack">
+    {% match kind %}
+      {% when ErrorKind::NotFound %}
+        <p>Nothing is at this address. The link may be mistyped, or from an older version of TealTeam.</p>
+      {% when ErrorKind::FormAddress %}
+        <p>
+          This is the address a form sends its answers to, so there is nothing
+          to show by opening it directly. Nothing was sent or changed.
+        </p>
+      {% when ErrorKind::Refused %}
+        <p>
+          The server could not use what was sent. If it came from a form, the
+          page may be older than the server: reload that page and try again.
+        </p>
+      {% when ErrorKind::ServerFault %}
+        <p>The server hit a problem. Try again, and if it keeps happening, tell your lead scout.</p>
+    {% endmatch %}
+    <p><a class="btn btn-primary" href="/">Go to the home page</a></p>
+    <p class="muted">{{ status }} · {{ path }}</p>
+  </div>
+</section>
+{% endblock %}

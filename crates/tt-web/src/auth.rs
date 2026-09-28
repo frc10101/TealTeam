@@ -140,8 +140,9 @@ impl IntoResponse for AuthRedirect {
     }
 }
 
-async fn current_user(state: &AppState, parts: &Parts) -> Option<User> {
-    let jar = CookieJar::from_headers(&parts.headers);
+/// The user whose session cookie is in `headers`, if it is live.
+pub(crate) async fn current_user(state: &AppState, headers: &HeaderMap) -> Option<User> {
+    let jar = CookieJar::from_headers(headers);
     let session_id = jar.get(SESSION_COOKIE)?.value().to_string();
     if session_id.is_empty() {
         return None;
@@ -175,7 +176,7 @@ impl FromRequestParts<AppState> for MaybeAuth {
         parts: &mut Parts,
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
-        Ok(MaybeAuth(current_user(state, parts).await))
+        Ok(MaybeAuth(current_user(state, &parts.headers).await))
     }
 }
 
@@ -186,7 +187,7 @@ impl FromRequestParts<AppState> for Auth {
         parts: &mut Parts,
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
-        current_user(state, parts)
+        current_user(state, &parts.headers)
             .await
             .map(Auth)
             .ok_or(AuthRedirect("/sign-in"))
@@ -203,7 +204,7 @@ macro_rules! role_guard {
                 parts: &mut Parts,
                 state: &AppState,
             ) -> Result<Self, Self::Rejection> {
-                match current_user(state, parts).await {
+                match current_user(state, &parts.headers).await {
                     Some(user) if user.roles.$check() => Ok($guard(user)),
                     // Signed in but unauthorised: home, not a 403.
                     Some(_) => Err(AuthRedirect("/")),

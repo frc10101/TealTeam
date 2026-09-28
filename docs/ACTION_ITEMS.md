@@ -100,7 +100,7 @@ The goal is an app a scout can sign into and submit through. No sync, no offline
 | U7 | Tailwind component layer (`.btn` / `.card` / `.form-*` / `.alert` / `.badge` / `.data-table` / `.nav-link`) + teal palette | RS §7 | M | **Done** |
 | U8 | Re-create or deliberately design away the three Unpoly glue contracts: `tt:navigate` via `X-Up-Events`, `[tt-src]` polling regions, `[tt-change]` select-driven render | RS §7 | M | **Done** — designed away; live regions in `live.js` |
 | U9 | Dual-mode responses keyed on `X-Up-Version` — keeps the app usable when Unpoly fails to load | RS §7 | M | **Not needed** — one response mode (U8) |
-| U10 | Error and success fragments **in templates**, not inline Rust format strings | RS §7, §12 | S |  |
+| U10 | Error and success fragments **in templates**, not inline Rust format strings | RS §7, §12 | S | **Done** — no Rust builds HTML; one layer turns every other error into a page |
 
 ### Phase 1 notes
 
@@ -150,7 +150,20 @@ Why: every page already worked as plain HTML. Unpoly's gain would be skipping a 
 
 **U9 has nothing left to do.** There is one response mode, the one that works without JavaScript. `POST /api/frc/sync` still answers scripts with JSON by `Accept`, which is a different split and stays.
 
-**Still open in Phase 1:** U10 (error templates).
+**Errors are templates, and a browser never gets a blank screen (U10).** The spec's defect — error fragments built as Rust format strings with hand-called escaping — has no counterpart here: no Rust code builds HTML, handlers pass plain-text messages, and Askama escapes them. Form errors were already in each page's template, beside the field. One alert was inconsistent: a failed **Sync now** was announced as a polite status; it is now `role="alert"`, like every other error.
+
+What was left was everything that goes wrong *around* a handler. axum answers those with an empty body or a line of plain text, which on a phone is a dead end with no nav:
+
+| A browser reaches | It got | It gets |
+| --- | --- | --- |
+| A mistyped link or old bookmark (404) | A blank page | **Page not found**, with a way home |
+| A form's address opened as a page (405) — after a failed sign-in or save the address bar shows `/api/…`, so history or a restored tab lands there | A blank page | **Nothing to show here**, saying nothing was sent |
+| A form body the extractor rejects, e.g. a page older than the server (422, 415) | ``Failed to deserialize form body: missing field `password` `` | **That did not work**, and reload the page |
+| A fault inside a handler (5xx) | Plain text | **Something went wrong** — the internal text stays out of sight |
+
+This is one layer, `crates/tt-web/src/errors.rs`, not a handler per case, so a route added later cannot forget it. It rewrites a response only when the request asked for `text/html` and the body is not already HTML, and it keeps the status and headers (a 405 keeps `Allow`). Scripts, `fetch`, and a page's own `<script>` and `<link>` loads do not ask for HTML and get the original response; a script can still read why its post was refused. The text it replaces is logged, since that is the part worth reading. The page has the full layout with the right nav for whoever is signed in, and shows the status and address so a scout can read them out. The wording lives in `pages/error.html`, chosen by status. Checked against the binary and at 390px, and each guard in the layer was removed once to confirm a test fails without it.
+
+**Phase 1 is complete.**
 
 ---
 

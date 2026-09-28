@@ -256,6 +256,70 @@ pub struct PlaceholderPage {
     pub season_name: String,
 }
 
+/// Which dead end a browser reached (U10). Picks the wording on the error page;
+/// the status code itself stays whatever the server said.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ErrorKind {
+    /// 404: nothing at this address.
+    NotFound,
+    /// 405: the address a form posts to, opened as a page. After a form comes
+    /// back with an error the address bar shows it, so opening it again -- from
+    /// history, the address bar, or a restored tab -- lands here.
+    FormAddress,
+    /// Any other 4xx: the server could not use what was sent.
+    Refused,
+    /// 5xx.
+    ServerFault,
+}
+
+impl ErrorKind {
+    pub fn for_status(status: u16) -> Self {
+        match status {
+            404 => Self::NotFound,
+            405 => Self::FormAddress,
+            500.. => Self::ServerFault,
+            _ => Self::Refused,
+        }
+    }
+
+    /// The page heading, and its tab title.
+    pub fn heading(self) -> &'static str {
+        match self {
+            Self::NotFound => "Page not found",
+            Self::FormAddress => "Nothing to show here",
+            Self::Refused => "That did not work",
+            Self::ServerFault => "Something went wrong",
+        }
+    }
+}
+
+/// What a browser gets instead of an empty or plain-text error response
+/// (`tt-web`'s `errors` layer). Full layout, so the nav is there to go on from.
+#[derive(Template)]
+#[template(path = "pages/error.html")]
+pub struct ErrorPage {
+    pub title: String,
+    pub nav: Nav,
+    pub kind: ErrorKind,
+    pub status: u16,
+    /// The address asked for, shown so a scout can read it out to whoever is
+    /// fixing the link.
+    pub path: String,
+}
+
+impl ErrorPage {
+    pub fn new(status: u16, path: String, nav: Nav) -> Self {
+        let kind = ErrorKind::for_status(status);
+        Self {
+            title: kind.heading().into(),
+            nav,
+            kind,
+            status,
+            path,
+        }
+    }
+}
+
 /// The lead-scout panel. For now it carries the upstream card and the manual
 /// sync (I13); the queue, rankings, and assignments arrive with L1-L12.
 #[derive(Template)]
@@ -1158,5 +1222,70 @@ mod tests {
         assert!(html.contains("Lead Scout"));
         assert!(html.contains("Drive Coach"));
         assert!(html.contains("Password changed"));
+    }
+
+    // ── Error pages (U10) ───────────────────────────────────────────────────
+
+    #[test]
+    fn the_status_picks_the_wording_on_an_error_page() {
+        assert_eq!(ErrorKind::for_status(404), ErrorKind::NotFound);
+        assert_eq!(ErrorKind::for_status(405), ErrorKind::FormAddress);
+        assert_eq!(ErrorKind::for_status(400), ErrorKind::Refused);
+        assert_eq!(ErrorKind::for_status(422), ErrorKind::Refused);
+        assert_eq!(ErrorKind::for_status(500), ErrorKind::ServerFault);
+        assert_eq!(ErrorKind::for_status(503), ErrorKind::ServerFault);
+    }
+
+    #[test]
+    fn an_error_page_says_what_happened_and_how_to_go_on() {
+        for (status, heading, says) in [
+            (404, "Page not found", "Nothing is at this address"),
+            (405, "Nothing to show here", "Nothing was sent or changed"),
+            (422, "That did not work", "reload that page and try again"),
+            (500, "Something went wrong", "tell your lead scout"),
+        ] {
+            let html = ErrorPage::new(status, "/somewhere".into(), nav(Roles::SCOUT))
+                .render_html()
+                .expect("render");
+            assert!(html.contains(&format!("<title>{heading} · TealTeam</title>")));
+            assert!(html.contains(&format!("<h1>{heading}</h1>")), "{status}");
+            assert!(html.contains(says), "{status}");
+            assert!(html.contains(&format!("{status} · /somewhere")));
+            assert!(html.contains(r#"<a class="btn btn-primary" href="/">"#));
+            assert!(
+                html.contains(r#"href="/submission""#),
+                "the nav is there to go on from"
+            );
+        }
+    }
+
+    #[test]
+    fn the_address_on_an_error_page_is_escaped() {
+        let html = ErrorPage::new(404, "/<script>x</script>".into(), Nav::default())
+            .render_html()
+            .expect("render");
+        assert!(!html.contains("<script>x"));
+        assert!(html.contains("&#60;script&#62;x"));
+    }
+
+    #[test]
+    fn a_failed_sync_is_announced_as_an_alert_and_a_good_one_as_a_status() {
+        let page = |ok: bool| LeadScoutPage {
+            title: "Lead Scout".into(),
+            nav: nav(Roles::SCOUT),
+            season_name: "Rebuilt".into(),
+            upstream: UpstreamPanel {
+                result_headline: "Sync finished".into(),
+                result_ok: ok,
+                ..UpstreamPanel::default()
+            },
+            stored: None,
+        };
+
+        let failed = page(false).render_html().expect("render");
+        assert!(failed.contains(r#"<div class="alert alert-error" role="alert">"#));
+
+        let good = page(true).render_html().expect("render");
+        assert!(good.contains(r#"<div class="alert alert-success" role="status">"#));
     }
 }

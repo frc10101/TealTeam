@@ -193,6 +193,12 @@ pub fn router(state: AppState) -> Router {
         .route("/health", get(health_json))
         .route("/status", get(health_page))
         .nest_service("/static", tower_http::services::ServeDir::new(static_dir()))
+        // Every error a browser would otherwise get as a blank or plain-text
+        // screen becomes a page with the nav on it (U10).
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::errors::html_errors,
+        ))
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(state)
 }
@@ -1494,5 +1500,243 @@ mod flow_tests {
         seed_match(&state, 3, false).await;
         let body = text(page().await).await;
         assert!(body.contains("This Weekend: 2 teams · 3 matches, 1 played"));
+    }
+
+    // ── Error pages (U10) ───────────────────────────────────────────────────
+
+    /// Send `request` to `app` with the given `Accept`, and read back the status,
+    /// the content type, and the body.
+    async fn fetch(
+        app: Router,
+        request: axum::http::request::Builder,
+        accept: &str,
+        body: &str,
+    ) -> (StatusCode, String, String) {
+        let response = app
+            .oneshot(
+                request
+                    .header(header::ACCEPT, accept)
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .expect("request");
+        let status = response.status();
+        let content_type = response
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .map(|v| v.to_str().unwrap().to_string())
+            .unwrap_or_default();
+        (status, content_type, text(response).await)
+    }
+
+    fn form_post(uri: &str) -> axum::http::request::Builder {
+        Request::builder()
+            .method("POST")
+            .uri(uri)
+            .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+    }
+
+    #[tokio::test]
+    async fn every_dead_end_a_browser_reaches_is_a_page_with_the_nav() {
+        let state = migrated_state().await;
+        let cases = [
+            // A mistyped link or an old bookmark.
+            (
+                Request::get("/submision"),
+                "",
+                StatusCode::NOT_FOUND,
+                "Page not found",
+            ),
+            // Reopening the address a failed sign-in left in the address bar.
+            (
+                Request::get("/api/auth/login"),
+                "",
+                StatusCode::METHOD_NOT_ALLOWED,
+                "Nothing to show here",
+            ),
+            // A form from before a field was added.
+            (
+                form_post("/api/auth/login"),
+                "email=a%40b.c",
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "That did not work",
+            ),
+            // A body that is not a form at all.
+            (
+                Request::post("/api/auth/signup").header(header::CONTENT_TYPE, "text/plain"),
+                "x",
+                StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                "That did not work",
+            ),
+            // A missing file opened straight in the address bar.
+            (
+                Request::get("/static/js/gone.js"),
+                "",
+                StatusCode::NOT_FOUND,
+                "Page not found",
+            ),
+        ];
+
+        for (request, body, status, heading) in cases {
+            let (got, content_type, page) =
+                fetch(router(state.clone()), request, BROWSER_ACCEPT, body).await;
+            assert_eq!(got, status, "{page}");
+            assert!(
+                content_type.starts_with("text/html"),
+                "{status}: {content_type}"
+            );
+            assert!(
+                page.contains(&format!("<h1>{heading}</h1>")),
+                "{status}: {page}"
+            );
+            assert!(page.contains(r#"<header class="nav">"#), "{status}");
+            assert!(
+                page.contains(r#"href="/sign-in""#),
+                "{status}: signed out, so offer sign-in"
+            );
+            assert!(
+                !page.contains("Failed to deserialize"),
+                "axum's text goes to the log"
+            );
+            assert!(!page.contains("Form requests must"));
+        }
+    }
+
+    #[tokio::test]
+    async fn a_405_page_keeps_the_allow_header() {
+        let state = migrated_state().await;
+        let response = router(state)
+            .oneshot(
+                Request::get("/api/auth/login")
+                    .header(header::ACCEPT, BROWSER_ACCEPT)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("request");
+        assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+        assert_eq!(response.headers()[header::ALLOW], "POST");
+    }
+
+    #[tokio::test]
+    async fn a_signed_in_scout_keeps_their_nav_on_an_error_page() {
+        let state = migrated_state().await;
+        let cookie = signed_up(&state).await;
+        // Where a failed save leaves the address bar.
+        let request = Request::get("/api/submission").header(header::COOKIE, &cookie);
+
+        let (status, _, page) = fetch(router(state), request, BROWSER_ACCEPT, "").await;
+        assert_eq!(status, StatusCode::METHOD_NOT_ALLOWED);
+        assert!(page.contains("Sign out"), "{page}");
+        assert!(
+            page.contains(r#"href="/submission""#),
+            "the Scout tab, to go back"
+        );
+        assert!(page.contains("405 · /api/submission"));
+    }
+
+    #[tokio::test]
+    async fn scripts_and_asset_loads_get_errors_as_they_were() {
+        let state = migrated_state().await;
+
+        let (status, content_type, body) =
+            fetch(router(state.clone()), Request::get("/nope"), "*/*", "").await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert!(!content_type.starts_with("text/html"));
+        assert!(body.is_empty());
+
+        // What a <script src> for a missing file sends.
+        let (status, _, body) = fetch(
+            router(state.clone()),
+            Request::get("/static/js/gone.js"),
+            "*/*",
+            "",
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert!(body.is_empty());
+
+        // A script can still read why its post was refused.
+        let (status, _, body) = fetch(
+            router(state),
+            form_post("/api/auth/login"),
+            "*/*",
+            "email=a%40b.c",
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+        assert!(body.contains("missing field `password`"), "{body}");
+    }
+
+    /// Three routes that fail in ways no real route does yet, behind the same
+    /// layer as the real router.
+    fn app_with_faults(state: AppState) -> Router {
+        async fn boom() -> impl IntoResponse {
+            (StatusCode::INTERNAL_SERVER_ERROR, "pool timed out")
+        }
+        async fn own() -> impl IntoResponse {
+            (StatusCode::CONFLICT, Html("<p>already saved</p>"))
+        }
+        async fn sized() -> impl IntoResponse {
+            (
+                StatusCode::BAD_REQUEST,
+                [(header::CONTENT_LENGTH, "4")],
+                "nope",
+            )
+        }
+        Router::new()
+            .route("/boom", axum::routing::get(boom))
+            .route("/own", axum::routing::get(own))
+            .route("/sized", axum::routing::get(sized))
+            .layer(axum::middleware::from_fn_with_state(
+                state.clone(),
+                crate::errors::html_errors,
+            ))
+            .with_state(state)
+    }
+
+    #[tokio::test]
+    async fn a_fault_in_a_handler_is_the_error_page_and_internals_stay_in_the_log() {
+        let app = app_with_faults(migrated_state().await);
+        let (status, content_type, page) =
+            fetch(app, Request::get("/boom"), BROWSER_ACCEPT, "").await;
+
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(content_type.starts_with("text/html"));
+        assert!(page.contains("<h1>Something went wrong</h1>"), "{page}");
+        assert!(!page.contains("pool timed out"));
+    }
+
+    #[tokio::test]
+    async fn an_error_that_is_already_a_page_is_left_alone() {
+        let app = app_with_faults(migrated_state().await);
+        let (status, _, page) = fetch(app, Request::get("/own"), BROWSER_ACCEPT, "").await;
+
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(page, "<p>already saved</p>");
+    }
+
+    #[tokio::test]
+    async fn a_length_set_for_the_replaced_body_is_not_sent_with_the_page() {
+        // Hyper trusts an explicit Content-Length, so a stale one would cut the
+        // page off after four bytes.
+        let app = app_with_faults(migrated_state().await);
+        let response = app
+            .oneshot(
+                Request::get("/sized")
+                    .header(header::ACCEPT, BROWSER_ACCEPT)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("request");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let length = response.headers().get(header::CONTENT_LENGTH).cloned();
+        let page = text(response).await;
+        assert!(page.contains("<h1>That did not work</h1>"));
+        // axum fills in the length of whatever body leaves the layer.
+        assert_eq!(length.expect("length"), page.len().to_string().as_str());
     }
 }

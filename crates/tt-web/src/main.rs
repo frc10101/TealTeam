@@ -9,6 +9,7 @@
 
 mod auth;
 mod config;
+mod errors;
 mod events;
 mod handlers;
 mod scouting;

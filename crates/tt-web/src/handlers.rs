@@ -51,7 +51,7 @@ fn html(page: impl Page) -> Response {
     }
 }
 
-async fn nav_for(state: &AppState, user: Option<&tt_core::user::User>) -> Nav {
+pub(crate) async fn nav_for(state: &AppState, user: Option<&tt_core::user::User>) -> Nav {
     Nav::for_user(user, state.repo.health().await.is_ready())
 }
 
@@ -463,7 +463,7 @@ async fn lead_scout_page(
 /// Whether the caller is a browser expecting a page, rather than a script
 /// expecting data. Browsers put `text/html` in `Accept` on every navigation and
 /// form post; `fetch` and `curl` send `*/*`.
-fn wants_html(headers: &HeaderMap) -> bool {
+pub(crate) fn wants_html(headers: &HeaderMap) -> bool {
     headers
         .get(ACCEPT)
         .and_then(|v| v.to_str().ok())
