@@ -145,9 +145,48 @@ pub fn is_stale(synced_at: Option<DateTime<Utc>>, now: DateTime<Utc>) -> bool {
     }
 }
 
+/// "just now", "5 minutes ago", "2 hours ago", "3 days ago".
+///
+/// Relative rather than a clock time, so it needs no timezone: neither the Pi's
+/// zone nor the event's enters into it (TIMEZONE_HANDLING.md). A negative age
+/// -- a clock stepped backwards -- reads as "just now" rather than nonsense.
+pub fn describe_age(age: TimeDelta) -> String {
+    let minutes = age.num_minutes();
+    if minutes < 1 {
+        return "just now".into();
+    }
+    let (n, unit) = if minutes < 60 {
+        (minutes, "minute")
+    } else if age.num_hours() < 24 {
+        (age.num_hours(), "hour")
+    } else {
+        (age.num_days(), "day")
+    };
+    let plural = if n == 1 { "" } else { "s" };
+    format!("{n} {unit}{plural} ago")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ages_read_in_the_largest_whole_unit() {
+        let age = |seconds| describe_age(TimeDelta::seconds(seconds));
+        assert_eq!(age(0), "just now");
+        assert_eq!(age(59), "just now");
+        assert_eq!(age(60), "1 minute ago");
+        assert_eq!(age(59 * 60 + 59), "59 minutes ago");
+        assert_eq!(age(60 * 60), "1 hour ago");
+        assert_eq!(age(23 * 3600 + 3599), "23 hours ago");
+        assert_eq!(age(24 * 3600), "1 day ago");
+        assert_eq!(age(3 * 86_400), "3 days ago");
+    }
+
+    #[test]
+    fn a_clock_stepped_backwards_reads_as_just_now() {
+        assert_eq!(describe_age(TimeDelta::minutes(-5)), "just now");
+    }
     use chrono::TimeZone;
 
     fn at(minute: u32) -> DateTime<Utc> {

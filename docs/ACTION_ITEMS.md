@@ -174,7 +174,7 @@ This is the highest-leverage cluster in either source document. It removes the 5
 | I10 | Connectivity tracker: TCP connect to `1.1.1.1:443`, 1500 ms, 3s cache, skip loopback/RFC1918/link-local | RS §6.4 | S | **Done** |
 | I11 | **Four-state connection chip describing the client's link to the server**, not the server's internet — and remove all "offline mode" toggle language | RI-O11 · RS §6.4, §12 | S |  |
 | I12 | **Upstream freshness badges**; amber past 20 minutes during quals. Stale rankings that look live cause bad picks | RI-S11 | S | `is_stale` + `synced_at` done; badges pending |
-| I13 | `POST /api/frc/sync` manual sync, admin/lead only | RS §6.1 | S |  |
+| I13 | `POST /api/frc/sync` manual sync, admin/lead only | RS §6.1 | S | **Done** |
 | I14 | **Manual rankings entry screen** — the true last resort. A lead scout can type 40 rows off the audience display in five minutes, and it has never once failed to work | RI-S13 | S |  |
 
 ### Coach and pick list
@@ -215,7 +215,11 @@ This is the highest-leverage cluster in either source document. It removes the 5
 
 **Parsing is in `tt-core`, transport in `tt-upstream`.** That split keeps the deserializers wasm-clean for S4, where a client with signal fetches upstream itself and hands the Pi a bundle — the reason the refurbish plan needs no relay server.
 
-**Still open in Phase 2:** I9, I11, I13, I14, all of L1-L12, U11-U20, and P3-P9. I13 is the natural next step: the clients are constructed in `tt-web` now, and a manual sync is the in-app remedy for a Pi that booted without internet — the boot sync does not retry, by design.
+**A lead scout can resync from the app (I13).** `POST /api/frc/sync` reruns the FIRST event sync (90s cap), then **wakes the background loop** so matches and statistics follow at once. The wake is the part that matters: a Pi that booted offline found an empty calendar and chose a three-hour pause, and without it the events a manual sync delivers would sit waiting out the rest. Only one FIRST sync runs at a time, boot or manual — a second press gets "already running" rather than doubling a hundred-request sync.
+
+**One route, two callers.** A script gets JSON counts, per the spec. A browser posting the new **Sync now** button on `/lead-scout` gets the page back with the outcome, because without Unpoly (U8) a JSON body would be the whole screen. The page's "FIRST and TBA data" card shows the server's uplink, when it last synced (relative time, so no timezone question), and which feeds are configured. An uplink nobody has tested yet reads "Not checked yet", not "No internet" — otherwise a server with no credentials claims to be offline. `.badge-amber` was referenced by `UplinkState` but never defined in `site.css`; it is now, with `.badge-gray`.
+
+**Still open in Phase 2:** I9, I11, I14, all of L1-L12, U11-U20, and P3-P9.
 
 ---
 

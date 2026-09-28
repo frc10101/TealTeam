@@ -11,19 +11,22 @@
 //!   difference between fixing a typo and giving up.
 
 use axum::extract::{Form, State};
+use axum::http::HeaderMap;
+use axum::http::header::ACCEPT;
 use axum::response::{IntoResponse, Redirect, Response};
 use axum_extra::extract::cookie::CookieJar;
 use chrono::Utc;
 use serde::Deserialize;
 use tt_core::user::{self, Roles};
 use tt_repo::{NewUser, Repo};
-use tt_templates::{AccountPage, HomePage, Nav, Page, SignInPage, SignUpPage};
+use tt_templates::{AccountPage, HomePage, LeadScoutPage, Nav, Page, SignInPage, SignUpPage};
 
 use crate::auth::{
     Auth, Coach, LeadScout, MaybeAuth, SESSION_COOKIE, clear_session_cookie, device_uuid,
     hash_password, new_session, session_cookie, verify_password,
 };
 use crate::startup::AppState;
+use crate::upstream::{self, ManualSync};
 
 /// Shown instead of a specific reason when a login fails.
 ///
@@ -380,22 +383,61 @@ pub async fn device_heartbeat(
     }
 }
 
+// ── Lead scout ──────────────────────────────────────────────────────────────
+
+pub async fn lead_scout(State(state): State<AppState>, LeadScout(user): LeadScout) -> Response {
+    lead_scout_page(&state, &user, None).await
+}
+
+/// `POST /api/frc/sync` (I13): refresh upstream data now.
+///
+/// One route, two callers. A script gets JSON counts. A browser posting the
+/// lead-scout page's form gets that page back with the outcome on it -- there
+/// is no Unpoly yet (U8), so a JSON body would be the whole screen.
+pub async fn manual_sync(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    headers: HeaderMap,
+) -> Response {
+    tracing::info!(user = %user.email, "manual sync requested");
+    let outcome = upstream::sync_now(&state.repo, &state.upstream).await;
+
+    if wants_html(&headers) {
+        lead_scout_page(&state, &user, Some(&outcome)).await
+    } else {
+        axum::Json(outcome).into_response()
+    }
+}
+
+async fn lead_scout_page(
+    state: &AppState,
+    user: &tt_core::user::User,
+    outcome: Option<&ManualSync>,
+) -> Response {
+    html(LeadScoutPage {
+        title: "Lead Scout".into(),
+        nav: nav_for(state, Some(user)).await,
+        season_name: state.season.name.clone(),
+        upstream: upstream::panel(&state.upstream, outcome, Utc::now()),
+    })
+}
+
+/// Whether the caller is a browser expecting a page, rather than a script
+/// expecting data. Browsers put `text/html` in `Accept` on every navigation and
+/// form post; `fetch` and `curl` send `*/*`.
+fn wants_html(headers: &HeaderMap) -> bool {
+    headers
+        .get(ACCEPT)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.contains("text/html"))
+}
+
 // ── Role-guarded pages ──────────────────────────────────────────────────────
 //
 // The nav links these for users who hold the role, so they must exist. Their
 // content arrives in phase 2 (L1-L12, U18-U20); what matters now is that the
 // guard is on the handler, so the access rule is settled before the page has
 // anything worth protecting.
-
-pub async fn lead_scout(State(state): State<AppState>, LeadScout(user): LeadScout) -> Response {
-    placeholder(
-        &state,
-        &user,
-        "Lead Scout",
-        "Assignments, review queue, and rankings",
-    )
-    .await
-}
 
 pub async fn drive_coach(State(state): State<AppState>, Coach(user): Coach) -> Response {
     placeholder(

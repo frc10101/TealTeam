@@ -15,6 +15,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{NaiveDate, TimeDelta, Utc};
+use tokio::sync::Notify;
 use tracing::{info, warn};
 use tt_core::records::{Event, MatchRecord, Team, TeamEventStats};
 use tt_core::upstream::{self, Phase};
@@ -391,6 +392,9 @@ pub const FALLBACK_DAYS: i64 = 7;
 pub const PASS_TIMEOUT: Duration = Duration::from_secs(120);
 /// Longest the FIRST event sync at boot may run.
 pub const BOOT_SYNC_TIMEOUT: Duration = Duration::from_secs(60);
+/// Longest a manual FIRST event sync may run (I13). Longer than at boot: a
+/// person asked for this one and is waiting on the answer.
+pub const MANUAL_SYNC_TIMEOUT: Duration = Duration::from_secs(90);
 
 /// Choose a sync cadence from what is on the calendar.
 pub fn interval_for(active_event_count: usize) -> Duration {
@@ -494,7 +498,16 @@ async fn pass_targets<R: Repo + Sync>(
 ///
 /// The first pass runs immediately. After that, each pass sets the pause before
 /// the next: two minutes while an event is live, three hours otherwise.
-pub async fn run_loop<R: Repo + Sync>(repo: Arc<R>, tba: TbaClient, uplink: Uplink) {
+///
+/// `wake` cuts a pause short. A manual event sync uses it (I13): a Pi that
+/// booted with an empty calendar chose a three-hour pause, and without a nudge
+/// the events it has just been given would wait out the rest of it.
+pub async fn run_loop<R: Repo + Sync>(
+    repo: Arc<R>,
+    tba: TbaClient,
+    uplink: Uplink,
+    wake: Arc<Notify>,
+) {
     loop {
         let today = Utc::now().date_naive();
         let pass = sync_active(&*repo, &tba, &uplink, today, PASS_TIMEOUT).await;
@@ -505,7 +518,10 @@ pub async fn run_loop<R: Repo + Sync>(repo: Arc<R>, tba: TbaClient, uplink: Upli
             "sync pass: {}",
             pass.report.summary()
         );
-        tokio::time::sleep(next).await;
+        tokio::select! {
+            () = tokio::time::sleep(next) => {}
+            () = wake.notified() => info!("sync pass requested early"),
+        }
     }
 }
 

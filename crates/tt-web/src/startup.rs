@@ -41,6 +41,9 @@ pub struct AppState {
     /// Parsed once at startup rather than per request. Immutable for the life of
     /// the process, which is what makes the schema version a deployment fact.
     pub season: Arc<SeasonSchema>,
+    /// Shared with the background sync, so a manual sync and the loop agree on
+    /// the uplink's state and never run two event syncs at once.
+    pub upstream: Arc<Upstream>,
 }
 
 /// Steps 1-3, shared by every command.
@@ -113,6 +116,7 @@ pub async fn run() -> anyhow::Result<()> {
     let state = AppState {
         repo: Arc::new(repo),
         season: Arc::new(season),
+        upstream: Arc::new(Upstream::from_env()),
     };
 
     // 6. Only with storage up. When it is down, migrations did not run and a
@@ -120,7 +124,7 @@ pub async fn run() -> anyhow::Result<()> {
     if storage_ready {
         upstream::spawn(
             state.repo.clone(),
-            Upstream::from_env(),
+            state.upstream.clone(),
             config.first_sync_on_boot,
         );
     } else {
@@ -183,6 +187,7 @@ pub fn router(state: AppState) -> Router {
             post(handlers::change_password),
         )
         .route("/api/device/heartbeat", post(handlers::device_heartbeat))
+        .route("/api/frc/sync", post(handlers::manual_sync))
         // Operational
         .route("/health", get(health_json))
         .route("/status", get(health_page))
@@ -289,6 +294,7 @@ mod tests {
         AppState {
             repo: Arc::new(SqliteRepo::connect(url).expect("lazy connect")),
             season: Arc::new(season::current_season().expect("embedded schema")),
+            upstream: Arc::new(Upstream::disabled()),
         }
     }
 
@@ -301,6 +307,7 @@ mod tests {
         AppState {
             repo: Arc::new(repo),
             season: Arc::new(season::current_season().expect("embedded schema")),
+            upstream: Arc::new(Upstream::disabled()),
         }
     }
 
@@ -788,5 +795,109 @@ mod flow_tests {
 
         let devices = state.repo.list_devices().await.expect("list");
         assert_eq!(devices[0].team_number, Some(10101), "first team wins");
+    }
+
+    // ── Manual sync (I13) ───────────────────────────────────────────────────
+
+    use crate::upstream::test_support::{EVENTS, first_stub, upstream_at};
+
+    const BROWSER_ACCEPT: &str = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
+
+    async fn with_first_stub(state: AppState) -> AppState {
+        let base = first_stub(EVENTS).await;
+        AppState {
+            upstream: Arc::new(upstream_at(Some(&base), false)),
+            ..state
+        }
+    }
+
+    async fn sync_request(state: &AppState, accept: &str, cookie: Option<&str>) -> Response {
+        let mut req = Request::builder()
+            .method("POST")
+            .uri("/api/frc/sync")
+            .header(header::ACCEPT, accept);
+        if let Some(c) = cookie {
+            req = req.header(header::COOKIE, c);
+        }
+        router(state.clone())
+            .oneshot(req.body(Body::empty()).unwrap())
+            .await
+            .expect("request")
+    }
+
+    #[tokio::test]
+    async fn only_leads_and_admins_can_trigger_a_sync() {
+        let state = with_first_stub(migrated_state().await).await;
+
+        let anonymous = sync_request(&state, "*/*", None).await;
+        assert_eq!(anonymous.status(), StatusCode::SEE_OTHER);
+        assert_eq!(anonymous.headers()[header::LOCATION], "/sign-in");
+
+        signed_up(&state).await; // the first account, an admin
+        let response = post(
+            &state,
+            "/api/auth/signup",
+            "name=Kim&email=kim%40example.com&password=longenough1&confirm_password=longenough1",
+            None,
+        )
+        .await;
+        let scout = session_cookie_from(&response).expect("session");
+        let refused = sync_request(&state, "*/*", Some(&scout)).await;
+        assert_eq!(refused.status(), StatusCode::SEE_OTHER);
+        assert_eq!(refused.headers()[header::LOCATION], "/");
+
+        assert!(
+            state.repo.list_events().await.unwrap().is_empty(),
+            "neither refused request may have synced anything"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_script_gets_json_counts() {
+        let state = with_first_stub(migrated_state().await).await;
+        let admin = signed_up(&state).await;
+
+        let response = sync_request(&state, "*/*", Some(&admin)).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body: serde_json::Value = serde_json::from_str(&text(response).await).expect("json");
+
+        assert_eq!(body["ok"], true, "{body}");
+        assert_eq!(body["events"], 1);
+        assert_eq!(body["teams"], 2);
+        assert_eq!(body["problems"], serde_json::json!([]));
+        assert_eq!(state.repo.list_events().await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn the_sync_button_gets_the_page_back_with_the_outcome() {
+        let state = with_first_stub(migrated_state().await).await;
+        let admin = signed_up(&state).await;
+
+        let response = sync_request(&state, BROWSER_ACCEPT, Some(&admin)).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = text(response).await;
+
+        assert!(body.contains("Synced 1 event(s) and 2 team(s)."), "{body}");
+        assert!(
+            body.contains("just now"),
+            "the card shows the sync that just ran"
+        );
+        assert!(body.contains("Sync now"), "and the button, to go again");
+    }
+
+    #[tokio::test]
+    async fn the_lead_scout_page_says_what_upstream_is_configured() {
+        let state = migrated_state().await; // no credentials at all
+        let admin = signed_up(&state).await;
+
+        let body = text(get(&state, "/lead-scout", Some(&admin)).await).await;
+
+        assert!(body.contains("FIRST and TBA data"));
+        assert!(
+            body.contains("Not checked yet"),
+            "unknown, not \"No internet\""
+        );
+        assert!(body.contains("never"));
+        assert_eq!(body.matches("not configured").count(), 2, "FIRST and TBA");
     }
 }

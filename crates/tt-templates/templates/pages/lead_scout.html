@@ -1,0 +1,46 @@
+{% extends "layout.html" %}
+{% block content %}
+<section class="card">
+  <div class="card-header"><h1>Lead Scout</h1></div>
+  <div class="card-body">
+    <p>Assignments, review queue, and rankings.</p>
+    <p class="alert alert-info">
+      Not built yet — these arrive with the rest of phase 2.
+    </p>
+    <p class="muted">Season: {{ season_name }}</p>
+  </div>
+</section>
+
+<section class="card" id="upstream">
+  <div class="card-header"><h2>FIRST and TBA data</h2></div>
+  <div class="card-body stack">
+    {% if !upstream.result_headline.is_empty() %}
+      <div class="alert {% if upstream.result_ok %}alert-success{% else %}alert-error{% endif %}" role="status">
+        <p>{{ upstream.result_headline }}</p>
+        {% if !upstream.result_problems.is_empty() %}
+          <ul>{% for problem in upstream.result_problems %}<li>{{ problem }}</li>{% endfor %}</ul>
+        {% endif %}
+      </div>
+    {% endif %}
+
+    <dl class="detail">
+      <dt>Server uplink</dt>
+      <dd><span class="badge {{ upstream.uplink_class }}">{{ upstream.uplink_label }}</span></dd>
+      <dt>Last sync</dt>
+      <dd>{{ upstream.last_sync }}{% if upstream.stale %} <span class="badge badge-amber">stale</span>{% endif %}</dd>
+      <dt>Events and rosters</dt>
+      <dd>{% if upstream.first_configured %}FIRST Events API{% else %}<span class="badge badge-gray">not configured</span>{% endif %}</dd>
+      <dt>Matches and stats</dt>
+      <dd>{% if upstream.tba_configured %}The Blue Alliance, every 2 minutes during an event{% else %}<span class="badge badge-gray">not configured</span>{% endif %}</dd>
+    </dl>
+
+    <form method="post" action="/api/frc/sync">
+      <button class="btn btn-primary" type="submit">Sync now</button>
+    </form>
+    <p class="hint">
+      Pulls the event list and rosters now, then matches and statistics. Works
+      only while the server has internet.
+    </p>
+  </div>
+</section>
+{% endblock %}

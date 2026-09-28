@@ -135,6 +135,36 @@ pub struct PlaceholderPage {
     pub season_name: String,
 }
 
+/// The lead-scout panel. For now it carries the upstream card and the manual
+/// sync (I13); the queue, rankings, and assignments arrive with L1-L12.
+#[derive(Template)]
+#[template(path = "pages/lead_scout.html")]
+pub struct LeadScoutPage {
+    pub title: String,
+    pub nav: Nav,
+    pub season_name: String,
+    pub upstream: UpstreamPanel,
+}
+
+/// The "FIRST and TBA data" card: what the server knows about its upstream
+/// feeds, and the button that refreshes them.
+#[derive(Debug, Clone, Default)]
+pub struct UpstreamPanel {
+    /// The server's uplink, e.g. "No internet", and its badge class.
+    pub uplink_label: &'static str,
+    pub uplink_class: &'static str,
+    /// "3 minutes ago", or "never".
+    pub last_sync: String,
+    /// Synced, but long enough ago that the data should not be trusted as live.
+    pub stale: bool,
+    pub first_configured: bool,
+    pub tba_configured: bool,
+    /// The outcome of a sync requested from this page. Empty on a plain visit.
+    pub result_headline: String,
+    pub result_ok: bool,
+    pub result_problems: Vec<String>,
+}
+
 #[derive(Template)]
 #[template(path = "pages/account.html")]
 pub struct AccountPage {

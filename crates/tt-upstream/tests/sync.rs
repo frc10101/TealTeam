@@ -541,3 +541,60 @@ async fn a_pass_that_overruns_its_budget_stops_and_says_so() {
     assert_eq!(pass.live_events, 1);
     assert_eq!(pass.next_interval(), sync::INTERVAL_DURING_EVENT);
 }
+
+#[tokio::test]
+async fn waking_the_loop_runs_a_pass_now_rather_than_after_its_pause() {
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
+    use tt_core::records::Event;
+
+    let base = stub_server().await;
+    let repo = Arc::new(repo().await);
+    let uplink = Uplink::new();
+    let (_, tba) = clients(&base, &uplink);
+    let wake = Arc::new(tokio::sync::Notify::new());
+
+    // An empty calendar: the first pass finds nothing and settles into a
+    // three-hour pause.
+    tokio::spawn(sync::run_loop(
+        repo.clone(),
+        tba,
+        uplink.clone(),
+        wake.clone(),
+    ));
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    // An event running today arrives, as a manual sync would store it. The loop
+    // reads the real clock, so the event is dated around it.
+    let today = chrono::Utc::now().date_naive();
+    let event = Event {
+        key: "2026mabil".into(),
+        name: "Greater Boston Regional".into(),
+        location: None,
+        timezone: None,
+        start_date: today.pred_opt(),
+        end_date: today.succ_opt(),
+        event_code: Some("mabil".into()),
+        event_type: None,
+        district_key: None,
+        week: None,
+    };
+    repo.upsert_event(&event, chrono::Utc::now())
+        .await
+        .expect("store");
+
+    // Unwoken, the loop is still paused. This also proves the first pass ran
+    // before the event existed; otherwise it would have synced it already.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(
+        repo.event_matches("2026mabil").await.unwrap().is_empty(),
+        "the loop should still be paused"
+    );
+
+    wake.notify_one();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while repo.event_matches("2026mabil").await.unwrap().is_empty() {
+        assert!(Instant::now() < deadline, "the woken loop never synced");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
