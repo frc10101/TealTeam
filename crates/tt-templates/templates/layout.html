@@ -4,6 +4,9 @@
   Nav links are role-gated: a scout never sees a Lead Scout tab, which is the
   first half of access control. The second half is the typed guard on the
   handler -- the nav hiding a link is a courtesy, not a permission check.
+
+  Event-scoped links carry ?event= so moving between pages keeps the event the
+  header switcher shows (U2).
 #}
 <!doctype html>
 <html lang="en">
@@ -19,18 +22,32 @@
 
     <header class="nav">
       <div class="nav-inner">
-        <a class="brand" href="/">TealTeam</a>
+        <a class="brand" href="/{{ nav.event.query() }}">TealTeam</a>
+
+        {% if !nav.event.options.is_empty() %}
+          {# A GET form with no action submits to the current page, so switching
+             reloads whatever page you are on, for the new event. #}
+          <form method="get" class="event-switcher">
+            <label class="visually-hidden" for="event-switcher">Event</label>
+            <select id="event-switcher" name="event" class="form-select" data-autosubmit>
+              {% for option in nav.event.options %}
+                <option value="{{ option.key }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>
+              {% endfor %}
+            </select>
+            <noscript><button type="submit" class="btn btn-secondary btn-sm">Go</button></noscript>
+          </form>
+        {% endif %}
 
         <nav class="nav-links" aria-label="Main">
-          <a href="/">Home</a>
-          {% if nav.signed_in %}<a href="/submission">Scout</a>{% endif %}
-          {% if nav.can_lead %}<a href="/lead-scout">Lead Scout</a>{% endif %}
-          {% if nav.can_coach %}<a href="/drive-coach">Drive Coach</a>{% endif %}
+          <a href="/{{ nav.event.query() }}">Home</a>
+          {% if nav.signed_in %}<a href="/submission{{ nav.event.query() }}">Scout</a>{% endif %}
+          {% if nav.can_lead %}<a href="/lead-scout{{ nav.event.query() }}">Lead Scout</a>{% endif %}
+          {% if nav.can_coach %}<a href="/drive-coach{{ nav.event.query() }}">Drive Coach</a>{% endif %}
         </nav>
 
         <div class="nav-account">
           {% if nav.signed_in %}
-            <a href="/account">{{ nav.name }}</a>
+            <a href="/account{{ nav.event.query() }}">{{ nav.name }}</a>
             <form method="post" action="/api/auth/logout" class="inline">
               <button type="submit" class="btn btn-secondary btn-sm">Sign out</button>
             </form>
@@ -53,6 +70,11 @@
       {% endif %}
     </footer>
 
+    {# No Unpoly (U8): links and forms are plain navigations, answered with
+       whole pages or a 303. These two cover what its glue script did. #}
     <script src="/static/js/device.js" defer></script>
+    <script src="/static/js/autosubmit.js" defer></script>
+    <script src="/static/js/live.js" defer></script>
+    {% block scripts %}{% endblock %}
   </body>
 </html>

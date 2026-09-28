@@ -1,0 +1,161 @@
+{#
+  The scouting page (U4). Three steps, all in the URL so any of them can be
+  bookmarked or reloaded: the match (?match=), the robot (&team=), then the
+  form, which is drawn from the season schema -- nothing here names a 2026
+  field, so next season needs a new seasons/*.json and no template change.
+
+  Works without JavaScript: the match select has a Go button, and counters are
+  plain number inputs until counter.js adds their − and + buttons.
+#}
+{% extends "layout.html" %}
+
+{% macro field_notes(field) %}
+  {% if !field.help.is_empty() %}<p class="hint">{{ field.help }}</p>{% endif %}
+  {% if !field.error.is_empty() %}<p class="form-error" id="{{ field.id }}-error">{{ field.error }}</p>{% endif %}
+{% endmacro %}
+
+{% block content %}
+{% if !saved.is_empty() %}
+  <div class="alert alert-success" role="status">
+    <p>{{ saved }}</p>
+    {% if let Some(picker) = picker %}{% if let Some(next) = picker.next %}
+      <p><a class="btn btn-primary" href="{{ next.href }}">Scout {{ next.label }}</a></p>
+    {% endif %}{% endif %}
+  </div>
+{% endif %}
+{% for error in errors %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endfor %}
+{% if !notice.is_empty() %}<p class="alert alert-info" role="status">{{ notice }}</p>{% endif %}
+
+{% if !unavailable.is_empty() %}
+  <section class="card">
+    <div class="card-header"><h1>Scout</h1></div>
+    <div class="card-body"><p>{{ unavailable }}</p></div>
+  </section>
+{% endif %}
+
+{% if let Some(picker) = picker %}
+  <section class="card" id="match-picker">
+    <div class="card-header">
+      <h1>Scout {{ picker.label }}{% if picker.played %} <span class="badge badge-gray">played</span>{% endif %}</h1>
+    </div>
+    <div class="card-body">
+      {# A GET form with no action reloads this page for the chosen match. #}
+      <form method="get" class="match-select">
+        <input type="hidden" name="event" value="{{ picker.event_key }}">
+        {% if let Some(previous) = picker.previous %}
+          <a class="btn btn-secondary" href="{{ previous.href }}" aria-label="Previous match, {{ previous.label }}">‹</a>
+        {% endif %}
+        <label class="visually-hidden" for="match-select">Match</label>
+        <select id="match-select" name="match" class="form-select" data-autosubmit>
+          {% for option in picker.options %}
+            <option value="{{ option.key }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>
+          {% endfor %}
+        </select>
+        <noscript><button type="submit" class="btn btn-secondary">Go</button></noscript>
+        {% if let Some(next) = picker.next %}
+          <a class="btn btn-secondary" href="{{ next.href }}" aria-label="Next match, {{ next.label }}">›</a>
+        {% endif %}
+      </form>
+
+      <p class="form-label">Which robot are you watching?</p>
+      <div class="robots">
+        {% for alliance in picker.alliances %}
+          <ul class="alliance {{ alliance.color }}" aria-label="{{ alliance.color }} alliance">
+            {% for slot in alliance.slots %}
+              <li>
+                {% if slot.href.is_empty() %}
+                  <span class="robot empty"><span class="robot-station">{{ slot.station }}</span><strong>—</strong></span>
+                {% else %}
+                  <a class="robot{% if slot.selected %} selected{% endif %}" href="{{ slot.href }}"{% if slot.selected %} aria-current="true"{% endif %}>
+                    <span class="robot-station">{{ slot.station }}</span>
+                    <strong>{{ slot.team }}</strong>
+                    {% if slot.recorded %}<span class="robot-done">Recorded</span>{% endif %}
+                  </a>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+{% endif %}
+
+{% if let Some(form) = form %}
+  <form method="post" action="/api/submission{{ nav.event.query() }}" class="scout-form stack" id="scout-form">
+    <input type="hidden" name="match" value="{{ form.match_key }}">
+    <input type="hidden" name="team" value="{{ form.team_number }}">
+    <input type="hidden" name="record_id" value="{{ form.record_id }}">
+
+    <div class="scout-target">
+      <h2>{{ form.heading }}</h2>
+      {% if !form.team_name.is_empty() %}<p class="muted">{{ form.team_name }}</p>{% endif %}
+    </div>
+
+    {% if form.has_errors %}
+      <div class="alert alert-error" role="alert">
+        <p>Not saved yet. Some answers need attention.</p>
+        {% for message in form.errors %}<p>{{ message }}</p>{% endfor %}
+      </div>
+    {% endif %}
+
+    {% for section in form.sections %}
+      <section class="card">
+        <div class="card-header"><h2>{{ section.label }}</h2></div>
+        <div class="card-body stack">
+          {% for field in section.fields %}
+            {% match field.input %}
+              {% when FormInput::Choice { options } %}
+                <fieldset class="field">
+                  <legend class="form-label">{{ field.label }}{% if field.required %} <span class="required">required</span>{% endif %}</legend>
+                  <div class="choices">
+                    {% for option in options %}
+                      <label class="choice">
+                        <input type="radio" name="{{ field.name }}" value="{{ option.value }}"{% if option.checked %} checked{% endif %}{% if field.required %} required{% endif %}>
+                        <span>{{ option.label }}</span>
+                      </label>
+                    {% endfor %}
+                  </div>
+                  {% call field_notes(field) %}{% endcall %}
+                </fieldset>
+              {% when FormInput::Counter { min, max, value } %}
+                <div class="field">
+                  <label class="form-label" for="{{ field.id }}">{{ field.label }}{% if field.required %} <span class="required">required</span>{% endif %}</label>
+                  <div class="counter" data-counter>
+                    <button type="button" class="btn btn-secondary" data-step="-1" aria-label="One fewer" hidden>−</button>
+                    <input class="form-input" type="number" id="{{ field.id }}" name="{{ field.name }}" value="{{ value }}"
+                           min="{{ min }}" max="{{ max }}" step="1" inputmode="numeric"{% if field.required %} required{% endif %}>
+                    <button type="button" class="btn btn-secondary" data-step="1" aria-label="One more" hidden>+</button>
+                  </div>
+                  {% call field_notes(field) %}{% endcall %}
+                </div>
+              {% when FormInput::Toggle { checked } %}
+                <div class="field">
+                  <label class="toggle">
+                    <input type="checkbox" name="{{ field.name }}" value="on"{% if checked %} checked{% endif %}>
+                    <span>{{ field.label }}</span>
+                  </label>
+                  {% call field_notes(field) %}{% endcall %}
+                </div>
+              {% when FormInput::Text { max_len, value } %}
+                <div class="field">
+                  <label class="form-label" for="{{ field.id }}">{{ field.label }}{% if field.required %} <span class="required">required</span>{% endif %}</label>
+                  <textarea class="form-input" id="{{ field.id }}" name="{{ field.name }}" rows="4"
+                            maxlength="{{ max_len }}"{% if field.required %} required{% endif %}>{{ value }}</textarea>
+                  {% call field_notes(field) %}{% endcall %}
+                </div>
+            {% endmatch %}
+          {% endfor %}
+        </div>
+      </section>
+    {% endfor %}
+
+    {% if form.notes_unshared %}
+      <p class="hint">Your account has no team number, so no team will be able to read the notes you write here.</p>
+    {% endif %}
+    <button class="btn btn-primary btn-lg" type="submit">Save observation</button>
+  </form>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}<script src="/static/js/counter.js" defer></script>{% endblock %}

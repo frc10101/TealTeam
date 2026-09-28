@@ -2233,6 +2233,7 @@ name = "tt-templates"
 version = "0.1.0"
 dependencies = [
  "askama",
+ "chrono",
  "thiserror",
  "tt-core",
 ]

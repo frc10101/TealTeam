@@ -33,13 +33,20 @@
   --red-900: #7f1d1d;
   --green-500: #22c55e;
   --green-900: #14532d;
+  --amber-500: #f59e0b;
   --amber-900: #78350f;
+  --blue-500: #3b82f6;
+  --blue-900: #1e3a8a;
 
   --radius: 0.5rem;
   --tap: 44px; /* Minimum touch target. Non-negotiable on a phone. */
+  --tap-match: 56px; /* Anything tapped while a match is running (RI 2F). */
 }
 
 * { box-sizing: border-box; }
+
+/* `hidden` must win over component display rules like .btn's inline-flex. */
+[hidden] { display: none !important; }
 
 body {
   margin: 0;
@@ -79,6 +86,21 @@ h1, h2 { margin: 0; font-size: 1.25rem; line-height: 1.3; }
 .nav-links a:hover, .nav-account a:hover { background: var(--gray-800); color: var(--teal-300); }
 .nav-account { display: flex; align-items: center; gap: 0.5rem; }
 .inline { display: inline; }
+
+/* The event switcher (U2). On a phone it takes a full-width row at the bottom
+   of the header, so the brand and links keep theirs; on anything wider it sits
+   between the brand and the links. */
+.event-switcher { display: flex; gap: 0.5rem; flex: 1 1 100%; order: 1; }
+.event-switcher .form-select { flex: 1; min-width: 0; text-overflow: ellipsis; }
+@media (min-width: 40rem) {
+  .event-switcher { flex: 0 1 22rem; order: 0; }
+}
+
+/* Screen-reader text: present for assistive technology, invisible otherwise. */
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
 
 /* ── Layout ─────────────────────────────────────────────────────────────── */
 
@@ -131,6 +153,7 @@ h1, h2 { margin: 0; font-size: 1.25rem; line-height: 1.3; }
 .btn-secondary { background: var(--gray-700); color: var(--gray-100); }
 .btn-secondary:hover { background: var(--gray-800); }
 .btn-sm { min-height: 2rem; padding: 0 0.625rem; font-size: 0.875rem; }
+.btn-lg { min-height: var(--tap-match); padding: 0 1.5rem; font-size: 1.125rem; }
 
 /* ── Feedback ───────────────────────────────────────────────────────────── */
 
@@ -138,6 +161,7 @@ h1, h2 { margin: 0; font-size: 1.25rem; line-height: 1.3; }
 .alert-error   { background: color-mix(in srgb, var(--red-900) 40%, transparent);   border-color: var(--red-500);   color: #fecaca; }
 .alert-success { background: color-mix(in srgb, var(--green-900) 40%, transparent); border-color: var(--green-500); color: #bbf7d0; }
 .alert-info    { background: var(--gray-800); border-color: var(--teal-600); color: var(--teal-300); }
+.alert-warning { background: color-mix(in srgb, var(--amber-900) 40%, transparent); border-color: var(--amber-500); color: #fde68a; }
 
 .badge {
   display: inline-block; padding: 0.125rem 0.625rem; border-radius: 999px;
@@ -150,11 +174,111 @@ h1, h2 { margin: 0; font-size: 1.25rem; line-height: 1.3; }
 
 .muted { color: var(--gray-500); font-size: 0.9375rem; }
 
+/* ── Rosters ────────────────────────────────────────────────────────────── */
+
+.roster {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: 0.25rem 1rem;
+}
+.roster li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roster .you { color: var(--teal-300); }
+
 /* ── Detail lists ───────────────────────────────────────────────────────── */
 
 .detail { display: grid; grid-template-columns: auto 1fr; gap: 0.5rem 1rem; margin: 0; }
 .detail dt { color: var(--gray-500); font-size: 0.875rem; }
 .detail dd { margin: 0; }
+
+/* ── Live regions (U8) ──────────────────────────────────────────────────── */
+
+/* static/js/live.js sets data-live-failed when a refresh does not land. The
+   content stays, dimmed, and says it is no longer current. */
+[data-live-failed] > * { opacity: 0.55; }
+[data-live-failed]::before {
+  content: "Not updating — showing what the server last said.";
+  display: block; grid-column: 1 / -1;
+  color: #fde68a; font-size: 0.8125rem;
+}
+
+/* ── Scouting (U4) ──────────────────────────────────────────────────────── */
+
+.match-select { display: flex; gap: 0.5rem; align-items: center; }
+.match-select .form-select { flex: 1; min-width: 0; }
+.match-select .btn { min-width: var(--tap); font-size: 1.25rem; }
+
+/* The six robots: red on one row, blue on the next, in station order. */
+.robots { display: grid; gap: 0.5rem; }
+.alliance {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem;
+}
+.robot {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: var(--tap-match); padding: 0.375rem;
+  border: 2px solid transparent; border-radius: var(--radius);
+  color: #fff; text-decoration: none; font-variant-numeric: tabular-nums;
+}
+.alliance.red .robot  { background: color-mix(in srgb, var(--red-900) 75%, transparent); }
+.alliance.blue .robot { background: color-mix(in srgb, var(--blue-900) 75%, transparent); }
+.robot strong { font-size: 1.25rem; line-height: 1.2; }
+.robot-station { font-size: 0.75rem; color: var(--gray-300); }
+.robot-done { font-size: 0.75rem; color: #bbf7d0; }
+.robot.selected { border-color: var(--teal-300); box-shadow: 0 0 0 2px var(--teal-300); }
+.robot.empty { opacity: 0.5; }
+a.robot:focus-visible { outline: 2px solid var(--teal-300); outline-offset: 2px; }
+
+.scout-target h2 { font-size: 1.25rem; }
+.scout-target p { margin: 0.25rem 0 0; }
+
+fieldset.field { border: 0; margin: 0; padding: 0; min-width: 0; }
+fieldset.field legend { padding: 0; margin-bottom: 0.25rem; }
+.field > p { margin: 0; }
+.required { font-size: 0.75rem; font-weight: 400; color: var(--amber-500); }
+.form-error { color: #fecaca; font-size: 0.875rem; }
+textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
+
+/* Options are big buttons, not a dropdown: one tap, and all of them visible. The
+   real radio or checkbox stays in the page, invisible, for keyboards, screen
+   readers, and the browser's required-field check. */
+.choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr)); gap: 0.5rem; }
+.choice, .toggle { position: relative; display: block; }
+.choice input, .toggle input {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  margin: 0; opacity: 0; pointer-events: none;
+}
+.choice span, .toggle span {
+  display: flex; align-items: center; justify-content: center; gap: 0.75rem;
+  min-height: var(--tap-match); padding: 0.5rem 0.75rem;
+  background: var(--gray-800); border: 1px solid var(--gray-700); border-radius: var(--radius);
+  text-align: center; cursor: pointer;
+}
+.choice input:checked + span {
+  background: var(--teal-700); border-color: var(--teal-300); color: #fff; font-weight: 600;
+}
+.choice input:focus-visible + span, .toggle input:focus-visible + span {
+  outline: 2px solid var(--teal-300); outline-offset: 2px;
+}
+.toggle span { justify-content: flex-start; text-align: left; }
+.toggle span::before {
+  content: ""; flex: none; width: 1.5rem; height: 1.5rem;
+  border: 2px solid var(--gray-500); border-radius: 0.375rem;
+}
+.toggle input:checked + span { border-color: var(--teal-300); }
+.toggle input:checked + span::before {
+  background: var(--teal-500); border-color: var(--teal-500);
+  box-shadow: inset 0 0 0 3px var(--gray-800);
+}
+
+/* Counters: − and + around the number. Flex rather than grid so that without
+   JavaScript, when the buttons stay hidden, the input takes the full row. */
+.counter { display: flex; gap: 0.5rem; }
+.counter .btn { flex: 0 0 var(--tap-match); min-height: var(--tap-match); padding: 0; font-size: 1.5rem; }
+.counter .form-input {
+  flex: 1; min-width: 0; min-height: var(--tap-match);
+  text-align: center; font-size: 1.25rem; font-variant-numeric: tabular-nums;
+}
+
+.scout-form > .btn-lg { width: 100%; }
 
 @media (min-width: 40rem) {
   h1, h2 { font-size: 1.5rem; }

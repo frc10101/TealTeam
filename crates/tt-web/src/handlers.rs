@@ -25,6 +25,8 @@ use crate::auth::{
     Auth, Coach, LeadScout, MaybeAuth, SESSION_COOKIE, clear_session_cookie, device_uuid,
     hash_password, new_session, session_cookie, verify_password,
 };
+use crate::events::{self, EventContext, EventParam};
+use crate::scouting::{self, ScoutParams};
 use crate::startup::AppState;
 use crate::upstream::{self, ManualSync};
 
@@ -53,19 +55,42 @@ async fn nav_for(state: &AppState, user: Option<&tt_core::user::User>) -> Nav {
     Nav::for_user(user, state.repo.health().await.is_ready())
 }
 
+/// Nav with the event switcher, plus the event the page is about (U2).
+async fn event_page(
+    state: &AppState,
+    user: Option<&tt_core::user::User>,
+    requested: Option<&str>,
+) -> (Nav, EventContext) {
+    // UTC's date, not the event's: within a few hours of midnight at a US event
+    // the default can pick a neighbouring event. Harmless, since the switcher
+    // is one tap away; correcting it needs the event's zone (Q5).
+    let today = Utc::now().date_naive();
+    let context = events::resolve(&*state.repo, user, requested, today).await;
+    let mut nav = nav_for(state, user).await;
+    nav.event = context.switcher();
+    (nav, context)
+}
+
 fn team_display(team_number: Option<i32>) -> String {
     team_number.map(|n| n.to_string()).unwrap_or_default()
 }
 
 // ── Home ────────────────────────────────────────────────────────────────────
 
-pub async fn home(State(state): State<AppState>, MaybeAuth(user): MaybeAuth) -> Response {
+pub async fn home(
+    State(state): State<AppState>,
+    MaybeAuth(user): MaybeAuth,
+    EventParam(requested): EventParam,
+) -> Response {
+    let (nav, context) = event_page(&state, user.as_ref(), requested.as_deref()).await;
+    let team = user.as_ref().and_then(|u| u.team_number);
     html(HomePage {
         title: "Home".into(),
-        nav: nav_for(&state, user.as_ref()).await,
-        team_display: team_display(user.as_ref().and_then(|u| u.team_number)),
+        nav,
+        team_display: team_display(team),
         season_name: state.season.name.clone(),
         season_year: state.season.season,
+        event: events::panel(&*state.repo, &context, team).await,
     })
 }
 
@@ -296,8 +321,12 @@ fn account_page(nav: Nav, user: &tt_core::user::User, error: String, success: St
     })
 }
 
-pub async fn account(State(state): State<AppState>, Auth(user): Auth) -> Response {
-    let nav = nav_for(&state, Some(&user)).await;
+pub async fn account(
+    State(state): State<AppState>,
+    Auth(user): Auth,
+    EventParam(requested): EventParam,
+) -> Response {
+    let (nav, _) = event_page(&state, Some(&user), requested.as_deref()).await;
     account_page(nav, &user, String::new(), String::new())
 }
 
@@ -365,7 +394,7 @@ pub async fn device_heartbeat(
     MaybeAuth(user): MaybeAuth,
     parts: axum::http::request::Parts,
 ) -> Response {
-    let Some(uuid) = device_uuid(&parts) else {
+    let Some(uuid) = device_uuid(&parts.headers) else {
         return axum::Json(serde_json::json!({ "status": "no-device-id" })).into_response();
     };
 
@@ -385,25 +414,31 @@ pub async fn device_heartbeat(
 
 // ── Lead scout ──────────────────────────────────────────────────────────────
 
-pub async fn lead_scout(State(state): State<AppState>, LeadScout(user): LeadScout) -> Response {
-    lead_scout_page(&state, &user, None).await
+pub async fn lead_scout(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
+) -> Response {
+    lead_scout_page(&state, &user, requested.as_deref(), None).await
 }
 
 /// `POST /api/frc/sync` (I13): refresh upstream data now.
 ///
 /// One route, two callers. A script gets JSON counts. A browser posting the
-/// lead-scout page's form gets that page back with the outcome on it -- there
-/// is no Unpoly yet (U8), so a JSON body would be the whole screen.
+/// lead-scout page's form gets that page back with the outcome on it: every
+/// browser request is a plain navigation (U8), so a JSON body would be the
+/// whole screen.
 pub async fn manual_sync(
     State(state): State<AppState>,
     LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
     headers: HeaderMap,
 ) -> Response {
     tracing::info!(user = %user.email, "manual sync requested");
     let outcome = upstream::sync_now(&state.repo, &state.upstream).await;
 
     if wants_html(&headers) {
-        lead_scout_page(&state, &user, Some(&outcome)).await
+        lead_scout_page(&state, &user, requested.as_deref(), Some(&outcome)).await
     } else {
         axum::Json(outcome).into_response()
     }
@@ -412,13 +447,16 @@ pub async fn manual_sync(
 async fn lead_scout_page(
     state: &AppState,
     user: &tt_core::user::User,
+    requested: Option<&str>,
     outcome: Option<&ManualSync>,
 ) -> Response {
+    let (nav, context) = event_page(state, Some(user), requested).await;
     html(LeadScoutPage {
         title: "Lead Scout".into(),
-        nav: nav_for(state, Some(user)).await,
+        nav,
         season_name: state.season.name.clone(),
         upstream: upstream::panel(&state.upstream, outcome, Utc::now()),
+        stored: events::stored(&*state.repo, &context).await,
     })
 }
 
@@ -432,36 +470,77 @@ fn wants_html(headers: &HeaderMap) -> bool {
         .is_some_and(|v| v.contains("text/html"))
 }
 
+// ── Scouting (U4) ───────────────────────────────────────────────────────────
+
+pub async fn submission(
+    State(state): State<AppState>,
+    Auth(user): Auth,
+    EventParam(requested): EventParam,
+    params: ScoutParams,
+) -> Response {
+    let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
+    html(scouting::page(&state, &user, nav, &context, &params, None, Vec::new()).await)
+}
+
+/// `POST /api/submission`: save an observation, then show the next step.
+///
+/// Post/redirect/get on success, so a reload of the confirmation cannot post
+/// again. A failed save re-renders the page with the answers kept.
+pub async fn submit_observation(
+    State(state): State<AppState>,
+    Auth(user): Auth,
+    EventParam(requested): EventParam,
+    headers: HeaderMap,
+    Form(pairs): Form<Vec<(String, String)>>,
+) -> Response {
+    let device = device_uuid(&headers);
+    match scouting::submit(&state, &user, device.as_deref(), &pairs).await {
+        Ok(next) => Redirect::to(&next).into_response(),
+        Err(rejected) => {
+            let rejected = *rejected;
+            let event = rejected.event_key.as_deref().or(requested.as_deref());
+            let (nav, context) = event_page(&state, Some(&user), event).await;
+            html(
+                scouting::page(
+                    &state,
+                    &user,
+                    nav,
+                    &context,
+                    &rejected.params,
+                    rejected.draft,
+                    rejected.errors,
+                )
+                .await,
+            )
+        }
+    }
+}
+
 // ── Role-guarded pages ──────────────────────────────────────────────────────
 //
 // The nav links these for users who hold the role, so they must exist. Their
-// content arrives in phase 2 (L1-L12, U18-U20); what matters now is that the
-// guard is on the handler, so the access rule is settled before the page has
-// anything worth protecting.
+// content arrives in phase 2 (U18-U20); what matters now is that the guard is
+// on the handler, so the access rule is settled before the page has anything
+// worth protecting.
 
-pub async fn drive_coach(State(state): State<AppState>, Coach(user): Coach) -> Response {
+pub async fn drive_coach(
+    State(state): State<AppState>,
+    Coach(user): Coach,
+    EventParam(requested): EventParam,
+) -> Response {
+    let (nav, _) = event_page(&state, Some(&user), requested.as_deref()).await;
     placeholder(
         &state,
-        &user,
+        nav,
         "Drive Coach",
         "Match schedule and alliance partners",
     )
-    .await
 }
 
-pub async fn submission(State(state): State<AppState>, Auth(user): Auth) -> Response {
-    placeholder(&state, &user, "Scout", "The scouting form for this match").await
-}
-
-async fn placeholder(
-    state: &AppState,
-    user: &tt_core::user::User,
-    title: &str,
-    summary: &str,
-) -> Response {
+fn placeholder(state: &AppState, nav: Nav, title: &str, summary: &str) -> Response {
     html(tt_templates::PlaceholderPage {
         title: title.to_string(),
-        nav: nav_for(state, Some(user)).await,
+        nav,
         heading: title.to_string(),
         summary: summary.to_string(),
         season_name: state.season.name.clone(),

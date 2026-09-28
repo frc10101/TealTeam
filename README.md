@@ -32,7 +32,9 @@ Work from the action items. Read the rebuild spec for what the app *did*, and th
 
 ## Target stack
 
-Rust + axum + Askama + sqlx + Unpoly + Tailwind, over SQLite, on a Raspberry Pi 5 at the event. One server, and it lives at the event — no cloud tier.
+Rust + axum + Askama + sqlx, over SQLite, on a Raspberry Pi 5 at the event. One server, and it lives at the event — no cloud tier.
+
+Pages are server-rendered HTML that works without JavaScript, styled by one hand-written stylesheet. A few small scripts in `crates/tt-web/static/js/` add to them, with no build step. The retired app's Unpoly and Tailwind are deliberately gone; [ACTION_ITEMS.md](docs/ACTION_ITEMS.md) (U8, and the Phase 1 notes) says why.
 
 The one structural rule to get right on the first commit: split the workspace into a pure `tt-core` / `tt-templates` layer that compiles to `wasm32`, behind a `Repo` trait, with a CI job enforcing it. See [REBUILD_SPEC.md §9](docs/REBUILD_SPEC.md#9-crate-layout-for-the-rebuild). Retrofitting that split was the single largest item in the refurbish plan; building it in costs almost nothing.
 

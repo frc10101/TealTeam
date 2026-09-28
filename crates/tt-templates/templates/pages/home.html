@@ -6,7 +6,7 @@
     {% if nav.signed_in %}
       <p>Signed in as <strong>{{ nav.name }}</strong>{% if !team_display.is_empty() %} · team {{ team_display }}{% endif %}.</p>
       <p class="muted">Season: {{ season_name }} ({{ season_year }})</p>
-      <p><a class="btn btn-primary" href="/submission">Start scouting</a></p>
+      <p><a class="btn btn-primary" href="/submission{{ nav.event.query() }}">Start scouting</a></p>
     {% else %}
       <p>Scouting and analytics for FRC team 10101.</p>
       <p class="muted">Season: {{ season_name }} ({{ season_year }})</p>
@@ -17,4 +17,49 @@
     {% endif %}
   </div>
 </section>
+
+{% if !event.unknown_key.is_empty() %}
+  <p class="alert alert-error" role="alert">
+    There is no event “{{ event.unknown_key }}” on this server{% if event.summary.is_some() %}. Showing the current one instead{% endif %}.
+  </p>
+{% endif %}
+
+{% if let Some(summary) = event.summary %}
+  <section class="card" id="event-summary">
+    <div class="card-header"><h2>{{ summary.name }}</h2></div>
+    <div class="card-body">
+      {% if !summary.dates.is_empty() || !summary.location.is_empty() %}
+        <p class="muted">{{ summary.dates }}{% if !summary.dates.is_empty() && !summary.location.is_empty() %} · {% endif %}{{ summary.location }}</p>
+      {% endif %}
+      {% if summary.team_missing %}
+        <p class="alert alert-warning" role="status">Your team is not listed for this event yet.</p>
+      {% endif %}
+      <dl class="detail">
+        <dt>Teams</dt><dd>{{ summary.team_count }}</dd>
+        <dt>Matches</dt>
+        <dd>{{ summary.match_count }}{% if summary.match_count > 0 %} ({{ summary.played_count }} played){% endif %}</dd>
+      </dl>
+      {% if summary.roster.is_empty() %}
+        <p class="muted">No roster yet.</p>
+      {% else %}
+        <ul class="roster" aria-label="Teams attending">
+          {% for team in summary.roster %}
+            <li{% if team.is_viewer %} class="you"{% endif %}><strong>{{ team.number }}</strong> {{ team.name }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+  </section>
+{% else if event.none_loaded %}
+  <section class="card" id="event-summary">
+    <div class="card-body">
+      <p>No events have been loaded yet.</p>
+      {% if nav.can_lead %}
+        <p>Use <a href="/lead-scout#upstream">Sync now</a> on the Lead Scout page, or run <code>tt-web bulk-load</code> on the server.</p>
+      {% else %}
+        <p class="muted">A lead scout can load them.</p>
+      {% endif %}
+    </div>
+  </section>
+{% endif %}
 {% endblock %}

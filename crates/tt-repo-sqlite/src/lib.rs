@@ -17,6 +17,7 @@
 
 mod competition;
 pub mod migrate;
+mod observations;
 mod users;
 
 use chrono::{DateTime, Utc};
@@ -26,7 +27,9 @@ use std::time::Duration;
 use tracing::warn;
 use tt_core::records::{Event, MatchRecord, Team, TeamEventStats};
 use tt_core::user::{Session, User};
-use tt_repo::{Credentials, Device, Health, NewUser, Repo, RepoError, Result};
+use tt_repo::{
+    Credentials, Device, Health, NewObservation, NewUser, Recorded, Repo, RepoError, Result,
+};
 
 /// Time to wait for a connection before giving up.
 ///
@@ -234,6 +237,10 @@ impl Repo for SqliteRepo {
         self.upsert_match_impl(record, now).await
     }
 
+    async fn match_by_key(&self, key: &str) -> Result<Option<MatchRecord>> {
+        self.match_by_key_impl(key).await
+    }
+
     async fn event_matches(&self, event_key: &str) -> Result<Vec<MatchRecord>> {
         self.event_matches_impl(event_key).await
     }
@@ -256,6 +263,18 @@ impl Repo for SqliteRepo {
 
     async fn event_stats(&self, event_key: &str) -> Result<Vec<TeamEventStats>> {
         self.event_stats_impl(event_key).await
+    }
+
+    async fn record_observation(
+        &self,
+        observation: &NewObservation,
+        now: DateTime<Utc>,
+    ) -> Result<Recorded> {
+        self.record_observation_impl(observation, now).await
+    }
+
+    async fn observed_teams(&self, match_key: &str, scouter_id: i64) -> Result<Vec<i32>> {
+        self.observed_teams_impl(match_key, scouter_id).await
     }
 }
 

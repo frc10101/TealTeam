@@ -20,6 +20,7 @@
 use argon2::password_hash::{PasswordHash, PasswordHasher, SaltString};
 use argon2::{Argon2, PasswordVerifier};
 use axum::extract::FromRequestParts;
+use axum::http::HeaderMap;
 use axum::http::request::Parts;
 use axum::response::{IntoResponse, Redirect, Response};
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
@@ -159,8 +160,8 @@ async fn current_user(state: &AppState, parts: &Parts) -> Option<User> {
 }
 
 /// The device UUID this browser reports, if any.
-pub fn device_uuid(parts: &Parts) -> Option<String> {
-    let jar = CookieJar::from_headers(&parts.headers);
+pub fn device_uuid(headers: &HeaderMap) -> Option<String> {
+    let jar = CookieJar::from_headers(headers);
     let raw = jar.get(DEVICE_COOKIE)?.value().trim().to_string();
     // Bound the length: this value is written by the client and lands in the
     // database.

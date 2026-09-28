@@ -186,6 +186,7 @@ pub fn router(state: AppState) -> Router {
             "/api/account/change-password",
             post(handlers::change_password),
         )
+        .route("/api/submission", post(handlers::submit_observation))
         .route("/api/device/heartbeat", post(handlers::device_heartbeat))
         .route("/api/frc/sync", post(handlers::manual_sync))
         // Operational
@@ -899,5 +900,599 @@ mod flow_tests {
         );
         assert!(body.contains("never"));
         assert_eq!(body.matches("not configured").count(), 2, "FIRST and TBA");
+        assert!(
+            !body.contains("<dt>Stored</dt>"),
+            "no event, nothing to count"
+        );
+    }
+
+    // ── Event selection and summary (U2, U3) ────────────────────────────────
+
+    /// Store an event running from `start` to `end` days from today, with the
+    /// given teams on its roster.
+    async fn seed_event(state: &AppState, key: &str, name: &str, days: (i64, i64), teams: &[i32]) {
+        use tt_core::records::{Event, Team};
+        let now = chrono::Utc::now();
+        let today = now.date_naive();
+        let event = Event {
+            key: key.into(),
+            name: name.into(),
+            location: Some("Boston, MA".into()),
+            timezone: None,
+            start_date: Some(today + chrono::TimeDelta::days(days.0)),
+            end_date: Some(today + chrono::TimeDelta::days(days.1)),
+            event_code: None,
+            event_type: None,
+            district_key: None,
+            week: None,
+        };
+        state.repo.upsert_event(&event, now).await.expect("event");
+        for &number in teams {
+            let team = Team {
+                number,
+                name: format!("Team {number}"),
+                nickname: None,
+                school: None,
+                city: None,
+                state: None,
+                country: None,
+                rookie_year: None,
+                website: None,
+            };
+            state.repo.upsert_team(&team, now).await.expect("team");
+            state
+                .repo
+                .link_event_team(key, number, now)
+                .await
+                .expect("link");
+        }
+    }
+
+    #[tokio::test]
+    async fn home_summarises_the_event_running_today() {
+        let state = migrated_state().await;
+        seed_event(&state, "2026past", "Last Month", (-30, -28), &[10101]).await;
+        seed_event(&state, "2026now", "This Weekend", (-1, 1), &[254, 10101]).await;
+        let cookie = signed_up(&state).await; // team 10101
+
+        let body = text(get(&state, "/", Some(&cookie)).await).await;
+
+        assert!(body.contains("<h2>This Weekend</h2>"), "{body}");
+        assert!(body.contains("<dt>Teams</dt><dd>2</dd>"));
+        assert!(body.contains(r#"<li class="you"><strong>10101</strong>"#));
+        assert!(!body.contains("Your team is not listed"));
+        assert!(body.contains(r#"<option value="2026now" selected>"#));
+    }
+
+    #[tokio::test]
+    async fn the_event_in_the_url_wins_and_every_link_keeps_it() {
+        let state = migrated_state().await;
+        seed_event(&state, "2026past", "Last Month", (-30, -28), &[10101]).await;
+        seed_event(&state, "2026now", "This Weekend", (-1, 1), &[10101]).await;
+        let cookie = signed_up(&state).await; // an admin, so every link shows
+
+        let body = text(get(&state, "/?event=2026past", Some(&cookie)).await).await;
+
+        assert!(body.contains("<h2>Last Month</h2>"));
+        assert!(body.contains(r#"<option value="2026past" selected>"#));
+        for link in ["/submission", "/lead-scout", "/drive-coach"] {
+            assert!(
+                body.contains(&format!(r#"href="{link}?event=2026past""#)),
+                "{link} should carry the event"
+            );
+        }
+
+        // And the next page keeps showing it.
+        let next = text(get(&state, "/lead-scout?event=2026past", Some(&cookie)).await).await;
+        assert!(next.contains(r#"<option value="2026past" selected>"#));
+        assert!(next.contains(r#"action="/api/frc/sync?event=2026past""#));
+    }
+
+    #[tokio::test]
+    async fn a_team_missing_from_the_roster_is_told_so() {
+        let state = migrated_state().await;
+        seed_event(&state, "2026now", "This Weekend", (-1, 1), &[254]).await;
+        let cookie = signed_up(&state).await; // team 10101, on no roster
+
+        let body = text(get(&state, "/", Some(&cookie)).await).await;
+
+        assert!(
+            body.contains("<h2>This Weekend</h2>"),
+            "still offered the event"
+        );
+        assert!(body.contains("Your team is not listed for this event yet."));
+    }
+
+    #[tokio::test]
+    async fn an_unknown_event_is_named_and_the_page_still_works() {
+        let state = migrated_state().await;
+        seed_event(&state, "2026now", "This Weekend", (-1, 1), &[]).await;
+
+        let response = get(&state, "/?event=2026nope", None).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = text(response).await;
+
+        assert!(body.contains("There is no event “2026nope” on this server"));
+        assert!(
+            body.contains("<h2>This Weekend</h2>"),
+            "the default instead"
+        );
+    }
+
+    #[tokio::test]
+    async fn an_empty_database_says_how_to_load_events() {
+        let state = migrated_state().await;
+        let body = text(get(&state, "/", None).await).await;
+        assert!(body.contains("No events have been loaded yet."));
+        assert!(!body.contains("event-switcher\""), "no empty switcher");
+    }
+
+    #[tokio::test]
+    async fn sign_in_has_no_event_switcher() {
+        let state = migrated_state().await;
+        seed_event(&state, "2026now", "This Weekend", (-1, 1), &[]).await;
+        let body = text(get(&state, "/sign-in", None).await).await;
+        assert!(!body.contains("event-switcher\""));
+    }
+
+    // ── Scouting (U4) ───────────────────────────────────────────────────────
+
+    const RECORD_ID: &str = "0191f7ac-1234-7000-8000-000000000001";
+    const DEVICE: &str = "tt_device=0191f7ac-1234-7000-8000-abcdefabcdef";
+
+    async fn seed_match(state: &AppState, number: i32, played: bool) {
+        use tt_core::matches::CompLevel;
+        use tt_core::records::MatchRecord;
+        let record = MatchRecord {
+            key: format!("2026now_qm{number}"),
+            event_key: "2026now".into(),
+            comp_level: CompLevel::Qualification,
+            set_number: 1,
+            match_number: number,
+            // Only 10101 and 254 are on the synced roster; 1-4 are not.
+            red: [Some(10101), Some(254), Some(1)],
+            blue: [Some(2), Some(3), Some(4)],
+            red_score: None,
+            blue_score: None,
+            winner: None,
+            played,
+            scheduled_at: None,
+            actual_at: None,
+        };
+        state
+            .repo
+            .upsert_match(&record, chrono::Utc::now())
+            .await
+            .expect("match");
+    }
+
+    /// An event running now with Q1 played and Q2 not, and a signed-in scout on
+    /// team 10101 whose tablet has checked in. Returns the scout's cookies.
+    async fn scouting() -> (AppState, String) {
+        let state = migrated_state().await;
+        seed_event(&state, "2026now", "This Weekend", (-1, 1), &[10101, 254]).await;
+        seed_match(&state, 1, true).await;
+        seed_match(&state, 2, false).await;
+        let cookies = format!("{}; {DEVICE}", signed_up(&state).await);
+        post(&state, "/api/device/heartbeat", "", Some(&cookies)).await;
+        (state, cookies)
+    }
+
+    fn observation_form(team: i32, record_id: &str, answers: &str) -> String {
+        format!("match=2026now_qm2&team={team}&record_id={record_id}&{answers}")
+    }
+
+    /// What a browser posts: every counter (untouched ones at their rendered
+    /// 0), ticked boxes only, and the text.
+    const GOOD_ANSWERS: &str = "f.starting_position=center&f.auto_scored=0&f.teleop_scored=9\
+                                &f.broke_down=on&f.penalties=0&f.notes=tippy+on+the+ramp";
+
+    async fn observations(state: &AppState) -> i64 {
+        sqlx::query_scalar("SELECT COUNT(*) FROM observations")
+            .fetch_one(state.repo.pool())
+            .await
+            .expect("count")
+    }
+
+    #[tokio::test]
+    async fn scouting_waits_for_a_match_schedule() {
+        let state = migrated_state().await;
+        seed_event(&state, "2026now", "This Weekend", (-1, 1), &[10101]).await;
+        let cookie = signed_up(&state).await;
+
+        let body = text(get(&state, "/submission", Some(&cookie)).await).await;
+        assert!(body.contains("This Weekend has no match schedule yet."));
+        assert!(!body.contains("match-picker"));
+    }
+
+    #[tokio::test]
+    async fn the_scouting_page_opens_on_the_next_unplayed_match() {
+        let (state, cookies) = scouting().await;
+        let body = text(get(&state, "/submission", Some(&cookies)).await).await;
+
+        assert!(body.contains("Scout Q2"), "{body}");
+        assert!(body.contains(r#"<option value="2026now_qm1">Q1 · played</option>"#));
+        assert!(
+            body.contains(r#"href="/submission?event=2026now&#38;match=2026now_qm2&#38;team=254""#),
+            "each robot is a link to its form"
+        );
+        assert!(!body.contains("scout-form"), "no robot chosen yet");
+    }
+
+    #[tokio::test]
+    async fn choosing_a_robot_opens_the_season_form() {
+        let (state, cookies) = scouting().await;
+        let body = text(
+            get(
+                &state,
+                "/submission?event=2026now&match=2026now_qm2&team=254",
+                Some(&cookies),
+            )
+            .await,
+        )
+        .await;
+
+        assert!(body.contains("Q2 · Team 254 · Red 2"), "{body}");
+        assert!(body.contains("Team 254"), "the roster's name for it");
+        for field in state.season.fields() {
+            assert!(
+                body.contains(&format!(r#"name="f.{}""#, field.key)),
+                "{}",
+                field.key
+            );
+        }
+        assert!(body.contains(r#"action="/api/submission?event=2026now""#));
+        assert!(body.contains(r#"name="record_id" value="0"#), "a v7 id");
+    }
+
+    #[tokio::test]
+    async fn a_saved_observation_is_pending_review_with_who_where_and_when() {
+        let (state, cookies) = scouting().await;
+        let response = post(
+            &state,
+            "/api/submission?event=2026now",
+            &observation_form(254, RECORD_ID, GOOD_ANSWERS),
+            Some(&cookies),
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        let next = response.headers()[header::LOCATION]
+            .to_str()
+            .unwrap()
+            .to_string();
+        assert_eq!(
+            next,
+            "/submission?event=2026now&match=2026now_qm2&saved=254"
+        );
+
+        use sqlx::Row;
+        let row = sqlx::query(
+            "SELECT client_record_id, event_key, alliance, payload, schema_version, \
+                    scouter_id, device_id, submitting_team, review_state \
+             FROM observations",
+        )
+        .fetch_one(state.repo.pool())
+        .await
+        .expect("one row");
+        assert_eq!(row.get::<String, _>("client_record_id"), RECORD_ID);
+        assert_eq!(row.get::<String, _>("event_key"), "2026now");
+        assert_eq!(
+            row.get::<String, _>("alliance"),
+            "red",
+            "read off the match"
+        );
+        assert_eq!(
+            row.get::<String, _>("payload"),
+            r#"{"auto_scored":0,"broke_down":true,"no_show":false,"notes":"tippy on the ramp","penalties":0,"starting_position":"center","teleop_scored":9}"#,
+            "untouched counters are zeros and unticked boxes are noes"
+        );
+        assert_eq!(row.get::<i64, _>("schema_version"), state.season.version);
+        assert_eq!(row.get::<Option<i64>, _>("scouter_id"), Some(1));
+        assert!(
+            row.get::<Option<i64>, _>("device_id").is_some(),
+            "the tablet"
+        );
+        assert_eq!(
+            row.get::<Option<i32>, _>("submitting_team"),
+            Some(10101),
+            "resolved at write time (L7)"
+        );
+        assert_eq!(row.get::<String, _>("review_state"), "pending");
+
+        let confirmation = text(get(&state, &next, Some(&cookies)).await).await;
+        assert!(confirmation.contains("Saved team 254 in Q2."));
+        assert!(confirmation.contains("Recorded"));
+    }
+
+    #[tokio::test]
+    async fn a_double_tapped_save_stores_one_observation() {
+        let (state, cookies) = scouting().await;
+        for _ in 0..2 {
+            let response = post(
+                &state,
+                "/api/submission",
+                &observation_form(254, RECORD_ID, GOOD_ANSWERS),
+                Some(&cookies),
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        }
+        assert_eq!(observations(&state).await, 1);
+    }
+
+    #[tokio::test]
+    async fn a_form_with_mistakes_comes_back_with_the_answers_in_it() {
+        let (state, cookies) = scouting().await;
+        let response = post(
+            &state,
+            "/api/submission",
+            &observation_form(
+                254,
+                RECORD_ID,
+                "f.teleop_scored=9o&f.notes=tippy+on+the+ramp",
+            ),
+            Some(&cookies),
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = text(response).await;
+        assert!(body.contains("Not saved yet."));
+        assert!(
+            body.contains("Choose one."),
+            "starting position is required"
+        );
+        assert!(body.contains("Enter a whole number."));
+        assert!(body.contains(r#"value="9o""#));
+        assert!(body.contains("tippy on the ramp</textarea>"));
+        assert!(
+            body.contains(&format!(r#"name="record_id" value="{RECORD_ID}""#)),
+            "the same id, so fixing and resaving cannot store it twice"
+        );
+        assert_eq!(observations(&state).await, 0);
+    }
+
+    #[tokio::test]
+    async fn a_second_observation_of_one_robot_is_refused_and_says_why() {
+        let (state, cookies) = scouting().await;
+        post(
+            &state,
+            "/api/submission",
+            &observation_form(254, RECORD_ID, GOOD_ANSWERS),
+            Some(&cookies),
+        )
+        .await;
+
+        let other_id = "0191f7ac-1234-7000-8000-000000000002";
+        let body = text(
+            post(
+                &state,
+                "/api/submission",
+                &observation_form(254, other_id, GOOD_ANSWERS),
+                Some(&cookies),
+            )
+            .await,
+        )
+        .await;
+        assert!(body.contains("Not saved: each scout keeps one observation per robot per match."));
+        assert!(body.contains("You have already recorded team 254 in Q2."));
+        assert!(!body.contains("scout-form"));
+        assert_eq!(observations(&state).await, 1);
+
+        // Choosing the robot again says so up front, before any typing.
+        let body = text(
+            get(
+                &state,
+                "/submission?event=2026now&match=2026now_qm2&team=254",
+                Some(&cookies),
+            )
+            .await,
+        )
+        .await;
+        assert!(body.contains("You have already recorded team 254 in Q2."));
+        assert!(!body.contains("scout-form"));
+    }
+
+    #[tokio::test]
+    async fn the_robot_must_be_in_the_match() {
+        let (state, cookies) = scouting().await;
+        let body = text(
+            post(
+                &state,
+                "/api/submission",
+                &observation_form(9999, RECORD_ID, GOOD_ANSWERS),
+                Some(&cookies),
+            )
+            .await,
+        )
+        .await;
+        assert!(body.contains("Not saved: pick the robot you watched from this match."));
+        assert!(body.contains("Team 9999 is not in Q2."));
+        assert_eq!(observations(&state).await, 0);
+    }
+
+    #[tokio::test]
+    async fn a_match_that_is_not_scheduled_is_refused() {
+        let (state, cookies) = scouting().await;
+        let body = text(
+            post(
+                &state,
+                "/api/submission",
+                &format!("match=2026now_qm99&team=254&record_id={RECORD_ID}&{GOOD_ANSWERS}"),
+                Some(&cookies),
+            )
+            .await,
+        )
+        .await;
+        assert!(body.contains("Not saved: that match is not on the schedule."));
+        assert_eq!(observations(&state).await, 0);
+    }
+
+    #[tokio::test]
+    async fn a_robot_the_roster_has_not_synced_can_be_scouted() {
+        // Team 3 is in the TBA schedule but not yet in any FIRST roster.
+        let (state, cookies) = scouting().await;
+        let response = post(
+            &state,
+            "/api/submission",
+            &observation_form(3, RECORD_ID, GOOD_ANSWERS),
+            Some(&cookies),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        assert_eq!(observations(&state).await, 1);
+    }
+
+    #[tokio::test]
+    async fn a_saved_link_confirms_nothing_that_was_not_saved() {
+        let (state, cookies) = scouting().await;
+        let body = text(
+            get(
+                &state,
+                "/submission?event=2026now&match=2026now_qm2&saved=254",
+                Some(&cookies),
+            )
+            .await,
+        )
+        .await;
+        assert!(!body.contains("Saved team"));
+    }
+
+    #[tokio::test]
+    async fn only_a_signed_in_scout_can_save() {
+        let (state, _) = scouting().await;
+        let response = post(
+            &state,
+            "/api/submission",
+            &observation_form(254, RECORD_ID, GOOD_ANSWERS),
+            None,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        assert_eq!(response.headers()[header::LOCATION], "/sign-in");
+        assert_eq!(observations(&state).await, 0);
+    }
+
+    // ── No Unpoly: plain pages and live regions (U8) ────────────────────────
+
+    #[tokio::test]
+    async fn every_script_and_stylesheet_a_page_loads_is_served() {
+        let (state, cookie) = scouting().await;
+        let body = text(
+            get(
+                &state,
+                "/submission?match=2026now_qm2&team=254",
+                Some(&cookie),
+            )
+            .await,
+        )
+        .await;
+
+        let assets: Vec<&str> = body
+            .split(['"', '\''])
+            .filter(|s| s.starts_with("/static/"))
+            .collect();
+        assert!(assets.len() >= 5, "{assets:?}");
+        for asset in assets {
+            let response = get(&state, asset, None).await;
+            assert_eq!(response.status(), StatusCode::OK, "{asset}");
+        }
+    }
+
+    /// Every live region on `body`, as the `(id, url)` static/js/live.js reads
+    /// off its tag.
+    fn live_regions(body: &str) -> Vec<(String, String)> {
+        body.match_indices(" data-live=\"")
+            .map(|(at, _)| {
+                let start = body[..at].rfind('<').expect("inside a tag");
+                let end = at + body[at..].find('>').expect("the tag ends");
+                let tag = &body[start..end];
+                let attr = |name: &str| {
+                    let from = tag.find(&format!(" {name}=\""))? + name.len() + 3;
+                    let len = tag[from..].find('"')?;
+                    Some(tag[from..from + len].replace("&#38;", "&"))
+                };
+                (
+                    attr("id").expect("a live region needs an id"),
+                    attr("data-live").expect("and a page to refresh from"),
+                )
+            })
+            .collect()
+    }
+
+    /// What live.js relies on: each region's URL answers with a page holding
+    /// exactly one element with the region's id. Returns those pages.
+    async fn assert_live_regions_resolve(
+        state: &AppState,
+        body: &str,
+        cookie: &str,
+    ) -> Vec<String> {
+        let regions = live_regions(body);
+        assert!(!regions.is_empty(), "no live region on the page");
+        let mut pages = Vec::new();
+        for (id, url) in regions {
+            let response = get(state, &url, Some(cookie)).await;
+            assert_eq!(response.status(), StatusCode::OK, "{url}");
+            let page = text(response).await;
+            let found = page.matches(&format!(" id=\"{id}\"")).count();
+            assert_eq!(found, 1, "#{id} on {url}");
+            pages.push(page);
+        }
+        pages
+    }
+
+    #[tokio::test]
+    async fn the_sync_card_refreshes_itself_from_the_lead_scout_page() {
+        let (state, admin) = scouting().await;
+        let body = text(get(&state, "/lead-scout?event=2026now", Some(&admin)).await).await;
+
+        let expected = (
+            "upstream-status".to_string(),
+            "/lead-scout?event=2026now".to_string(),
+        );
+        assert_eq!(live_regions(&body), [expected]);
+        assert_live_regions_resolve(&state, &body, &admin).await;
+
+        // Once the session is gone the refresh lands on sign-in, which has no
+        // such element, so live.js keeps the card instead of swapping in a form.
+        let signed_out = get(&state, "/lead-scout?event=2026now", None).await;
+        assert_eq!(signed_out.headers()[header::LOCATION], "/sign-in");
+        let sign_in = text(get(&state, "/sign-in", None).await).await;
+        assert!(!sign_in.contains(r#"id="upstream-status""#));
+    }
+
+    #[tokio::test]
+    async fn after_a_sync_press_the_card_refreshes_from_the_page_not_the_post() {
+        let state = with_first_stub(migrated_state().await).await;
+        let admin = signed_up(&state).await;
+
+        // The address bar now says /api/frc/sync; the region must not.
+        let body = text(sync_request(&state, BROWSER_ACCEPT, Some(&admin)).await).await;
+        let refreshed = assert_live_regions_resolve(&state, &body, &admin).await;
+
+        // The outcome of the press sits outside the region, so a refresh
+        // cannot take it away while the lead scout is reading it.
+        let outcome = body.find("Synced 1 event(s)").expect("outcome shown");
+        let region = body.find(r#"id="upstream-status""#).expect("region");
+        assert!(outcome < region);
+        assert!(!refreshed[0].contains("Synced 1 event(s)"));
+    }
+
+    #[tokio::test]
+    async fn the_sync_card_counts_what_is_stored_for_the_event() {
+        let (state, admin) = scouting().await; // two teams; Q1 played, Q2 not
+        let page = || get(&state, "/lead-scout?event=2026now", Some(&admin));
+
+        let body = text(page().await).await;
+        assert!(
+            body.contains("This Weekend: 2 teams · 2 matches, 1 played"),
+            "{body}"
+        );
+
+        // What a background pass landing looks like on the next refresh.
+        seed_match(&state, 3, false).await;
+        let body = text(page().await).await;
+        assert!(body.contains("This Weekend: 2 teams · 3 matches, 1 played"));
     }
 }

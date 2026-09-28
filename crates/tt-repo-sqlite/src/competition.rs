@@ -352,6 +352,20 @@ impl SqliteRepo {
         Ok(())
     }
 
+    pub(crate) async fn match_by_key_impl(&self, key: &str) -> Result<Option<MatchRecord>> {
+        let row = sqlx::query(
+            "SELECT tba_key, event_key, comp_level, set_number, match_number, \
+                    red1, red2, red3, blue1, blue2, blue3, red_score, blue_score, winner, played, \
+                    scheduled_at, actual_at \
+             FROM matches WHERE tba_key = ?",
+        )
+        .bind(key)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| query_err("loading match", e))?;
+        Ok(row.as_ref().map(match_from_row))
+    }
+
     pub(crate) async fn event_matches_impl(&self, event_key: &str) -> Result<Vec<MatchRecord>> {
         let rows = sqlx::query(
             "SELECT tba_key, event_key, comp_level, set_number, match_number, \

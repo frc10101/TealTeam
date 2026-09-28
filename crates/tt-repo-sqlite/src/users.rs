@@ -34,7 +34,7 @@ pub(crate) fn query_err(context: &str, e: sqlx::Error) -> RepoError {
     }
 }
 
-fn is_unique_violation(e: &sqlx::Error) -> bool {
+pub(crate) fn is_unique_violation(e: &sqlx::Error) -> bool {
     matches!(e, sqlx::Error::Database(db) if db.is_unique_violation())
 }
 

@@ -12,6 +12,9 @@
 //! template consumes it, and no template ever reaches back into storage.
 
 use askama::Template;
+use tt_core::form::{FormErrors, RawAnswers, input_name, is_on};
+use tt_core::records::{Event, MatchRecord, Team};
+use tt_core::season::{FieldKind, SeasonSchema};
 use tt_core::user::User;
 
 /// A template failed to render.
@@ -53,6 +56,8 @@ pub struct Nav {
     /// False when the database is unreachable, so the footer can say so rather
     /// than letting a scout type into a form that will not save.
     pub storage_ready: bool,
+    /// The header's event switcher. Hidden on pages that set no options.
+    pub event: EventSwitcher,
 }
 
 impl Nav {
@@ -72,8 +77,123 @@ impl Nav {
                 can_coach: u.roles.can_coach(),
                 can_admin: u.roles.can_admin(),
                 storage_ready,
+                event: EventSwitcher::default(),
             },
             None => Self::anonymous(storage_ready),
+        }
+    }
+}
+
+/// The event switcher in the header (U2).
+///
+/// The selected event lives in the URL (`?event=2026mabil`), not on the
+/// session: a page is bookmarkable, two tabs can show two events, and nothing
+/// about it needs the server's memory -- which is what it will need offline.
+#[derive(Debug, Clone, Default)]
+pub struct EventSwitcher {
+    pub options: Vec<EventOption>,
+    /// Key of the event the page is showing; empty when there is none.
+    pub selected: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct EventOption {
+    pub key: String,
+    /// `"Greater Boston Regional · Mar 12–15"`.
+    pub label: String,
+    /// Precomputed so the template holds no comparison logic.
+    pub selected: bool,
+}
+
+impl EventSwitcher {
+    pub fn new(events: &[Event], selected: Option<&Event>) -> Self {
+        let selected = selected.map(|e| e.key.clone()).unwrap_or_default();
+        Self {
+            options: events
+                .iter()
+                .map(|e| EventOption {
+                    key: e.key.clone(),
+                    label: match e.date_range() {
+                        Some(dates) => format!("{} · {dates}", e.name),
+                        None => e.name.clone(),
+                    },
+                    selected: e.key == selected,
+                })
+                .collect(),
+            selected,
+        }
+    }
+
+    /// `?event=<key>` for event-scoped links, so moving between pages keeps the
+    /// event. Empty when nothing is selected.
+    ///
+    /// Not percent-encoded: keys are `{year}{event code}`, alphanumeric, and
+    /// only ever taken from the database, never echoed from a request.
+    pub fn query(&self) -> String {
+        if self.selected.is_empty() {
+            String::new()
+        } else {
+            format!("?event={}", self.selected)
+        }
+    }
+}
+
+/// What the home page says about the selected event (U3).
+#[derive(Debug, Clone, Default)]
+pub struct EventPanel {
+    pub summary: Option<EventSummary>,
+    /// The URL named an event this database does not have.
+    pub unknown_key: String,
+    /// The database holds no events at all.
+    pub none_loaded: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct EventSummary {
+    pub name: String,
+    /// `"Mar 12–15, 2026"`; empty when the event has no dates.
+    pub dates: String,
+    pub location: String,
+    pub team_count: usize,
+    pub match_count: usize,
+    pub played_count: usize,
+    /// By team number.
+    pub roster: Vec<RosterEntry>,
+    /// The viewer has a team and it is not on the roster (REBUILD_SPEC.md 5.1).
+    pub team_missing: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct RosterEntry {
+    pub number: i32,
+    pub name: String,
+    /// The viewer's own team, so they can find it in a list of fifty.
+    pub is_viewer: bool,
+}
+
+impl EventSummary {
+    pub fn new(
+        event: &Event,
+        roster: &[Team],
+        matches: &[MatchRecord],
+        viewer_team: Option<i32>,
+    ) -> Self {
+        Self {
+            name: event.name.clone(),
+            dates: event.date_range_with_year().unwrap_or_default(),
+            location: event.location.clone().unwrap_or_default(),
+            team_count: roster.len(),
+            match_count: matches.len(),
+            played_count: matches.iter().filter(|m| m.played).count(),
+            roster: roster
+                .iter()
+                .map(|t| RosterEntry {
+                    number: t.number,
+                    name: t.name.clone(),
+                    is_viewer: viewer_team == Some(t.number),
+                })
+                .collect(),
+            team_missing: viewer_team.is_some_and(|n| !roster.iter().any(|t| t.number == n)),
         }
     }
 }
@@ -95,6 +215,7 @@ pub struct HomePage {
     pub team_display: String,
     pub season_name: String,
     pub season_year: i32,
+    pub event: EventPanel,
 }
 
 #[derive(Template)]
@@ -144,6 +265,18 @@ pub struct LeadScoutPage {
     pub nav: Nav,
     pub season_name: String,
     pub upstream: UpstreamPanel,
+    /// What is stored for the selected event, so a sync can be watched landing.
+    /// `None` with no event, or when storage could not say.
+    pub stored: Option<StoredCounts>,
+}
+
+/// How much of one event the server holds.
+#[derive(Debug, Clone)]
+pub struct StoredCounts {
+    pub event_name: String,
+    pub teams: usize,
+    pub matches: usize,
+    pub played: usize,
 }
 
 /// The "FIRST and TBA data" card: what the server knows about its upstream
@@ -163,6 +296,328 @@ pub struct UpstreamPanel {
     pub result_headline: String,
     pub result_ok: bool,
     pub result_problems: Vec<String>,
+}
+
+// ── Scouting (U4) ───────────────────────────────────────────────────────────
+
+/// The scouting page: pick a match, pick a robot, record what it did.
+#[derive(Template)]
+#[template(path = "pages/submission.html")]
+pub struct SubmissionPage {
+    pub title: String,
+    pub nav: Nav,
+    /// Why there is nothing to scout, when there is not. Replaces the picker.
+    pub unavailable: String,
+    pub picker: Option<MatchPicker>,
+    /// Confirmation of the save that led here.
+    pub saved: String,
+    pub errors: Vec<String>,
+    /// Something to know that is not a failure.
+    pub notice: String,
+    pub form: Option<ScoutForm>,
+}
+
+/// Choosing the match and the robot.
+///
+/// A robot is picked from the six in the match, never from the event's list of
+/// fifty: the wrong-robot entries the retired app suffered came from exactly
+/// that list. Assignments (L3-L5) will preselect a robot here rather than
+/// replace the picker.
+#[derive(Debug, Clone)]
+pub struct MatchPicker {
+    pub event_key: String,
+    pub options: Vec<MatchOption>,
+    /// `"Q14"`.
+    pub label: String,
+    pub played: bool,
+    /// Red, then blue.
+    pub alliances: Vec<AllianceSlots>,
+    pub previous: Option<MatchLink>,
+    pub next: Option<MatchLink>,
+}
+
+#[derive(Debug, Clone)]
+pub struct MatchOption {
+    pub key: String,
+    /// `"Q14"`, or `"Q14 · played"`.
+    pub label: String,
+    pub selected: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct MatchLink {
+    pub href: String,
+    pub label: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct AllianceSlots {
+    /// `"red"` or `"blue"`: a CSS class and the accessible name.
+    pub color: &'static str,
+    pub slots: Vec<RobotSlot>,
+}
+
+/// One of the six driver-station positions.
+#[derive(Debug, Clone)]
+pub struct RobotSlot {
+    /// `"Red 1"`.
+    pub station: String,
+    /// Empty where the schedule has no team in this slot.
+    pub team: String,
+    /// Empty where there is nothing to choose.
+    pub href: String,
+    pub selected: bool,
+    /// This scout has already recorded this robot in this match.
+    pub recorded: bool,
+}
+
+/// Link to the scouting page for a match, and optionally a robot in it.
+///
+/// Not percent-encoded: event and match keys are TBA keys, alphanumeric plus
+/// underscores, and only ever taken from the database.
+pub fn scout_href(event_key: &str, match_key: &str, team: Option<i32>) -> String {
+    let mut href = format!("/submission?event={event_key}&match={match_key}");
+    if let Some(team) = team {
+        href.push_str(&format!("&team={team}"));
+    }
+    href
+}
+
+impl MatchPicker {
+    /// `matches` in playing order, with `index` the one shown.
+    pub fn new(
+        event_key: &str,
+        matches: &[MatchRecord],
+        index: usize,
+        team: Option<i32>,
+        recorded: &[i32],
+    ) -> Self {
+        let shown = &matches[index];
+        let link = |m: &MatchRecord| MatchLink {
+            href: scout_href(event_key, &m.key, None),
+            label: m.label(),
+        };
+        let alliance =
+            |color: &'static str, station: &str, teams: &[Option<i32>; 3]| AllianceSlots {
+                color,
+                slots: teams
+                    .iter()
+                    .enumerate()
+                    .map(|(i, slot)| RobotSlot {
+                        station: format!("{station} {}", i + 1),
+                        team: slot.map(|n| n.to_string()).unwrap_or_default(),
+                        href: slot
+                            .map(|n| scout_href(event_key, &shown.key, Some(n)))
+                            .unwrap_or_default(),
+                        selected: slot.is_some() && *slot == team,
+                        recorded: slot.is_some_and(|n| recorded.contains(&n)),
+                    })
+                    .collect(),
+            };
+
+        Self {
+            event_key: event_key.to_string(),
+            options: matches
+                .iter()
+                .enumerate()
+                .map(|(i, m)| MatchOption {
+                    key: m.key.clone(),
+                    label: if m.played {
+                        format!("{} · played", m.label())
+                    } else {
+                        m.label()
+                    },
+                    selected: i == index,
+                })
+                .collect(),
+            label: shown.label(),
+            played: shown.played,
+            alliances: vec![
+                alliance("red", "Red", &shown.red),
+                alliance("blue", "Blue", &shown.blue),
+            ],
+            previous: index.checked_sub(1).map(|i| link(&matches[i])),
+            next: matches.get(index + 1).map(link),
+        }
+    }
+}
+
+/// A scouting form, rendered from the season schema rather than written per
+/// season. Next January is a new `seasons/*.json`, not a new template.
+#[derive(Debug, Clone)]
+pub struct ScoutForm {
+    pub match_key: String,
+    pub team_number: i32,
+    /// Idempotency key for the save (D7). Kept across a failed save, so a
+    /// retry cannot store the observation twice.
+    pub record_id: String,
+    /// `"Q14 · Team 254 · Red 2"`.
+    pub heading: String,
+    /// The team's name, when the roster has it.
+    pub team_name: String,
+    pub sections: Vec<FormSection>,
+    /// Problems not tied to one field.
+    pub errors: Vec<String>,
+    /// Any problem at all, so the page can say the save did not happen.
+    pub has_errors: bool,
+    /// The scout has no team, so their notes will be readable by nobody.
+    pub notes_unshared: bool,
+}
+
+/// What a form holds between being shown and being saved.
+#[derive(Debug, Clone)]
+pub struct Draft {
+    pub record_id: String,
+    pub answers: RawAnswers,
+    pub errors: FormErrors,
+}
+
+impl Draft {
+    /// An untouched form.
+    pub fn fresh(record_id: String) -> Self {
+        Self {
+            record_id,
+            answers: RawAnswers::default(),
+            errors: FormErrors::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FormSection {
+    pub label: String,
+    pub fields: Vec<FormField>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FormField {
+    /// The input's `name`: `f.auto_scored`.
+    pub name: String,
+    /// The input's `id`: `f-auto_scored`.
+    pub id: String,
+    pub label: String,
+    pub help: String,
+    pub required: bool,
+    pub error: String,
+    pub input: FormInput,
+}
+
+/// How a field is drawn. Values are strings as typed, so a re-rendered form
+/// shows exactly what failed.
+#[derive(Debug, Clone)]
+pub enum FormInput {
+    /// A row of large buttons, one per option. Faster to tap than a dropdown.
+    Choice {
+        options: Vec<FormOption>,
+    },
+    /// A number between large − and + buttons.
+    Counter {
+        min: i64,
+        max: i64,
+        value: String,
+    },
+    Toggle {
+        checked: bool,
+    },
+    Text {
+        max_len: usize,
+        value: String,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct FormOption {
+    pub value: String,
+    pub label: String,
+    pub checked: bool,
+}
+
+impl ScoutForm {
+    pub fn new(
+        schema: &SeasonSchema,
+        record: &MatchRecord,
+        team_number: i32,
+        team_name: Option<&str>,
+        draft: Draft,
+        notes_unshared: bool,
+    ) -> Self {
+        let station = [("Red", &record.red), ("Blue", &record.blue)]
+            .into_iter()
+            .find_map(|(alliance, slots)| {
+                let i = slots.iter().position(|s| *s == Some(team_number))?;
+                Some(format!(" · {alliance} {}", i + 1))
+            })
+            .unwrap_or_default();
+
+        Self {
+            match_key: record.key.clone(),
+            team_number,
+            record_id: draft.record_id,
+            heading: format!("{} · Team {team_number}{station}", record.label()),
+            team_name: team_name.unwrap_or_default().to_string(),
+            sections: form_sections(schema, &draft.answers, &draft.errors),
+            has_errors: !draft.errors.is_empty(),
+            errors: draft.errors.form,
+            notes_unshared,
+        }
+    }
+}
+
+/// The schema's sections and fields, filled in with any answers so far.
+///
+/// With no answer yet a counter shows its minimum, so leaving it alone records
+/// a real zero; everything else starts empty.
+pub fn form_sections(
+    schema: &SeasonSchema,
+    answers: &RawAnswers,
+    errors: &FormErrors,
+) -> Vec<FormSection> {
+    schema
+        .sections
+        .iter()
+        .map(|section| FormSection {
+            label: section.label.clone(),
+            fields: section
+                .fields
+                .iter()
+                .map(|field| {
+                    let answer = answers.get(&field.key);
+                    FormField {
+                        name: input_name(&field.key),
+                        id: format!("f-{}", field.key),
+                        label: field.label.clone(),
+                        help: field.help.clone().unwrap_or_default(),
+                        required: field.required,
+                        error: errors.field(&field.key).unwrap_or_default().to_string(),
+                        input: match &field.kind {
+                            FieldKind::Select { options } => FormInput::Choice {
+                                options: options
+                                    .iter()
+                                    .map(|o| FormOption {
+                                        value: o.key.clone(),
+                                        label: o.label.clone(),
+                                        checked: answer.map(str::trim) == Some(o.key.as_str()),
+                                    })
+                                    .collect(),
+                            },
+                            FieldKind::Counter { min, max, .. } => FormInput::Counter {
+                                min: *min,
+                                max: *max,
+                                value: answer.map_or_else(|| min.to_string(), str::to_string),
+                            },
+                            FieldKind::Toggle { .. } => FormInput::Toggle {
+                                checked: answer.is_some_and(is_on),
+                            },
+                            FieldKind::Text { max_len } => FormInput::Text {
+                                max_len: *max_len,
+                                value: answer.unwrap_or_default().to_string(),
+                            },
+                        },
+                    }
+                })
+                .collect(),
+        })
+        .collect()
 }
 
 #[derive(Template)]
@@ -231,6 +686,7 @@ mod tests {
             team_display: "10101".into(),
             season_name: "Rebuilt".into(),
             season_year: 2026,
+            event: EventPanel::default(),
         }
         .render_html()
         .expect("render");
@@ -251,6 +707,7 @@ mod tests {
             team_display: "10101".into(),
             season_name: "Rebuilt".into(),
             season_year: 2026,
+            event: EventPanel::default(),
         }
         .render_html()
         .expect("render");
@@ -267,6 +724,7 @@ mod tests {
             team_display: String::new(),
             season_name: "Rebuilt".into(),
             season_year: 2026,
+            event: EventPanel::default(),
         }
         .render_html()
         .expect("render");
@@ -284,10 +742,347 @@ mod tests {
             team_display: String::new(),
             season_name: "Rebuilt".into(),
             season_year: 2026,
+            event: EventPanel::default(),
         }
         .render_html()
         .expect("render");
         assert!(html.contains("Storage unavailable"));
+    }
+
+    // ── Event switcher and summary (U2, U3) ─────────────────────────────────
+
+    fn event(key: &str, name: &str) -> Event {
+        Event {
+            key: key.into(),
+            name: name.into(),
+            location: Some("Boston, MA".into()),
+            timezone: None,
+            start_date: chrono_date(2026, 3, 12),
+            end_date: chrono_date(2026, 3, 15),
+            event_code: None,
+            event_type: None,
+            district_key: None,
+            week: None,
+        }
+    }
+
+    fn chrono_date(y: i32, m: u32, d: u32) -> Option<chrono::NaiveDate> {
+        chrono::NaiveDate::from_ymd_opt(y, m, d)
+    }
+
+    fn team(number: i32, name: &str) -> Team {
+        Team {
+            number,
+            name: name.into(),
+            nickname: None,
+            school: None,
+            city: None,
+            state: None,
+            country: None,
+            rookie_year: None,
+            website: None,
+        }
+    }
+
+    fn home(nav: Nav, event: EventPanel) -> String {
+        HomePage {
+            title: "Home".into(),
+            nav,
+            team_display: String::new(),
+            season_name: "Rebuilt".into(),
+            season_year: 2026,
+            event,
+        }
+        .render_html()
+        .expect("render")
+    }
+
+    #[test]
+    fn the_switcher_marks_the_selected_event_and_carries_it_in_links() {
+        let events = [
+            event("2026mabil", "Boston"),
+            event("2026nhgrs", "Granite State"),
+        ];
+        let switcher = EventSwitcher::new(&events, Some(&events[1]));
+
+        assert_eq!(switcher.options[0].label, "Boston · Mar 12–15");
+        assert!(!switcher.options[0].selected);
+        assert!(switcher.options[1].selected);
+        assert_eq!(switcher.query(), "?event=2026nhgrs");
+        assert_eq!(EventSwitcher::new(&events, None).query(), "");
+
+        let mut nav = nav(Roles {
+            is_admin: true,
+            ..Roles::SCOUT
+        });
+        nav.event = switcher;
+        let html = home(nav, EventPanel::default());
+        assert!(
+            html.contains(r#"<option value="2026nhgrs" selected>"#),
+            "{html}"
+        );
+        for link in [
+            "/?event=2026nhgrs",
+            "/submission?event=2026nhgrs",
+            "/lead-scout?event=2026nhgrs",
+        ] {
+            assert!(html.contains(&format!(r#"href="{link}""#)), "{link}");
+        }
+    }
+
+    #[test]
+    fn with_no_events_there_is_no_switcher() {
+        let html = home(nav(Roles::SCOUT), EventPanel::default());
+        assert!(
+            !html.contains("event-switcher\""),
+            "no empty select in the header"
+        );
+        assert!(
+            html.contains(r#"href="/submission""#),
+            "and links carry nothing"
+        );
+    }
+
+    #[test]
+    fn a_summary_counts_teams_and_matches_and_finds_the_viewer() {
+        let roster = [team(254, "Cheesy Poofs"), team(10101, "Teal Team")];
+        let summary = EventSummary::new(&event("2026mabil", "Boston"), &roster, &[], Some(10101));
+
+        assert_eq!(summary.dates, "Mar 12–15, 2026");
+        assert_eq!(summary.team_count, 2);
+        assert!(!summary.team_missing);
+        assert!(summary.roster[1].is_viewer && !summary.roster[0].is_viewer);
+    }
+
+    #[test]
+    fn a_team_absent_from_the_roster_is_told_so() {
+        let roster = [team(254, "Cheesy Poofs")];
+        let boston = event("2026mabil", "Boston");
+        let summary = EventSummary::new(&boston, &roster, &[], Some(10101));
+        assert!(summary.team_missing);
+
+        let html = home(
+            nav(Roles::SCOUT),
+            EventPanel {
+                summary: Some(summary),
+                ..EventPanel::default()
+            },
+        );
+        assert!(html.contains("Your team is not listed for this event yet."));
+
+        // No team, nothing to be missing from.
+        assert!(!EventSummary::new(&boston, &roster, &[], None).team_missing);
+    }
+
+    #[test]
+    fn an_empty_database_says_how_to_fill_it() {
+        let panel = EventPanel {
+            none_loaded: true,
+            ..EventPanel::default()
+        };
+        let lead = home(
+            nav(Roles {
+                is_lead_scout: true,
+                ..Roles::SCOUT
+            }),
+            panel.clone(),
+        );
+        assert!(lead.contains("No events have been loaded yet."));
+        assert!(lead.contains("/lead-scout#upstream"));
+
+        let scout = home(nav(Roles::SCOUT), panel);
+        assert!(scout.contains("A lead scout can load them."));
+        assert!(!scout.contains("/lead-scout#upstream"));
+    }
+
+    // ── Scouting (U4) ───────────────────────────────────────────────────────
+
+    fn scheduled(number: i32, played: bool) -> MatchRecord {
+        MatchRecord {
+            key: format!("2026mabil_qm{number}"),
+            event_key: "2026mabil".into(),
+            comp_level: tt_core::matches::CompLevel::Qualification,
+            set_number: 1,
+            match_number: number,
+            red: [Some(10101), Some(254), None],
+            blue: [Some(2), Some(3), Some(4)],
+            red_score: None,
+            blue_score: None,
+            winner: None,
+            played,
+            scheduled_at: None,
+            actual_at: None,
+        }
+    }
+
+    fn season() -> SeasonSchema {
+        tt_core::season::current_season().expect("shipped schema")
+    }
+
+    fn scouting_page(picker: Option<MatchPicker>, form: Option<ScoutForm>) -> String {
+        SubmissionPage {
+            title: "Scout".into(),
+            nav: nav(Roles::SCOUT),
+            unavailable: String::new(),
+            picker,
+            saved: String::new(),
+            errors: Vec::new(),
+            notice: String::new(),
+            form,
+        }
+        .render_html()
+        .expect("render")
+    }
+
+    fn answers(pairs: &[(&str, &str)]) -> RawAnswers {
+        let pairs: Vec<(String, String)> = pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        RawAnswers::from_pairs(&pairs)
+    }
+
+    #[test]
+    fn the_picker_offers_the_six_robots_of_the_chosen_match() {
+        let matches = [scheduled(1, true), scheduled(2, false), scheduled(3, false)];
+        let picker = MatchPicker::new("2026mabil", &matches, 1, Some(254), &[3]);
+
+        assert_eq!(picker.label, "Q2");
+        assert_eq!(picker.options[0].label, "Q1 · played");
+        assert!(picker.options[1].selected);
+        assert_eq!(picker.previous.as_ref().unwrap().label, "Q1");
+        assert_eq!(picker.next.as_ref().unwrap().label, "Q3");
+
+        let red = &picker.alliances[0].slots;
+        assert_eq!(red[1].station, "Red 2");
+        assert!(red[1].selected);
+        assert_eq!(
+            red[1].href,
+            "/submission?event=2026mabil&match=2026mabil_qm2&team=254"
+        );
+        assert!(
+            red[2].team.is_empty() && red[2].href.is_empty(),
+            "an empty slot"
+        );
+        assert!(picker.alliances[1].slots[1].recorded, "blue 2 is team 3");
+
+        let html = scouting_page(Some(picker), None);
+        assert!(html.contains(r#"<ul class="alliance red""#));
+        assert!(html.contains(r#"<option value="2026mabil_qm2" selected>"#));
+        assert!(html.contains("Recorded"));
+    }
+
+    #[test]
+    fn the_first_and_last_matches_have_no_link_past_the_end() {
+        let matches = [scheduled(1, false), scheduled(2, false)];
+        assert!(
+            MatchPicker::new("e", &matches, 0, None, &[])
+                .previous
+                .is_none()
+        );
+        assert!(MatchPicker::new("e", &matches, 1, None, &[]).next.is_none());
+    }
+
+    #[test]
+    fn a_fresh_form_is_drawn_entirely_from_the_schema() {
+        let schema = season();
+        let form = ScoutForm::new(
+            &schema,
+            &scheduled(2, false),
+            254,
+            Some("Cheesy Poofs"),
+            Draft::fresh("0191f7ac-1234-7000-8000-000000000001".into()),
+            false,
+        );
+        assert_eq!(form.heading, "Q2 · Team 254 · Red 2");
+        assert!(!form.has_errors);
+
+        let html = scouting_page(None, Some(form));
+        // Every field in the schema, by its prefixed name, and no other.
+        for field in schema.fields() {
+            assert!(
+                html.contains(&format!(r#"name="f.{}""#, field.key)),
+                "{}",
+                field.key
+            );
+        }
+        assert_eq!(
+            html.matches(r#"name="f."#).count(),
+            schema
+                .fields()
+                .map(|f| match &f.kind {
+                    FieldKind::Select { options } => options.len(),
+                    _ => 1,
+                })
+                .sum::<usize>()
+        );
+        assert!(html.contains("Cheesy Poofs"));
+        assert!(html.contains(r#"value="0191f7ac-1234-7000-8000-000000000001""#));
+        // Counters start at their minimum, so an untouched one is a real zero.
+        assert!(html.contains(r#"name="f.auto_scored" value="0""#));
+        assert!(!html.contains(" checked"), "nothing is preselected");
+    }
+
+    #[test]
+    fn a_returned_form_keeps_exactly_what_was_typed() {
+        let mut errors = FormErrors::default();
+        errors
+            .fields
+            .insert("teleop_scored".into(), "Must be between 0 and 60.".into());
+        errors.form.push(tt_core::form::STALE_FORM.into());
+        let draft = Draft {
+            record_id: "0191f7ac-1234-7000-8000-000000000001".into(),
+            answers: answers(&[
+                ("f.starting_position", "center"),
+                ("f.teleop_scored", "61"),
+                ("f.broke_down", "on"),
+                ("f.notes", "<b>tippy</b>"),
+            ]),
+            errors,
+        };
+        let form = ScoutForm::new(&season(), &scheduled(2, false), 3, None, draft, false);
+        assert!(form.has_errors);
+
+        let html = scouting_page(None, Some(form));
+        assert!(html.contains(r#"value="center" checked"#));
+        assert!(
+            html.contains(r#"value="61""#),
+            "the mistake itself, so it can be fixed"
+        );
+        assert!(html.contains("Must be between 0 and 60."));
+        assert!(html.contains("Not saved yet."));
+        assert!(html.contains("different version of the form"));
+        assert!(html.contains(r#"name="f.broke_down" value="on" checked"#));
+        assert!(
+            html.contains("&#60;b&#62;tippy&#60;/b&#62;</textarea>"),
+            "escaped"
+        );
+    }
+
+    #[test]
+    fn a_scout_with_no_team_is_told_their_notes_go_nowhere() {
+        let fresh = || Draft::fresh("0191f7ac-1234-7000-8000-000000000001".into());
+        let form = ScoutForm::new(&season(), &scheduled(2, false), 3, None, fresh(), true);
+        assert!(scouting_page(None, Some(form)).contains("no team will be able to read the notes"));
+
+        let form = ScoutForm::new(&season(), &scheduled(2, false), 3, None, fresh(), false);
+        assert!(!scouting_page(None, Some(form)).contains("no team will be able to read"));
+    }
+
+    #[test]
+    fn counter_buttons_are_hidden_until_the_script_shows_them() {
+        // Without JavaScript they would be buttons that do nothing.
+        let form = ScoutForm::new(
+            &season(),
+            &scheduled(2, false),
+            3,
+            None,
+            Draft::fresh("0191f7ac-1234-7000-8000-000000000001".into()),
+            false,
+        );
+        let html = scouting_page(None, Some(form));
+        assert!(html.contains(r#"data-step="1" aria-label="One more" hidden"#));
+        assert!(html.contains("/static/js/counter.js"));
     }
 
     #[test]

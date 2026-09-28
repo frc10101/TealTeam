@@ -5,7 +5,7 @@
 //! which is what lets the same structs come out of SQLite on a Pi and out of
 //! SQLite-WASM in a browser tab.
 
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::matches::CompLevel;
@@ -42,6 +42,63 @@ impl Event {
     pub fn days_until(&self, date: NaiveDate) -> Option<i64> {
         self.start_date.map(|start| (start - date).num_days())
     }
+
+    /// `"Mar 12–15"`, `"Mar 30–Apr 2"`, or `"Mar 12"` for a one-day event.
+    /// `None` without a start date. No year: the caller adds one where it helps.
+    ///
+    /// Assembled by hand because chrono's formatter needs its `alloc` feature,
+    /// which this crate does not otherwise enable.
+    pub fn date_range(&self) -> Option<String> {
+        const MONTHS: [&str; 12] = [
+            "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+        ];
+        let short = |d: NaiveDate| format!("{} {}", MONTHS[d.month0() as usize], d.day());
+
+        let start = self.start_date?;
+        Some(match self.end_date.filter(|end| *end > start) {
+            None => short(start),
+            Some(end) if (end.year(), end.month()) == (start.year(), start.month()) => {
+                format!("{}–{}", short(start), end.day())
+            }
+            Some(end) => format!("{}–{}", short(start), short(end)),
+        })
+    }
+
+    /// [`date_range`](Self::date_range) plus the year, for where the event is
+    /// shown on its own: `"Mar 12–15, 2026"`.
+    pub fn date_range_with_year(&self) -> Option<String> {
+        Some(format!(
+            "{}, {}",
+            self.date_range()?,
+            self.start_date?.year()
+        ))
+    }
+}
+
+/// The event a page shows when its URL names none (U2).
+///
+/// The one running on `today`; else the next to start; else the most recent to
+/// finish; else the first listed. So a lead scout opening the app at an event
+/// lands on that event, and in the off-season on the one coming up -- with no
+/// stored preference, which is what keeps the choice bookmarkable, per-tab, and
+/// available offline.
+pub fn default_event(events: &[Event], today: NaiveDate) -> Option<&Event> {
+    events
+        .iter()
+        .find(|e| e.is_active_on(today))
+        .or_else(|| {
+            events
+                .iter()
+                .filter(|e| e.start_date.is_some_and(|start| start > today))
+                .min_by_key(|e| e.start_date)
+        })
+        .or_else(|| {
+            events
+                .iter()
+                .filter(|e| e.end_date.is_some_and(|end| end < today))
+                .max_by_key(|e| e.end_date)
+        })
+        .or_else(|| events.first())
 }
 
 /// An FRC team.
@@ -247,6 +304,67 @@ mod tests {
             scheduled_at: None,
             actual_at: None,
         }
+    }
+
+    fn dated(key: &str, start: Option<NaiveDate>, end: Option<NaiveDate>) -> Event {
+        Event {
+            key: key.into(),
+            start_date: start,
+            end_date: end,
+            ..event()
+        }
+    }
+
+    #[test]
+    fn date_ranges_read_the_way_a_schedule_is_printed() {
+        let range = |start, end| dated("x", start, end).date_range();
+        let (mar12, mar15) = (Some(date(2026, 3, 12)), Some(date(2026, 3, 15)));
+        assert_eq!(range(mar12, mar15).as_deref(), Some("Mar 12–15"));
+        assert_eq!(
+            range(Some(date(2026, 3, 30)), Some(date(2026, 4, 2))).as_deref(),
+            Some("Mar 30–Apr 2")
+        );
+        assert_eq!(range(mar12, mar12).as_deref(), Some("Mar 12"), "one day");
+        assert_eq!(range(mar12, None).as_deref(), Some("Mar 12"));
+        // An end before the start is bad data, not a range backwards in time.
+        assert_eq!(range(mar15, mar12).as_deref(), Some("Mar 15"));
+        assert_eq!(range(None, mar15), None);
+        assert_eq!(
+            dated("x", mar12, mar15).date_range_with_year().as_deref(),
+            Some("Mar 12–15, 2026")
+        );
+    }
+
+    #[test]
+    fn the_default_event_is_the_one_running_today() {
+        let events = [
+            dated("past", Some(date(2026, 3, 1)), Some(date(2026, 3, 3))),
+            dated("now", Some(date(2026, 3, 12)), Some(date(2026, 3, 15))),
+            dated("next", Some(date(2026, 3, 26)), Some(date(2026, 3, 29))),
+        ];
+        let pick = |day| default_event(&events, date(2026, 3, day)).map(|e| e.key.as_str());
+
+        assert_eq!(pick(12), Some("now"), "its first day");
+        assert_eq!(pick(15), Some("now"), "its last day");
+        assert_eq!(pick(20), Some("next"), "between events, the one coming up");
+    }
+
+    #[test]
+    fn after_the_season_the_default_is_the_most_recent_event() {
+        let events = [
+            dated("early", Some(date(2026, 3, 1)), Some(date(2026, 3, 3))),
+            dated("late", Some(date(2026, 4, 1)), Some(date(2026, 4, 3))),
+        ];
+        let chosen = default_event(&events, date(2026, 6, 1)).map(|e| e.key.as_str());
+        assert_eq!(chosen, Some("late"));
+    }
+
+    #[test]
+    fn undated_events_are_a_last_resort_and_nothing_is_nothing() {
+        let events = [dated("undated", None, None)];
+        let chosen = default_event(&events, date(2026, 3, 1)).map(|e| e.key.as_str());
+        assert_eq!(chosen, Some("undated"));
+        assert!(default_event(&[], date(2026, 3, 1)).is_none());
     }
 
     #[test]

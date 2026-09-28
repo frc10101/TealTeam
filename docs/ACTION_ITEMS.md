@@ -92,14 +92,14 @@ The goal is an app a scout can sign into and submit through. No sync, no offline
 | # | Action | Source | Effort | Status |
 | --- | --- | --- | --- | --- |
 | U1 | Layout + role-gated nav, Askama compile-time-checked templates | RS §7 | M | **Done** |
-| U2 | **Event selection as client/URL state, not `sessions.selected_event_id`** — bookmarkable, multi-tab, and a precondition for offline. Persistent header switcher; allow multi-event analysis | RI-U9 · RS §12.12 | M |  |
-| U3 | Event summary: team count, match count, roster, "your team is not listed" warning | RS §5.1 | S |  |
-| U4 | **Schema-driven submission form renderer** reading D4 — replaces per-season template branching | RI-U3 · RS §5.2 | L | Schema + validator done; renderer pending |
+| U2 | **Event selection as client/URL state, not `sessions.selected_event_id`** — bookmarkable, multi-tab, and a precondition for offline. Persistent header switcher; allow multi-event analysis | RI-U9 · RS §12.12 | M | **Done** — multi-event analysis waits for U21 |
+| U3 | Event summary: team count, match count, roster, "your team is not listed" warning | RS §5.1 | S | **Done** |
+| U4 | **Schema-driven submission form renderer** reading D4 — replaces per-season template branching | RI-U3 · RS §5.2 | L | **Done** |
 | U5 | Account page, change password, help page | RS §5 | S | **Done** |
-| U6 | **Vendor Unpoly and the Tailwind build locally — never CDN.** Hard requirement for an event LAN, not an optimization | RS §7 | S | **Done** |
+| U6 | **Vendor Unpoly and the Tailwind build locally — never CDN.** Hard requirement for an event LAN, not an optimization | RS §7 | S | **Done** — nothing loads from a CDN; there is no Unpoly to vendor (U8) and no Tailwind build |
 | U7 | Tailwind component layer (`.btn` / `.card` / `.form-*` / `.alert` / `.badge` / `.data-table` / `.nav-link`) + teal palette | RS §7 | M | **Done** |
-| U8 | Re-create or deliberately design away the three Unpoly glue contracts: `tt:navigate` via `X-Up-Events`, `[tt-src]` polling regions, `[tt-change]` select-driven render | RS §7 | M |  |
-| U9 | Dual-mode responses keyed on `X-Up-Version` — keeps the app usable when Unpoly fails to load | RS §7 | M |  |
+| U8 | Re-create or deliberately design away the three Unpoly glue contracts: `tt:navigate` via `X-Up-Events`, `[tt-src]` polling regions, `[tt-change]` select-driven render | RS §7 | M | **Done** — designed away; live regions in `live.js` |
+| U9 | Dual-mode responses keyed on `X-Up-Version` — keeps the app usable when Unpoly fails to load | RS §7 | M | **Not needed** — one response mode (U8) |
 | U10 | Error and success fragments **in templates**, not inline Rust format strings | RS §7, §12 | S |  |
 
 ### Phase 1 notes
@@ -114,7 +114,43 @@ The goal is an app a scout can sign into and submit through. No sync, no offline
 
 **Tailwind is not in the build.** `static/css/site.css` is hand-written using the component class names REBUILD_SPEC §7 documents (`.btn`, `.card`, `.form-*`, `.alert`, `.badge`). That removes Node, npm, and a TypeScript compiler from a workflow maintained by students who graduate every four years. Swapping a Tailwind build back in later means replacing one file, not rewriting templates. **This is a deliberate deviation from the stated stack** — revisit at U7 if the utility classes are wanted.
 
-**Still open in Phase 1:** U2 (event selection as client state), U3 (event summary), U4's form renderer, U8-U10 (Unpoly glue, dual-mode responses, error templates). These need events and matches in the database, which is the upstream-sync work in Phase 2.
+**Event selection is URL state (U2, U3).** Pages take `?event=2026mabil`; the header switcher is a GET form with no action, so choosing an event reloads the page you are on, for that event, and every nav link carries the parameter onward. Nothing is stored anywhere — which is what makes a page bookmarkable, lets two tabs show two events, and means the choice needs no server memory offline. The retired `POST /api/events/select` has nothing left to do and was not rebuilt.
+
+**With no `?event=`, the page shows the event running today**, else the next to start, else the most recent (`tt_core::records::default_event`). A viewer is offered their team's events, or every event when they have no team *or their team is on no roster yet*. An event named in the URL is shown even if it is not on that list, and an unknown key renders the default with an error naming the key rather than a 400. "Today" is UTC's date, so near midnight at a US event the default can pick a neighbouring event — correcting that needs the event's zone (Q5).
+
+**Multi-event analysis is not part of this.** The refurbish plan's point was to scope *data entry* to one event and let *analysis* span several; there are no analysis screens yet, so that half lands with U21.
+
+**A scout can now record a match (U4).** `/submission` is three steps, all URL state like U2: pick the match (`?match=`, defaulting to the first unplayed), pick one of its **six robots** (`&team=`), then fill in a form drawn entirely from `seasons/2026.json` — no template names a 2026 field. A robot is never chosen from the event's list of fifty, and the alliance is read off the match rather than asked, which removes the two wrong-robot paths the retired form had. Assignments (L3-L5) should preselect a robot in this picker, not replace it.
+
+**Selects are rows of big buttons, counters are − / + around a number, and everything used mid-match is 56px** (RI §2F). It works without JavaScript: the match select has a Go button, and counters are plain number inputs until `static/js/counter.js` reveals their buttons — they are rendered `hidden`, so a page without the script never shows buttons that do nothing. `[hidden]` now beats component `display` rules in `site.css`. Checked by screenshot at 360 and 390px, not only by tests.
+
+**Untouched is not the same as unrecorded.** A counter starts at its minimum, so leaving it alone records a real 0; an unticked box records `false`. Only an unchosen select, a cleared counter, or blank notes are left out of the payload. The reading lives in `tt_core::form`, so a service worker can run the same code offline (C5).
+
+**Saving is idempotent (D7).** The form carries a UUIDv7 minted at render (`tt_core::record_id`, clock and randomness passed in, so wasm-clean); a double-tapped Save or a retried post stores one row. The id survives a failed save, so fixing a mistake and saving again cannot store two. A second, *different* observation of the same robot in the same match by the same scout is refused by the coverage index with a message saying so — and choosing that robot again says so before any typing. Correcting a saved observation waits on L10's decline.
+
+**Rows are written pending, with provenance:** scout, tablet (from the device cookie), the scout's team resolved at write time (L7), the schema version, and `observed_at`. A failed save re-renders with every answer and a message per field; success redirects (303) to a confirmation that is shown only if the row is really there, not because the URL says `saved=`.
+
+**A robot on no synced roster can still be scouted.** TBA's schedule routinely names teams before FIRST's roster sync creates them, and `observations.team_number` references `teams`. Recording inserts a placeholder `Team N` row if needed; the next roster sync renames it.
+
+**A schema papercut this surfaced:** `no_show` says "Tick this and skip the rest", but `starting_position` is required, so a no-show still needs a position picked. Either drop `required` from `starting_position` or change the hint — a schema-owner call (Open decision 2), so it is left as is.
+
+**No Unpoly (U8, U9).** The retired app's three glue contracts are designed away, not rebuilt:
+
+| Retired contract | Now |
+| --- | --- |
+| `tt:navigate` via `X-Up-Events` — server-driven navigation after login, logout, approve | Every form is a plain POST answered with a 303, or with the page re-rendered around the error. Browsers follow redirects on their own. |
+| `[tt-change]` — a select renders a fragment | `data-autosubmit` on a select in a GET form (`static/js/autosubmit.js`): a navigation to a URL holding the choice, so it is bookmarkable, with a `<noscript>` Go button. The event switcher and the scouting match picker use it. |
+| `[tt-src]` — self-loading and polling regions | `data-live="<url>" data-live-every="<s>"` (`static/js/live.js`): the region re-fetches a **whole page** and swaps in the element with its own id. The page is the fragment — no fragment routes, no second template, nothing to fall out of step. |
+
+Why: every page already worked as plain HTML. Unpoly's gain would be skipping a few KB of layout per click on a wired LAN; its cost is a second response mode on every handler (U9), a third-party attribute language to learn and upgrade, and target mismatches that fail silently (REBUILD_SPEC §7). Offline is unaffected: a service worker (C1, C5) intercepts page navigations and live-region fetches alike, and can render the same Askama pages. Reversible: Unpoly later is one vendored file plus `up-*` attributes, and nothing here fights it.
+
+**Live regions keep what they have when a refresh fails.** `live.js` pauses while the tab is hidden, never swaps content from under the focus, skips unchanged content, and on any failure leaves the content dimmed under "Not updating — showing what the server last said." A refresh that lands on sign-in after the session expires finds no element with the region's id, so a sign-in form is never swapped into a card. Each refresh is a full page render — fine at 30 s on a Pi, but a page that grows expensive should get a cheaper URL of its own rather than a slower timer. S8's server push can later trigger the same refresh.
+
+**The first live region is the lead scout's sync card**, because the background sync keeps working after **Sync now** returns. The card now also counts what is stored for the selected event (teams, matches, played), so matches can be watched landing. The outcome of the press sits outside the region, so a refresh cannot take it away mid-read. Tested: a flow test fetches every `data-live` URL on the page and requires exactly one element with the region's id, and another requires every `/static/` asset a page loads to be served. In headless Chrome against the binary, a tampered card was restored by the next poll, and after sign-out the card was kept and marked stale.
+
+**U9 has nothing left to do.** There is one response mode, the one that works without JavaScript. `POST /api/frc/sync` still answers scripts with JSON by `Accept`, which is a different split and stays.
+
+**Still open in Phase 1:** U10 (error templates).
 
 ---
 
@@ -134,7 +170,7 @@ This is the highest-leverage cluster in either source document. It removes the 5
 | L4 | Prefill query — next unplayed match, matching `scouter_id` **OR** `device_uuid` | RS §5.2 | M |  |
 | L5 | **Lock the scouting form to the assignment**, pre-filled and restricted, with a deliberate override | RI-A1 · RS §5.2, §12 | M |  |
 | L6 | **Coverage view**: who is assigned, who has submitted, which robots are uncovered | RI-A3 | M |  |
-| L7 | Resolve `submitting_team_id` at write time — it drives the notes privacy rule, and missing it once already required a backfill migration | RS §5.2 | S |  |
+| L7 | Resolve `submitting_team_id` at write time — it drives the notes privacy rule, and missing it once already required a backfill migration | RS §5.2 | S | **Done** — with U4's save |
 
 ### Review pipeline
 
@@ -219,7 +255,7 @@ This is the highest-leverage cluster in either source document. It removes the 5
 
 **One route, two callers.** A script gets JSON counts, per the spec. A browser posting the new **Sync now** button on `/lead-scout` gets the page back with the outcome, because without Unpoly (U8) a JSON body would be the whole screen. The page's "FIRST and TBA data" card shows the server's uplink, when it last synced (relative time, so no timezone question), and which feeds are configured. An uplink nobody has tested yet reads "Not checked yet", not "No internet" — otherwise a server with no credentials claims to be offline. `.badge-amber` was referenced by `UplinkState` but never defined in `site.css`; it is now, with `.badge-gray`.
 
-**Still open in Phase 2:** I9, I11, I14, all of L1-L12, U11-U20, and P3-P9.
+**Still open in Phase 2:** I9, I11, I14, L1-L6, L8-L12, U11-U20, and P3-P9.
 
 ---
 
@@ -312,7 +348,8 @@ These need a human, and several block Phase 2 or 3.
 | --- | --- |
 | Wi-Fi access point on the Pi | Violates FRC rule E143. Not built at all — the old code's AP path is gone with the rest. |
 | Wi-Fi HaLow | No client device supports it. Revisit only as a pit-to-stands Pi-to-Pi bridge, and only if Ethernet and QR both fail. |
-| A client-side SPA / Leptos rewrite | Unnecessary. Askama compiles to wasm and Unpoly fetches fragments over HTTP, so the UI can be served by wasm handlers with no framework and no client router. |
+| A client-side SPA / Leptos rewrite | Unnecessary. Askama compiles to wasm, so a service worker can render the same pages with no framework and no client router. |
+| Unpoly | Designed away at U8. Plain navigations, 303s, and a small `live.js` cover what its glue layer did, with one response mode instead of two (U9). |
 | IndexedDB as the browser store | Key-value only; you would hand-write every join. SQLite-WASM on OPFS lets the SQL mostly port. |
 | ElectricSQL / PowerSync | Neither has a Rust/wasm client story that fits, and these conflict rules are simpler than what they solve. |
 | Web Push notifications | Structurally impossible without internet. |

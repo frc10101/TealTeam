@@ -24,6 +24,7 @@
 use chrono::{DateTime, Utc};
 use thiserror::Error;
 use tt_core::records::{Event, MatchRecord, Team, TeamEventStats};
+use tt_core::season::Payload;
 use tt_core::user::{Roles, Session, User};
 
 /// Anything that can go wrong reaching storage.
@@ -134,6 +135,43 @@ impl Device {
 
 /// How long since a heartbeat a device still counts as online.
 pub const DEVICE_ONLINE_WINDOW: chrono::TimeDelta = chrono::TimeDelta::minutes(3);
+
+/// One scout's record of one robot in one match, ready to store.
+///
+/// Arrives pending review; approving and declining it are later updates to the
+/// same row (L9, L10), never a copy into another table.
+#[derive(Debug, Clone)]
+pub struct NewObservation {
+    /// UUIDv7 minted when the form was rendered (D7). A second post carrying
+    /// the same id is the same observation, not another one.
+    pub client_record_id: String,
+    pub match_key: String,
+    pub event_key: String,
+    pub team_number: i32,
+    /// `"red"` or `"blue"`, taken from the match rather than asked of the scout.
+    pub alliance: &'static str,
+    /// Already checked against the season schema.
+    pub payload: Payload,
+    pub schema_version: i64,
+    pub scouter_id: Option<i64>,
+    pub device_id: Option<i64>,
+    /// The scout's team, resolved now (L7). It decides who may read the notes,
+    /// and the retired app needed a backfill migration after leaving it null.
+    pub submitting_team: Option<i32>,
+    /// When the match was watched. Not when the row reached the server, which
+    /// in phase 3 can be much later.
+    pub observed_at: DateTime<Utc>,
+}
+
+/// What recording an observation did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Recorded {
+    /// Stored now, with this row id.
+    Created(i64),
+    /// This `client_record_id` was already stored -- a double-tapped Save or a
+    /// retried post. Nothing was written; the earlier row stands.
+    Duplicate(i64),
+}
 
 #[trait_variant::make(Repo: Send)]
 pub trait LocalRepo {
@@ -252,6 +290,8 @@ pub trait LocalRepo {
 
     async fn upsert_match(&self, record: &MatchRecord, now: DateTime<Utc>) -> Result<()>;
 
+    async fn match_by_key(&self, key: &str) -> Result<Option<MatchRecord>>;
+
     /// An event's matches in playing order.
     async fn event_matches(&self, event_key: &str) -> Result<Vec<MatchRecord>>;
 
@@ -267,6 +307,27 @@ pub trait LocalRepo {
 
     /// Every team's stats at an event, best rank first.
     async fn event_stats(&self, event_key: &str) -> Result<Vec<TeamEventStats>>;
+
+    // ── Observations ────────────────────────────────────────────────────────
+
+    /// Store a scout's observation, pending review.
+    ///
+    /// Idempotent on `client_record_id`: see [`Recorded::Duplicate`]. A second,
+    /// different observation of the same robot in the same match by the same
+    /// scout is a [`RepoError::Conflict`] while the first one is not declined.
+    ///
+    /// The robot need not be on a synced roster. Match schedules and rosters
+    /// arrive from different feeds, and a scout must be able to record a robot
+    /// the moment it is on the field.
+    async fn record_observation(
+        &self,
+        observation: &NewObservation,
+        now: DateTime<Utc>,
+    ) -> Result<Recorded>;
+
+    /// Robots in a match that a scout has an observation of, other than a
+    /// declined one, by team number.
+    async fn observed_teams(&self, match_key: &str, scouter_id: i64) -> Result<Vec<i32>>;
 }
 
 #[cfg(test)]

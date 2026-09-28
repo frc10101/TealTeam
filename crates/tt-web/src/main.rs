@@ -9,7 +9,9 @@
 
 mod auth;
 mod config;
+mod events;
 mod handlers;
+mod scouting;
 mod startup;
 mod upstream;
 
