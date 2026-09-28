@@ -28,6 +28,8 @@ pub struct Config {
     pub port: u16,
     /// Whether destructive schema resets are permitted.
     pub allow_schema_reset: bool,
+    /// Whether to pull the FIRST event list when the server starts.
+    pub first_sync_on_boot: bool,
 }
 
 /// Runtime mode.
@@ -67,6 +69,9 @@ pub enum ConfigError {
 
     #[error("PORT must be a number between 1 and 65535, got {0:?}")]
     InvalidPort(String),
+
+    #[error("{name} must be 'true' or 'false', got {value:?}")]
+    NotABoolean { name: &'static str, value: String },
 }
 
 pub const DEFAULT_PORT: u16 = 8080;
@@ -103,7 +108,21 @@ impl Config {
             database_url,
             port,
             allow_schema_reset: mode.allows_schema_reset(),
+            first_sync_on_boot: flag("FIRST_SYNC_ON_BOOT", get("FIRST_SYNC_ON_BOOT"), true)?,
         })
+    }
+}
+
+/// Parse an on/off setting. Blank means the default; anything unrecognised is
+/// an error rather than a guess, for the same reason as [`Mode`].
+fn flag(name: &'static str, raw: Option<String>, default: bool) -> Result<bool, ConfigError> {
+    let Some(raw) = raw.filter(|v| !v.trim().is_empty()) else {
+        return Ok(default);
+    };
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "true" | "1" | "yes" | "on" => Ok(true),
+        "false" | "0" | "no" | "off" => Ok(false),
+        _ => Err(ConfigError::NotABoolean { name, value: raw }),
     }
 }
 
@@ -247,6 +266,35 @@ mod tests {
             Config::from_lookup(lookup(&[("PORT", "eighty")])),
             Err(ConfigError::InvalidPort(_))
         ));
+    }
+
+    #[test]
+    fn the_boot_sync_is_on_unless_switched_off() {
+        assert!(Config::from_lookup(lookup(&[])).unwrap().first_sync_on_boot);
+        assert!(
+            Config::from_lookup(lookup(&[("FIRST_SYNC_ON_BOOT", "")]))
+                .unwrap()
+                .first_sync_on_boot
+        );
+        for off in ["false", "FALSE", " 0 ", "no", "off"] {
+            assert!(
+                !Config::from_lookup(lookup(&[("FIRST_SYNC_ON_BOOT", off)]))
+                    .unwrap()
+                    .first_sync_on_boot,
+                "{off:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_misspelled_flag_is_an_error_not_a_guess() {
+        assert_eq!(
+            Config::from_lookup(lookup(&[("FIRST_SYNC_ON_BOOT", "flase")])),
+            Err(ConfigError::NotABoolean {
+                name: "FIRST_SYNC_ON_BOOT",
+                value: "flase".into()
+            })
+        );
     }
 
     #[test]

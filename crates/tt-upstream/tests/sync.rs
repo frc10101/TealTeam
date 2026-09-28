@@ -416,3 +416,128 @@ async fn upstream_failures_are_reported_not_swallowed() {
     assert!(report.problems.iter().any(|p| p.contains("fetching teams")));
     assert!(uplink.snapshot().last_api_error.is_some());
 }
+
+// ── The background pass (I7) ────────────────────────────────────────────────
+
+fn day(month: u32, day: u32) -> chrono::NaiveDate {
+    chrono::NaiveDate::from_ymd_opt(2026, month, day).unwrap()
+}
+
+/// A repo holding the one stub event (2026-03-12 to 03-15), and a TBA client
+/// pointed at `base`.
+async fn seeded(base: &str) -> (SqliteRepo, TbaClient, Uplink) {
+    let repo = repo().await;
+    let uplink = Uplink::new();
+    let (first, tba) = clients(base, &uplink);
+    sync::sync_events(&repo, &first, &EventFilters::all())
+        .await
+        .expect("events");
+    (repo, tba, uplink)
+}
+
+#[tokio::test]
+async fn a_pass_during_an_event_syncs_it_and_keeps_polling_fast() {
+    let base = stub_server().await;
+    let (repo, tba, uplink) = seeded(&base).await;
+
+    let pass = sync::sync_active(&repo, &tba, &uplink, day(3, 13), sync::PASS_TIMEOUT).await;
+
+    assert!(
+        pass.report.problems.is_empty(),
+        "{:?}",
+        pass.report.problems
+    );
+    assert_eq!(pass.live_events, 1);
+    assert_eq!(pass.report.matches, 3);
+    assert_eq!(pass.report.stats, 2);
+    assert_eq!(pass.next_interval(), sync::INTERVAL_DURING_EVENT);
+    assert!(uplink.snapshot().last_sync.is_some());
+}
+
+#[tokio::test]
+async fn with_nothing_live_a_pass_falls_back_to_the_surrounding_week() {
+    let base = stub_server().await;
+    let (repo, tba, uplink) = seeded(&base).await;
+
+    // Three days after it ended: the final rankings still need collecting.
+    let pass = sync::sync_active(&repo, &tba, &uplink, day(3, 18), sync::PASS_TIMEOUT).await;
+    assert_eq!(pass.report.matches, 3, "the finished event is still synced");
+    assert_eq!(pass.live_events, 0, "but it is not live");
+    assert_eq!(pass.next_interval(), sync::INTERVAL_BETWEEN_EVENTS);
+}
+
+#[tokio::test]
+async fn the_fallback_window_is_seven_days_either_side_inclusive() {
+    let base = stub_server().await;
+    let (repo, tba, uplink) = seeded(&base).await;
+
+    let synced = |today| {
+        let (repo, tba, uplink) = (&repo, &tba, &uplink);
+        async move {
+            sync::sync_active(repo, tba, uplink, today, sync::PASS_TIMEOUT)
+                .await
+                .report
+                .matches
+                > 0
+        }
+    };
+
+    assert!(synced(day(3, 5)).await, "seven days before the start");
+    assert!(!synced(day(3, 4)).await, "eight days before the start");
+    assert!(synced(day(3, 22)).await, "seven days after the end");
+    assert!(!synced(day(3, 23)).await, "eight days after the end");
+}
+
+#[tokio::test]
+async fn a_quiet_calendar_makes_a_quiet_pass() {
+    let base = stub_server().await;
+    let (repo, tba, uplink) = seeded(&base).await;
+
+    let pass = sync::sync_active(&repo, &tba, &uplink, day(6, 1), sync::PASS_TIMEOUT).await;
+
+    assert_eq!(
+        pass,
+        sync::Pass::default(),
+        "nothing to do is not a problem"
+    );
+    assert!(uplink.snapshot().last_sync.is_none());
+}
+
+#[tokio::test]
+async fn a_pass_that_overruns_its_budget_stops_and_says_so() {
+    let slow_matches = || async {
+        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+        "[]"
+    };
+    let app = Router::new()
+        .route("/2026/events", get(|| async { FIRST_EVENTS }))
+        .route("/2026/teams", get(|| async { FIRST_TEAMS }))
+        .route("/event/{key}/matches", get(slow_matches));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+    let (repo, tba, uplink) = seeded(&format!("http://{addr}")).await;
+
+    let budget = std::time::Duration::from_millis(200);
+    let started = std::time::Instant::now();
+    let pass = sync::sync_active(&repo, &tba, &uplink, day(3, 13), budget).await;
+
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(5),
+        "the budget must actually bound the pass"
+    );
+    assert!(
+        pass.report
+            .problems
+            .iter()
+            .any(|p| p.contains("stopped after 200ms")),
+        "{:?}",
+        pass.report.problems
+    );
+    // Choosing the events happens before the budget starts, so an overrun
+    // still knows the event is live and keeps the fast cadence.
+    assert_eq!(pass.live_events, 1);
+    assert_eq!(pass.next_interval(), sync::INTERVAL_DURING_EVENT);
+}

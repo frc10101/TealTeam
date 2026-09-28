@@ -9,6 +9,7 @@ tt-core = { workspace = true }
 tt-templates = { workspace = true }
 tt-repo = { workspace = true }
 tt-repo-sqlite = { workspace = true }
+tt-upstream = { workspace = true }
 
 anyhow = { workspace = true }
 argon2 = { workspace = true }

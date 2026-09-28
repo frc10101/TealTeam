@@ -10,12 +10,14 @@
 //!
 //!   1. Load `.env` files, then read config from the environment.
 //!   2. Initialise tracing.
-//!   3. **Validate config. This is the only fatal step** -- a bad `TEALTEAM_ENV`
-//!      or `PORT` is a typo someone can fix, and guessing at it is how the
-//!      retired implementation ended up erasing databases.
+//!   3. **Validate config. This is the only fatal step** -- a bad `TEALTEAM_ENV`,
+//!      `PORT`, or `FIRST_SYNC_ON_BOOT` is a typo someone can fix, and guessing
+//!      at it is how the retired implementation ended up erasing databases.
 //!   4. Open the database *lazily*. Does not touch the disk.
 //!   5. Probe it. **Failure is logged, not fatal**; the app serves degraded.
-//!   6. Bind and serve. Failure to bind is fatal -- there is nothing to serve on.
+//!   6. Start upstream sync in the background, if storage is up. **Never
+//!      awaited**: a venue with no internet must not delay the first page.
+//!   7. Bind and serve. Failure to bind is fatal -- there is nothing to serve on.
 
 use anyhow::Context;
 use axum::Router;
@@ -30,6 +32,7 @@ use tt_repo_sqlite::SqliteRepo;
 use tt_templates::{HealthPage, Page};
 
 use crate::config::{self, Config};
+use crate::upstream::{self, Upstream};
 
 /// Everything a handler needs. Cheap to clone; the contents are shared.
 #[derive(Clone)]
@@ -40,7 +43,8 @@ pub struct AppState {
     pub season: Arc<SeasonSchema>,
 }
 
-pub async fn run() -> anyhow::Result<()> {
+/// Steps 1-3, shared by every command.
+fn prepare() -> anyhow::Result<Config> {
     // 1-2. Config comes before tracing is configured, so early failures print to
     // stderr rather than vanishing. Tracing then picks up RUST_LOG from the same
     // .env files.
@@ -48,7 +52,11 @@ pub async fn run() -> anyhow::Result<()> {
     init_tracing();
 
     // 3. The only fatal validation step.
-    let config = Config::from_env().context("invalid configuration")?;
+    Config::from_env().context("invalid configuration")
+}
+
+pub async fn run() -> anyhow::Result<()> {
+    let config = prepare()?;
     info!(
         port = config.port,
         database = %config.database_url,
@@ -75,7 +83,7 @@ pub async fn run() -> anyhow::Result<()> {
         .with_context(|| format!("opening database {}", config.database_url))?;
 
     // 5. Degrade, do not abort.
-    match repo.health().await {
+    let storage_ready = match repo.health().await {
         Health::Ready => {
             // Forward-only. Nothing in this path can drop anything, regardless of
             // configuration -- see tt_repo_sqlite::migrate.
@@ -90,6 +98,7 @@ pub async fn run() -> anyhow::Result<()> {
             if expired > 0 {
                 info!("purged {expired} expired session(s)");
             }
+            true
         }
         Health::Down => {
             warn!(
@@ -97,15 +106,28 @@ pub async fn run() -> anyhow::Result<()> {
                  Storage-backed features will not work until this is fixed.",
                 config.database_url
             );
+            false
         }
-    }
+    };
 
     let state = AppState {
         repo: Arc::new(repo),
         season: Arc::new(season),
     };
 
-    // 6. Bind on 0.0.0.0 so LAN clients reach it. Nothing else is reachable from
+    // 6. Only with storage up. When it is down, migrations did not run and a
+    // sync would have no tables to write to.
+    if storage_ready {
+        upstream::spawn(
+            state.repo.clone(),
+            Upstream::from_env(),
+            config.first_sync_on_boot,
+        );
+    } else {
+        warn!("upstream sync not started: storage is down");
+    }
+
+    // 7. Bind on 0.0.0.0 so LAN clients reach it. Nothing else is reachable from
     // a scout's phone.
     let addr = format!("0.0.0.0:{}", config.port);
     let listener = tokio::net::TcpListener::bind(&addr)
@@ -118,6 +140,25 @@ pub async fn run() -> anyhow::Result<()> {
         .context("server error")?;
 
     Ok(())
+}
+
+/// `tt-web bulk-load` (I8).
+///
+/// Unlike serving, a dead database is fatal here: there is nothing to degrade
+/// to, and the point of the command is to find problems before leaving the shop.
+pub async fn bulk_load() -> anyhow::Result<()> {
+    let config = prepare()?;
+
+    let repo = SqliteRepo::connect(&config.database_url)
+        .with_context(|| format!("opening database {}", config.database_url))?;
+    if !repo.health().await.is_ready() {
+        anyhow::bail!("database unavailable at {}", config.database_url);
+    }
+    tt_repo_sqlite::migrate::apply(repo.pool())
+        .await
+        .context("applying migrations")?;
+
+    upstream::bulk_load(&repo, &Upstream::from_env(), &mut std::io::stdout()).await
 }
 
 pub fn router(state: AppState) -> Router {

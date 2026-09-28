@@ -168,8 +168,8 @@ This is the highest-leverage cluster in either source document. It removes the 5
 | I4 | FIRST sync: event/team/event_teams upserts, `tba_key = {year}{code}`, lenient three-format date parsing, country-filter precedence | RS §6.1 | M | **Done** |
 | I5 | TBA stats sync → `team_event_stats`; component OPRs non-critical (log and continue with nulls) | RS §6.2 | M | **Done** |
 | I6 | TBA match sync: `played` derivation, `winning_alliance`, `red1..blue3` from `frc` keys, unix `0` → `NULL` not epoch | RS §6.2 | M | **Done** |
-| I7 | Background loop: 2 min during active events, 3 hr otherwise, ±7-day fallback, 24-hr lookahead, 120s per-pass timeout | RS §6.2 | M | Cadence + sync_active done; loop task pending |
-| I8 | **Pre-event bulk load** — full upstream snapshot, one command, verifiable row counts. An afternoon of work that covers most of the tedious data before you leave the shop | RI-S5 | S | **Done** |
+| I7 | Background loop: 2 min during active events, 3 hr otherwise, ±7-day fallback, 24-hr lookahead, 120s per-pass timeout | RS §6.2 | M | **Done** |
+| I8 | **Pre-event bulk load** — full upstream snapshot, one command, verifiable row counts. An afternoon of work that covers most of the tedious data before you leave the shop | RI-S5 | S | **Done** — `tt-web bulk-load` |
 | I9 | ETag / conditional requests on the TBA poller | RI-S10 | S |  |
 | I10 | Connectivity tracker: TCP connect to `1.1.1.1:443`, 1500 ms, 3s cache, skip loopback/RFC1918/link-local | RS §6.4 | S | **Done** |
 | I11 | **Four-state connection chip describing the client's link to the server**, not the server's internet — and remove all "offline mode" toggle language | RI-O11 · RS §6.4, §12 | S |  |
@@ -199,7 +199,15 @@ This is the highest-leverage cluster in either source document. It removes the 5
 
 ### Phase 2 notes
 
-**Done so far: upstream ingestion.** The FIRST and TBA clients, the uplink probe, and the sync that lands events, rosters, matches, and statistics in the database. 12 integration tests run the whole path — stub HTTP server, real clients, real SQLite — against payloads shaped like the real thing.
+**Done so far: upstream ingestion, running on its own.** The FIRST and TBA clients, the uplink probe, and the sync that lands events, rosters, matches, and statistics in the database. 17 integration tests run the whole path — stub HTTP server, real clients, real SQLite — against payloads shaped like the real thing.
+
+**The server now keeps itself current (I7).** At boot it pulls the FIRST event list in the background (60s cap, `FIRST_SYNC_ON_BOOT=false` to skip), then hands over to the TBA loop: every 2 minutes while an event is live, every 3 hours otherwise, with the ±7-day fallback so last weekend's final rankings still arrive. Serving never waits on either — a venue with no internet does not delay the first page. Neither starts when storage is down, and missing credentials switch the matching piece off with a log line saying so.
+
+**Each pass has a 120s budget that bounds the network work only.** Choosing which events to sync is a local query and happens first, so a pass that overruns still knows whether an event is live and keeps the right cadence. What it stored before the cutoff stays stored.
+
+**A lost uplink now ends a pass instead of probing once per event.** `SyncReport.offline` is set on the first offline error, and both the loop and the bulk load stop there. Before, a pass over thirty events with no signal paid thirty probe timeouts to learn the same thing thirty times.
+
+**I4 and I8 were library code until this landed.** Nothing in the binary called `sync_events` or `bulk_load`, so "one command" did not exist. It does now: `tt-web bulk-load` applies migrations, loads everything, and prints per-event team, match, and stat counts **read back from the database** — what you check at the shop is what the Pi will serve. It exits non-zero if nothing landed. `tt-web help` lists the commands; a bare `tt-web` still serves.
 
 **The two schema-drift bugs from `TBA_SCHEMA_FIX_SUMMARY.md` are fixed and pinned by tests.** Component OPRs are found by dynamic name (`totalAutoPoints`, not a fixed `auto_oprs` field), and ranking points fall back to `sort_orders` / `extra_stats` when the legacy primitives are null. Both have tests named after the symptom, so a future "simplification" to direct field access fails loudly.
 
@@ -207,7 +215,7 @@ This is the highest-leverage cluster in either source document. It removes the 5
 
 **Parsing is in `tt-core`, transport in `tt-upstream`.** That split keeps the deserializers wasm-clean for S4, where a client with signal fetches upstream itself and hands the Pi a bundle — the reason the refurbish plan needs no relay server.
 
-**Still open in Phase 2:** the sync loop task (I7 has its cadence and `sync_active`, but nothing spawns it yet), I9, I11, I13, I14, all of L1-L12, U11-U20, and P3-P9.
+**Still open in Phase 2:** I9, I11, I13, I14, all of L1-L12, U11-U20, and P3-P9. I13 is the natural next step: the clients are constructed in `tt-web` now, and a manual sync is the in-app remedy for a Pi that booted without internet — the boot sync does not retry, by design.
 
 ---
 

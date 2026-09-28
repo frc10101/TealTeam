@@ -11,7 +11,10 @@
 //! The one thing that does abort is a total absence of connectivity, because
 //! then nothing after it will work either.
 
-use chrono::{NaiveDate, Utc};
+use std::sync::Arc;
+use std::time::Duration;
+
+use chrono::{NaiveDate, TimeDelta, Utc};
 use tracing::{info, warn};
 use tt_core::records::{Event, MatchRecord, Team, TeamEventStats};
 use tt_core::upstream::{self, Phase};
@@ -32,6 +35,9 @@ pub struct SyncReport {
     /// Things that went wrong but did not stop the run, in words an operator can
     /// act on.
     pub problems: Vec<String>,
+    /// The uplink dropped partway. Anything after that point was not attempted,
+    /// because every remaining request would have failed the same way.
+    pub offline: bool,
 }
 
 impl SyncReport {
@@ -42,6 +48,7 @@ impl SyncReport {
         self.matches += other.matches;
         self.stats += other.stats;
         self.problems.extend(other.problems);
+        self.offline |= other.offline;
     }
 
     fn problem(&mut self, message: impl Into<String>) {
@@ -321,6 +328,7 @@ pub async fn sync_event<R: Repo + Sync>(repo: &R, tba: &TbaClient, event_key: &s
     match sync_matches(repo, tba, event_key).await {
         Ok(r) => report.merge(r),
         Err(e) if e.is_offline() => {
+            report.offline = true;
             report.problem(format!("no connection while syncing {event_key}"));
             return report;
         }
@@ -329,7 +337,10 @@ pub async fn sync_event<R: Repo + Sync>(repo: &R, tba: &TbaClient, event_key: &s
 
     match sync_stats(repo, tba, event_key).await {
         Ok(r) => report.merge(r),
-        Err(e) => report.problem(format!("stats for {event_key}: {e}")),
+        Err(e) => {
+            report.offline |= e.is_offline();
+            report.problem(format!("stats for {event_key}: {e}"));
+        }
     }
 
     report
@@ -353,6 +364,9 @@ pub async fn bulk_load<R: Repo + Sync>(
         let events = repo.list_events().await.unwrap_or_default();
         for event in &events {
             report.merge(sync_event(repo, tba, &event.key).await);
+            if report.offline {
+                break;
+            }
         }
     } else {
         report.problem("TBA key not configured; skipped matches and statistics");
@@ -364,15 +378,22 @@ pub async fn bulk_load<R: Repo + Sync>(
 }
 
 /// How often to sync while an event is running.
-pub const INTERVAL_DURING_EVENT: std::time::Duration = std::time::Duration::from_secs(2 * 60);
+pub const INTERVAL_DURING_EVENT: Duration = Duration::from_secs(2 * 60);
 /// How often to sync otherwise.
-pub const INTERVAL_BETWEEN_EVENTS: std::time::Duration =
-    std::time::Duration::from_secs(3 * 60 * 60);
+pub const INTERVAL_BETWEEN_EVENTS: Duration = Duration::from_secs(3 * 60 * 60);
 /// How far ahead an upcoming event counts as imminent.
 pub const LOOKAHEAD_DAYS: i64 = 1;
+/// When nothing is live, events this many days either side of today still get
+/// a pass: last weekend's final rankings, next weekend's schedule.
+pub const FALLBACK_DAYS: i64 = 7;
+/// Longest one background pass may spend on the network. An overrun stops
+/// where it is; everything stored before then stays stored.
+pub const PASS_TIMEOUT: Duration = Duration::from_secs(120);
+/// Longest the FIRST event sync at boot may run.
+pub const BOOT_SYNC_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Choose a sync cadence from what is on the calendar.
-pub fn interval_for(active_event_count: usize) -> std::time::Duration {
+pub fn interval_for(active_event_count: usize) -> Duration {
     if active_event_count > 0 {
         INTERVAL_DURING_EVENT
     } else {
@@ -380,32 +401,112 @@ pub fn interval_for(active_event_count: usize) -> std::time::Duration {
     }
 }
 
-/// Sync whatever is currently relevant: events running today, plus anything
-/// starting within a day.
-pub async fn sync_active<R: Repo + Sync>(repo: &R, tba: &TbaClient, uplink: &Uplink) -> SyncReport {
-    let today = Utc::now().date_naive();
+/// What one background pass did.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Pass {
+    pub report: SyncReport,
+    /// Events running today or starting within [`LOOKAHEAD_DAYS`]. Zero when
+    /// the pass fell back to the wider window or found nothing at all.
+    pub live_events: usize,
+}
+
+impl Pass {
+    /// How long to wait before the next pass.
+    pub fn next_interval(&self) -> Duration {
+        interval_for(self.live_events)
+    }
+}
+
+/// One pass of the background loop (I7).
+///
+/// Syncs the events live on `today`: running, or starting within
+/// [`LOOKAHEAD_DAYS`]. When none are, falls back to every event within
+/// [`FALLBACK_DAYS`] either side, so an event that ended on Sunday still gets
+/// its final rankings on Tuesday.
+///
+/// `budget` bounds the network work only. Choosing the events is a local query
+/// and happens first, so a pass that overruns still knows which cadence comes
+/// next.
+pub async fn sync_active<R: Repo + Sync>(
+    repo: &R,
+    tba: &TbaClient,
+    uplink: &Uplink,
+    today: NaiveDate,
+    budget: Duration,
+) -> Pass {
     let mut report = SyncReport::default();
 
-    let events = match repo.active_events(today, LOOKAHEAD_DAYS).await {
-        Ok(events) => events,
+    let (events, live) = match pass_targets(repo, today).await {
+        Ok(found) => found,
         Err(e) => {
             report.problem(format!("listing active events: {e}"));
-            return report;
+            return Pass {
+                report,
+                live_events: 0,
+            };
         }
     };
 
-    if events.is_empty() {
-        return report;
-    }
+    let finished = tokio::time::timeout(budget, async {
+        for event in &events {
+            report.merge(sync_event(repo, tba, &event.key).await);
+            if report.offline {
+                break;
+            }
+        }
+    })
+    .await;
 
-    for event in &events {
-        report.merge(sync_event(repo, tba, &event.key).await);
+    if finished.is_err() {
+        report.problem(format!(
+            "sync pass stopped after {budget:?}; the remaining events wait for the next pass"
+        ));
     }
-
     if !report.is_empty() {
         uplink.record_sync();
     }
-    report
+
+    Pass {
+        report,
+        live_events: if live { events.len() } else { 0 },
+    }
+}
+
+/// The events a pass should cover, and whether they are live.
+async fn pass_targets<R: Repo + Sync>(
+    repo: &R,
+    today: NaiveDate,
+) -> tt_repo::Result<(Vec<Event>, bool)> {
+    let live = repo.active_events(today, LOOKAHEAD_DAYS).await?;
+    if !live.is_empty() {
+        return Ok((live, true));
+    }
+
+    // `active_events(d, n)` means "running on d, or starting in (d, d + n]".
+    // Anchored FALLBACK_DAYS back with twice that ahead, it is exactly the
+    // events whose dates overlap today ± FALLBACK_DAYS.
+    let from = today - TimeDelta::days(FALLBACK_DAYS);
+    let nearby = repo.active_events(from, 2 * FALLBACK_DAYS).await?;
+    Ok((nearby, false))
+}
+
+/// The background sync loop (I7). Never returns; spawn it.
+///
+/// The first pass runs immediately. After that, each pass sets the pause before
+/// the next: two minutes while an event is live, three hours otherwise.
+pub async fn run_loop<R: Repo + Sync>(repo: Arc<R>, tba: TbaClient, uplink: Uplink) {
+    loop {
+        let today = Utc::now().date_naive();
+        let pass = sync_active(&*repo, &tba, &uplink, today, PASS_TIMEOUT).await;
+        let next = pass.next_interval();
+        info!(
+            live_events = pass.live_events,
+            next_in_secs = next.as_secs(),
+            "sync pass: {}",
+            pass.report.summary()
+        );
+        tokio::time::sleep(next).await;
+    }
 }
 
 #[cfg(test)]
@@ -441,10 +542,48 @@ mod tests {
     }
 
     #[test]
+    fn losing_the_uplink_survives_a_merge() {
+        // bulk_load and sync_active stop on the merged flag; if a later merge
+        // could clear it, they would carry on probing a dead link.
+        let mut report = SyncReport {
+            offline: true,
+            ..Default::default()
+        };
+        report.merge(SyncReport::default());
+        assert!(report.offline);
+
+        let mut report = SyncReport::default();
+        report.merge(SyncReport {
+            offline: true,
+            ..Default::default()
+        });
+        assert!(report.offline);
+    }
+
+    #[test]
     fn the_cadence_speeds_up_during_an_event() {
         assert_eq!(interval_for(0), INTERVAL_BETWEEN_EVENTS);
         assert_eq!(interval_for(1), INTERVAL_DURING_EVENT);
         assert_eq!(interval_for(5), INTERVAL_DURING_EVENT);
+    }
+
+    #[test]
+    fn a_pass_sets_the_pause_before_the_next_one() {
+        let live = Pass {
+            live_events: 2,
+            ..Default::default()
+        };
+        assert_eq!(live.next_interval(), INTERVAL_DURING_EVENT);
+        // Syncing a nearby event in the fallback window is not a reason to poll
+        // every two minutes.
+        let fallback = Pass {
+            report: SyncReport {
+                matches: 40,
+                ..Default::default()
+            },
+            live_events: 0,
+        };
+        assert_eq!(fallback.next_interval(), INTERVAL_BETWEEN_EVENTS);
     }
 
     #[test]
@@ -470,6 +609,7 @@ mod tests {
             matches: 4,
             stats: 5,
             problems: vec!["x".into()],
+            offline: false,
         };
         let text = report.summary();
         for fragment in [
