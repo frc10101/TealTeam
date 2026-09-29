@@ -14,11 +14,12 @@ pub mod connectivity;
 pub mod error;
 pub mod form;
 pub mod matches;
-pub mod record_id;
 pub mod ranking;
+pub mod record_id;
 pub mod records;
 pub mod review;
 pub mod season;
+pub mod standings;
 pub mod upstream;
 pub mod user;
 

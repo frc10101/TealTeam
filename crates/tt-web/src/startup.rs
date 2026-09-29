@@ -180,6 +180,7 @@ pub fn router(state: AppState) -> Router {
         .route("/lead-scout/assignments", get(handlers::assignments))
         .route("/lead-scout/submissions/{id}", get(handlers::review_page))
         .route("/lead-scout/rankings", get(handlers::rankings))
+        .route("/lead-scout/rankings/enter", get(handlers::rankings_entry))
         .route("/lead-scout/weights", get(handlers::weights))
         .route("/drive-coach", get(handlers::drive_coach))
         // Forms
@@ -211,6 +212,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/devices/{id}/rename", post(handlers::rename_device))
         .route("/api/weights", post(handlers::save_weights))
+        .route("/api/rankings/manual", post(handlers::save_rankings))
         .route("/api/weights/reset", post(handlers::reset_weights))
         .route(
             "/api/observations/{id}/approve",
@@ -1873,6 +1875,146 @@ mod flow_tests {
         assert!(stored_assignments(&state).await.is_empty());
         let devices = state.repo.list_devices().await.expect("devices");
         assert_eq!(devices[0].name, None);
+    }
+
+    // ── Typing the rankings in (I14) ────────────────────────────────────────
+
+    async fn stored_rank(state: &AppState, team: i32) -> Option<i32> {
+        state
+            .repo
+            .team_stats("2026now", team)
+            .await
+            .expect("stats")
+            .and_then(|s| s.rank)
+    }
+
+    #[tokio::test]
+    async fn typed_rankings_replace_the_stored_ones_and_show_everywhere() {
+        let (state, admin) = scouting().await;
+        let synced = tt_core::records::TeamEventStats {
+            team_number: 10101,
+            event_key: "2026now".into(),
+            rank: Some(1),
+            opr: Some(40.0),
+            ..Default::default()
+        };
+        state
+            .repo
+            .upsert_team_stats(&synced, chrono::Utc::now())
+            .await
+            .expect("stats");
+
+        // The box opens on what is stored, ready to correct.
+        let body = text(
+            get(
+                &state,
+                "/lead-scout/rankings/enter?event=2026now",
+                Some(&admin),
+            )
+            .await,
+        )
+        .await;
+        assert!(body.contains(">10101</textarea>"), "{body}");
+        assert!(!body.contains("Nothing was saved"), "nothing was sent yet");
+        assert!(body.contains("(2 teams at this event)"));
+
+        let response = post(
+            &state,
+            "/api/rankings/manual?event=2026now",
+            "standings=254+3.42+11-1-0%0D%0A10101+2.9",
+            Some(&admin),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        assert_eq!(
+            location(&response),
+            "/lead-scout/rankings/enter?event=2026now&saved=2"
+        );
+        assert_eq!(stored_rank(&state, 254).await, Some(1));
+        assert_eq!(stored_rank(&state, 10101).await, Some(2));
+        let kept = state
+            .repo
+            .team_stats("2026now", 10101)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(kept.opr, Some(40.0), "OPRs are not on the audience display");
+
+        let body = text(get(&state, location(&response), Some(&admin)).await).await;
+        assert!(body.contains("Saved 2 ranks."));
+        assert!(
+            body.contains(">254 3.42 11-1-0\n10101 2.9</textarea>"),
+            "{body}"
+        );
+
+        let rankings =
+            text(get(&state, "/lead-scout/rankings?event=2026now", Some(&admin)).await).await;
+        assert!(ranking_row(&rankings, 254).contains("<td class=\"num\">1</td>"));
+    }
+
+    #[tokio::test]
+    async fn a_bad_line_saves_nothing_and_keeps_what_was_typed() {
+        let (state, admin) = scouting().await;
+        let body = text(
+            post(
+                &state,
+                "/api/rankings/manual?event=2026now",
+                "standings=254%0D%0A1+10101%0D%0A254",
+                Some(&admin),
+            )
+            .await,
+        )
+        .await;
+
+        assert!(body.contains("<p>Nothing was saved.</p>"), "{body}");
+        assert!(
+            body.contains("Line 2: team 1 is not at this event."),
+            "{body}"
+        );
+        assert!(body.contains("Line 3: team 254 is already ranked 1."));
+        assert!(body.contains(">254\r\n1 10101\r\n254</textarea>"), "{body}");
+        assert!(
+            !body.contains("The ranking below is from"),
+            "the box is not the stored one"
+        );
+        assert_eq!(stored_rank(&state, 254).await, None);
+    }
+
+    #[tokio::test]
+    async fn rankings_are_only_ever_saved_to_the_event_the_form_named() {
+        let (state, admin) = scouting().await;
+        for uri in [
+            "/api/rankings/manual",
+            "/api/rankings/manual?event=2026nope",
+        ] {
+            let body = text(post(&state, uri, "standings=254", Some(&admin)).await).await;
+            assert!(body.contains("<p>Nothing was saved.</p>"), "{uri}");
+            assert!(body.contains("The event was not recognised."), "{uri}");
+        }
+        assert_eq!(stored_rank(&state, 254).await, None);
+    }
+
+    #[tokio::test]
+    async fn a_scout_cannot_type_rankings_in() {
+        let (state, _) = scouting().await;
+        let kim = with_kim(&state).await;
+        let response = post(
+            &state,
+            "/api/rankings/manual?event=2026now",
+            "standings=254",
+            Some(&kim),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        assert_eq!(location(&response), "/");
+        let response = get(
+            &state,
+            "/lead-scout/rankings/enter?event=2026now",
+            Some(&kim),
+        )
+        .await;
+        assert_eq!(location(&response), "/");
+        assert_eq!(stored_rank(&state, 254).await, None);
     }
 
     // ── Coverage (L6) ───────────────────────────────────────────────────────

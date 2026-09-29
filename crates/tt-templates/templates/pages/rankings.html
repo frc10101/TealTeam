@@ -23,6 +23,10 @@
         {% if weights_changed == 0 %}Point values are the season's defaults.{% else %}{{ weights_changed }} point {% if weights_changed == 1 %}value is{% else %}values are{% endif %} changed from the season's defaults.{% endif %}
         <a href="/lead-scout/weights{{ nav.event.query() }}">Point values</a>
       </p>
+      <p class="hint">
+        Rank comes from The Blue Alliance. When nothing can reach it,
+        <a href="/lead-scout/rankings/enter{{ nav.event.query() }}">type the rankings in</a>.
+      </p>
     {% endif %}
     <p><a href="/lead-scout{{ nav.event.query() }}">Back to Lead Scout</a></p>
   </div>

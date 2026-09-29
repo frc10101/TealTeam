@@ -19,6 +19,7 @@ mod assignments;
 mod competition;
 pub mod migrate;
 mod observations;
+mod standings;
 mod users;
 mod weights;
 
@@ -31,6 +32,7 @@ use tt_core::assignments::{Assignment, Sighting};
 use tt_core::records::{Event, MatchRecord, Team, TeamEventStats};
 use tt_core::review::{Decision, ReviewState};
 use tt_core::season::WeightOverrides;
+use tt_core::standings::Standing;
 use tt_core::user::{Session, User};
 use tt_repo::{
     Credentials, Device, Health, NewAssignment, NewObservation, NewUser, Recorded, Repo, RepoError,
@@ -295,6 +297,15 @@ impl Repo for SqliteRepo {
 
     async fn event_stats(&self, event_key: &str) -> Result<Vec<TeamEventStats>> {
         self.event_stats_impl(event_key).await
+    }
+
+    async fn record_standings(
+        &self,
+        event_key: &str,
+        standings: &[Standing],
+        now: DateTime<Utc>,
+    ) -> Result<()> {
+        self.record_standings_impl(event_key, standings, now).await
     }
 
     async fn record_observation(

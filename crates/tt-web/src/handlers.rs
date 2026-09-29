@@ -10,7 +10,9 @@
 //!   empty form loses what someone typed, which on a phone in a gymnasium is the
 //!   difference between fixing a typo and giving up.
 
-use axum::extract::{Form, Path, State};
+use std::collections::HashMap;
+
+use axum::extract::{Form, Path, Query, State};
 use axum::http::header::ACCEPT;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
@@ -30,6 +32,7 @@ use crate::events::{self, EventContext, EventParam};
 use crate::ranking::{self, RankingParams};
 use crate::review::{self, ReviewedParam};
 use crate::scouting::{self, ScoutParams};
+use crate::standings;
 use crate::startup::AppState;
 use crate::upstream::{self, ManualSync};
 
@@ -593,6 +596,39 @@ pub async fn rankings(
 ) -> Response {
     let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
     html(ranking::page(&state, nav, &context, params.sort).await)
+}
+
+/// `GET /lead-scout/rankings/enter`: type the rankings in (I14).
+pub async fn rankings_entry(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
+    Query(query): Query<HashMap<String, String>>,
+) -> Response {
+    let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
+    let saved = query.get("saved").and_then(|n| n.parse().ok());
+    html(standings::page(&state, nav, &context, None, Vec::new(), saved).await)
+}
+
+/// `POST /api/rankings/manual?event=`: all of it, or nothing.
+pub async fn save_rankings(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
+    Form(pairs): Form<Vec<(String, String)>>,
+) -> Response {
+    let text = pairs
+        .iter()
+        .find(|(name, _)| name == "standings")
+        .map(|(_, value)| value.as_str())
+        .unwrap_or_default();
+    let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
+    match standings::save(&state, &user, requested.as_deref(), &context, text).await {
+        Ok(next) => Redirect::to(&next).into_response(),
+        Err(errors) => {
+            html(standings::page(&state, nav, &context, Some(text.to_string()), errors, None).await)
+        }
+    }
 }
 
 /// `GET /lead-scout/weights`.

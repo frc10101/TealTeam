@@ -387,6 +387,30 @@ pub struct RankingView {
 /// Fewer observations than this and a score is marked as thin.
 pub const THIN_BELOW: usize = 3;
 
+/// Typing the rankings in off the audience display (I14).
+#[derive(Template)]
+#[template(path = "pages/rankings_entry.html")]
+pub struct RankingsEntryPage {
+    pub title: String,
+    pub nav: Nav,
+    pub event_name: String,
+    /// Why there is no form, when there is not.
+    pub unavailable: String,
+    /// Every bad line of a refused save, or anything else that stopped it.
+    pub errors: Vec<String>,
+    /// This is a save coming back refused, so nothing was stored.
+    pub refused: bool,
+    /// What the save that led here did.
+    pub notice: String,
+    /// The box's contents: the stored ranking, or what a refused save sent.
+    pub text: String,
+    /// How old the stored ranking is, `"12 min ago"`; empty when there is none.
+    pub as_of: String,
+    pub roster_size: usize,
+    pub post_href: String,
+    pub back_href: String,
+}
+
 /// The point values behind the scouting score (L12).
 #[derive(Template)]
 #[template(path = "pages/weights.html")]

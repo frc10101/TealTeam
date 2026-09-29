@@ -1,0 +1,51 @@
+{% extends "layout.html" %}
+{#
+  Typing the rankings in (I14): the last resort when no uplink works. One
+  textarea, because forty rows is fastest as forty lines, with the stored
+  ranking already in it to correct. A refused save comes back with every
+  bad line named and the text as typed.
+#}
+{% block content %}
+{# One alert, not one per line: forty bad lines as forty boxes would push the
+   text off a phone screen. #}
+{% if !errors.is_empty() %}
+  <div class="alert alert-error" role="alert">
+    {% if refused %}<p>Nothing was saved.</p>{% endif %}
+    <ul>{% for error in errors %}<li>{{ error }}</li>{% endfor %}</ul>
+  </div>
+{% endif %}
+{% if !notice.is_empty() %}<p class="alert alert-success" role="status">{{ notice }}</p>{% endif %}
+
+<section class="card">
+  <div class="card-header">
+    <h1>Type rankings in{% if !event_name.is_empty() %} · {{ event_name }}{% endif %}</h1>
+  </div>
+  <div class="card-body stack">
+    {% if !unavailable.is_empty() %}
+      <p>{{ unavailable }}</p>
+    {% else %}
+      <p>
+        For when nothing can reach The Blue Alliance. Copy the rankings off the
+        audience display, <strong>one team per line, best first</strong>. The
+        line is the rank.
+      </p>
+      <p class="hint">
+        After the team number you can add the ranking score and the record, in
+        either order: <code>254 3.42 11-1-0</code>. Teams you leave out lose
+        their rank. The next sync from TBA replaces all of it.
+      </p>
+      {% if !as_of.is_empty() %}
+        <p class="muted">The ranking below is from {{ as_of }}.</p>
+      {% endif %}
+      <form class="stack" method="post" action="{{ post_href }}">
+        <label class="form-label" for="standings">Rankings{% if roster_size > 0 %} ({{ roster_size }} teams at this event){% endif %}</label>
+        <textarea class="form-input" id="standings" name="standings"
+                  rows="20" spellcheck="false" autocapitalize="off" autocomplete="off"
+                  placeholder="254 3.42 11-1-0&#10;1678 3.17 10-2&#10;10101">{{ text }}</textarea>
+        <button class="btn btn-primary" type="submit">Save rankings</button>
+      </form>
+    {% endif %}
+    <p><a href="{{ back_href }}">Back to Lead Scout</a></p>
+  </div>
+</section>
+{% endblock %}

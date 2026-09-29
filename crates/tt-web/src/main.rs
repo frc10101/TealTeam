@@ -16,6 +16,7 @@ mod handlers;
 mod ranking;
 mod review;
 mod scouting;
+mod standings;
 mod startup;
 mod upstream;
 

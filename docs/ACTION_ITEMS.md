@@ -224,14 +224,14 @@ This is the highest-leverage cluster in either source document. It removes the 5
 | I11 | **Four-state connection chip describing the client's link to the server**, not the server's internet — and remove all "offline mode" toggle language | RI-O11 · RS §6.4, §12 | S |  |
 | I12 | **Upstream freshness badges**; amber past 20 minutes during quals. Stale rankings that look live cause bad picks | RI-S11 | S | `is_stale` + `synced_at` done; badges pending |
 | I13 | `POST /api/frc/sync` manual sync, admin/lead only | RS §6.1 | S | **Done** |
-| I14 | **Manual rankings entry screen** — the true last resort. A lead scout can type 40 rows off the audience display in five minutes, and it has never once failed to work | RI-S13 | S |  |
+| I14 | **Manual rankings entry screen** — the true last resort. A lead scout can type 40 rows off the audience display in five minutes, and it has never once failed to work | RI-S13 | S | **Done** — `/lead-scout/rankings/enter` |
 
 ### Coach and pick list
 
 | # | Action | Source | Effort | Status |
 | --- | --- | --- | --- | --- |
 | U18 | **Coach panel reads the local `matches` table**, not the live FIRST schedule. It was non-functional offline, at exactly the event where it matters most | RS §12.6 | M |  |
-| U19 | Match status classification (±15 min windows) as a pure function in `tt-core` | RS §5.7 | S |  |
+| U19 | Match status classification (±15 min windows) as a pure function in `tt-core` | RS §5.7 | S | **Done** — `tt_core::matches::classify`, since the ingestion commit; see Phase 2 notes |
 | U20 | Pick list read / upsert / delete | RS §5.8 | S |  |
 
 ### Platform
@@ -341,7 +341,17 @@ Checked against the binary at phone width: the queue, the review page, a decline
 
 Checked against the binary at phone width, which caught the rankings table pushing the score off the edge of a 390px screen; its cells tighten and names wrap there now.
 
-**Still open in Phase 2:** I11, I14, U11-U20, and P3-P9.
+**Rankings can be typed in (I14).** `/lead-scout/rankings/enter` is one text box: one team per line, best first, **and the line is the rank**. So a rank is never typed, and can never disagree with the order. After the team number, a ranking score and a `W-L-T` record are optional, in either order: `254 3.42 11-1-0`. Spaces, tabs, and commas all separate, so a pasted spreadsheet column works too. The box opens holding the stored ranking, so correcting two rows is editing two lines, not retyping forty. It is linked from the Rankings page, and from the Lead Scout sync card beside **Sync now**, which is where a lead is when TBA cannot be reached.
+
+**All of it or nothing.** Every bad line is named at once ("Line 7: team 254 is already ranked 2."), the text comes back exactly as typed, and nothing is stored until there are no errors: a half-applied ranking is worse than a stale one. A number not on the event's roster is refused, because it is almost always a typo or a rank typed where the team belongs, and the message says so. With no roster synced at all, any number is taken.
+
+**A typed ranking replaces the stored one; it does not merge.** Listed teams get their rank, score, and record, with `synced_at` set to now. Their other ranking columns are cleared rather than left under a fresh timestamp that would vouch for them. OPRs are kept, since they are not on the display. Teams left out lose their rank, so a typed top twenty never leaves a stale "5th" beside a new one. It is one transaction (`Repo::record_standings`), and the next TBA sync overwrites it. It writes only to the event the form named, never to a default. The parsing is pure (`tt_core::standings`), so a client can run it offline.
+
+Checked against the binary at 390 and 1280px on a seeded 40-team event: the prefilled box, a refused save listing three bad lines in one alert, and a good save showing on the Rankings page.
+
+**U19 was already done.** `tt_core::matches::classify` implements the ±15-minute rule, with boundary tests, and has been there since the ingestion commit. **For U18:** it reads only the clock, so when an event runs 20 minutes behind, a match that has not been played reads "Completed". The coach panel should trust `matches.played` first and use the window only to pick out the current match.
+
+**Still open in Phase 2:** I11, U11-U18, U20, and P3-P9.
 
 ---
 

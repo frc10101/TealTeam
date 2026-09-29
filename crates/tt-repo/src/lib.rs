@@ -27,6 +27,7 @@ use tt_core::assignments::{AssigneeKey, Assignment, Sighting};
 use tt_core::records::{Event, MatchRecord, Team, TeamEventStats};
 use tt_core::review::{Decision, ReviewState};
 use tt_core::season::{Payload, WeightOverrides};
+use tt_core::standings::Standing;
 use tt_core::user::{Roles, Session, User};
 
 /// Anything that can go wrong reaching storage.
@@ -399,6 +400,16 @@ pub trait LocalRepo {
 
     /// Every team's stats at an event, best rank first.
     async fn event_stats(&self, event_key: &str) -> Result<Vec<TeamEventStats>>;
+
+    /// Replace an event's ranking with one typed off the audience display
+    /// (I14), in one transaction. Teams not listed lose their rank; OPRs are
+    /// kept.
+    async fn record_standings(
+        &self,
+        event_key: &str,
+        standings: &[Standing],
+        now: DateTime<Utc>,
+    ) -> Result<()>;
 
     // ── Observations ────────────────────────────────────────────────────────
 
