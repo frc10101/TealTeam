@@ -190,6 +190,23 @@ pub fn router(state: AppState) -> Router {
         .route("/api/submission", post(handlers::submit_observation))
         .route("/api/device/heartbeat", post(handlers::device_heartbeat))
         .route("/api/frc/sync", post(handlers::manual_sync))
+        .route(
+            "/api/assignments/match",
+            post(handlers::save_match_assignments),
+        )
+        .route(
+            "/api/assignments/clear-match",
+            post(handlers::clear_match_assignments),
+        )
+        .route(
+            "/api/assignments/clear",
+            post(handlers::clear_all_assignments),
+        )
+        .route(
+            "/api/assignments/auto",
+            post(handlers::distribute_assignments),
+        )
+        .route("/api/devices/{id}/rename", post(handlers::rename_device))
         // Operational
         .route("/health", get(health_json))
         .route("/status", get(health_page))
@@ -1475,6 +1492,374 @@ mod flow_tests {
             grid.contains(r#"href="/lead-scout?event=2026now""#),
             "and back"
         );
+    }
+
+    // ── Changing assignments (L2) ───────────────────────────────────────────
+
+    async fn stored_assignments(state: &AppState) -> Vec<(String, i32, Option<i64>, Option<i64>)> {
+        sqlx::query_as(
+            "SELECT match_key, team_number, scouter_id, device_id FROM scout_assignments \
+             ORDER BY match_key, team_number",
+        )
+        .fetch_all(state.repo.pool())
+        .await
+        .expect("assignments")
+    }
+
+    /// A second scout, Kim (user 2), who has not been seen.
+    async fn with_kim(state: &AppState) -> String {
+        let response = post(
+            state,
+            "/api/auth/signup",
+            "name=Kim&email=kim%40example.com&password=longenough1&confirm_password=longenough1",
+            None,
+        )
+        .await;
+        session_cookie_from(&response).expect("session")
+    }
+
+    fn location(response: &Response) -> &str {
+        response.headers()[header::LOCATION].to_str().unwrap()
+    }
+
+    #[tokio::test]
+    async fn a_signed_in_heartbeat_marks_the_scout_present_and_names_the_tablets_user() {
+        let (state, _) = scouting().await;
+        let scouts = state.repo.list_scouts().await.expect("scouts");
+        assert!(scouts[0].is_online(chrono::Utc::now(), tt_repo::DEVICE_ONLINE_WINDOW));
+
+        let devices = state.repo.list_devices().await.expect("devices");
+        assert_eq!(devices[0].last_user_id, Some(scouts[0].id));
+
+        // An anonymous heartbeat from the same tablet: nobody is on it now.
+        post(&state, "/api/device/heartbeat", "", Some(DEVICE)).await;
+        let devices = state.repo.list_devices().await.expect("devices");
+        assert_eq!(devices[0].last_user_id, None);
+    }
+
+    #[tokio::test]
+    async fn a_lead_assigns_a_match_and_lands_back_on_its_row() {
+        let (state, admin) = scouting().await;
+        let response = post(
+            &state,
+            "/api/assignments/match?event=2026now",
+            "match=2026now_qm2&a.254=u%3A1&a.10101=d%3A1&a.1=&then=stay",
+            Some(&admin),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        assert_eq!(
+            location(&response),
+            "/lead-scout/assignments?event=2026now&done=saved&match=2026now_qm2#2026now_qm2"
+        );
+        assert_eq!(
+            stored_assignments(&state).await,
+            [
+                ("2026now_qm2".into(), 254, Some(1), None),
+                ("2026now_qm2".into(), 10101, None, Some(1)),
+            ]
+        );
+
+        let body = text(get(&state, location(&response), Some(&admin)).await).await;
+        assert!(body.contains("Saved Q2."));
+        assert!(body.contains("<strong>2 of 6</strong>"));
+    }
+
+    #[tokio::test]
+    async fn save_and_next_opens_the_following_match() {
+        let (state, admin) = scouting().await;
+        let response = post(
+            &state,
+            "/api/assignments/match?event=2026now",
+            "match=2026now_qm1&a.254=u%3A1&then=next",
+            Some(&admin),
+        )
+        .await;
+        assert_eq!(
+            location(&response),
+            "/lead-scout/assignments?event=2026now&edit=2026now_qm2&done=saved&match=2026now_qm1#edit"
+        );
+
+        let body = text(get(&state, location(&response), Some(&admin)).await).await;
+        assert!(body.contains("Saved Q1."));
+        assert!(body.contains(r#"<section class="card" id="edit">"#));
+        assert!(body.contains("Assign Q2"));
+        assert!(body.contains(r#"<select class="form-select" id="a.254" name="a.254">"#));
+    }
+
+    #[tokio::test]
+    async fn the_editor_shows_who_has_each_robot_and_blank_takes_it_away() {
+        let (state, admin) = scouting().await;
+        post(
+            &state,
+            "/api/assignments/match",
+            "match=2026now_qm2&a.254=u%3A1",
+            Some(&admin),
+        )
+        .await;
+
+        let body = text(
+            get(
+                &state,
+                "/lead-scout/assignments?event=2026now&edit=2026now_qm2",
+                Some(&admin),
+            )
+            .await,
+        )
+        .await;
+        let select = &body[body.find(r#"name="a.254""#).unwrap()..];
+        let select = &select[..select.find("</select>").unwrap()];
+        assert!(
+            select.contains(r#"<option value="u:1" selected>Sam · online</option>"#),
+            "{select}"
+        );
+        assert!(select.contains("(tablet)"));
+
+        post(
+            &state,
+            "/api/assignments/match",
+            "match=2026now_qm2&a.254=",
+            Some(&admin),
+        )
+        .await;
+        assert!(stored_assignments(&state).await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn one_person_on_two_robots_in_a_match_is_refused_with_the_picks_kept() {
+        let (state, admin) = scouting().await;
+        let response = post(
+            &state,
+            "/api/assignments/match?event=2026now",
+            "match=2026now_qm2&a.254=u%3A1&a.10101=u%3A1",
+            Some(&admin),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = text(response).await;
+
+        assert!(body.contains("Sam is down for two robots in Q2."), "{body}");
+        assert!(stored_assignments(&state).await.is_empty());
+        let select = &body[body.find(r#"name="a.10101""#).unwrap()..];
+        assert!(
+            select[..select.find("</select>").unwrap()].contains(r#"value="u:1" selected"#),
+            "the editor comes back with what was picked"
+        );
+    }
+
+    #[tokio::test]
+    async fn an_assignee_that_does_not_exist_is_refused() {
+        let (state, admin) = scouting().await;
+        let body = text(
+            post(
+                &state,
+                "/api/assignments/match",
+                "match=2026now_qm2&a.254=u%3A99",
+                Some(&admin),
+            )
+            .await,
+        )
+        .await;
+        assert!(body.contains("Team 254: that scout or tablet no longer exists."));
+        assert!(stored_assignments(&state).await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn saving_a_match_drops_an_assignment_the_schedule_moved_away_from() {
+        let (state, admin) = scouting().await;
+        // Team 254 is assigned, then TBA swaps a surrogate into its slot.
+        assign(&state, 2, 254, Some(1), None).await;
+        sqlx::query("UPDATE matches SET red2 = 9999 WHERE tba_key = '2026now_qm2'")
+            .execute(state.repo.pool())
+            .await
+            .expect("reschedule");
+        let body = text(get(&state, "/lead-scout/assignments", Some(&admin)).await).await;
+        assert!(body.contains("Open the match and save it to drop them."));
+
+        post(
+            &state,
+            "/api/assignments/match",
+            "match=2026now_qm2&a.1=u%3A1",
+            Some(&admin),
+        )
+        .await;
+        assert_eq!(
+            stored_assignments(&state).await,
+            [("2026now_qm2".into(), 1, Some(1), None)],
+            "team 1 saved, and 254 -- no longer in the match -- dropped"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_robot_that_is_not_in_the_match_is_ignored() {
+        let (state, admin) = scouting().await;
+        post(
+            &state,
+            "/api/assignments/match",
+            "match=2026now_qm2&a.9999=u%3A1",
+            Some(&admin),
+        )
+        .await;
+        assert!(stored_assignments(&state).await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn auto_distribute_fills_unplayed_matches_one_robot_per_person() {
+        let (state, admin) = scouting().await;
+        with_kim(&state).await;
+
+        // Before: the online admin is ticked, Kim (never seen) and the tablet are not.
+        let body = text(
+            get(
+                &state,
+                "/lead-scout/assignments?event=2026now",
+                Some(&admin),
+            )
+            .await,
+        )
+        .await;
+        assert!(body.contains(r#"name="assignee" value="u:1" checked"#));
+        assert!(body.contains(r#"name="assignee" value="u:2">"#));
+        assert!(body.contains(r#"name="assignee" value="d:1">"#));
+
+        let response = post(
+            &state,
+            "/api/assignments/auto?event=2026now",
+            "assignee=u%3A1&assignee=u%3A2&matches=",
+            Some(&admin),
+        )
+        .await;
+        assert_eq!(
+            location(&response),
+            "/lead-scout/assignments?event=2026now&done=auto&n=2#upcoming"
+        );
+        // Q1 is played and left alone; in Q2, one robot each.
+        let stored = stored_assignments(&state).await;
+        assert_eq!(stored.len(), 2);
+        assert!(stored.iter().all(|a| a.0 == "2026now_qm2"));
+        assert_ne!(stored[0].2, stored[1].2);
+
+        let body = text(get(&state, location(&response), Some(&admin)).await).await;
+        assert!(body.contains("Handed out 2 robots."));
+    }
+
+    #[tokio::test]
+    async fn auto_distribute_needs_somebody_ticked_and_a_sensible_count() {
+        let (state, admin) = scouting().await;
+        for (form, says) in [
+            ("matches=", "tick at least one scout or tablet"),
+            ("assignee=u%3A99", "tick at least one scout or tablet"),
+            ("assignee=u%3A1&matches=0", "whole number above zero"),
+        ] {
+            let body = text(
+                post(
+                    &state,
+                    "/api/assignments/auto?event=2026now",
+                    form,
+                    Some(&admin),
+                )
+                .await,
+            )
+            .await;
+            assert!(body.contains(says), "{form}");
+        }
+        assert!(stored_assignments(&state).await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn clearing_a_match_or_everything() {
+        let (state, admin) = scouting().await;
+        for m in ["2026now_qm1", "2026now_qm2"] {
+            post(
+                &state,
+                "/api/assignments/match",
+                &format!("match={m}&a.254=u%3A1"),
+                Some(&admin),
+            )
+            .await;
+        }
+
+        let response = post(
+            &state,
+            "/api/assignments/clear-match?event=2026now",
+            "match=2026now_qm2",
+            Some(&admin),
+        )
+        .await;
+        assert!(location(&response).contains("done=cleared-match&match=2026now_qm2"));
+        assert_eq!(stored_assignments(&state).await.len(), 1);
+
+        // Without the box ticked, nothing goes.
+        let body = text(
+            post(
+                &state,
+                "/api/assignments/clear?event=2026now",
+                "",
+                Some(&admin),
+            )
+            .await,
+        )
+        .await;
+        assert!(body.contains("Tick the box to confirm first."));
+        assert_eq!(stored_assignments(&state).await.len(), 1);
+
+        let response = post(
+            &state,
+            "/api/assignments/clear?event=2026now",
+            "confirm=yes",
+            Some(&admin),
+        )
+        .await;
+        assert!(location(&response).contains("done=cleared&n=1"));
+        assert!(stored_assignments(&state).await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_tablet_can_be_named_and_unnamed() {
+        let (state, admin) = scouting().await;
+        let response = post(
+            &state,
+            "/api/devices/1/rename?event=2026now",
+            "name=++Stands+Left++",
+            Some(&admin),
+        )
+        .await;
+        assert!(location(&response).ends_with("done=renamed#tablets"));
+
+        let body = text(get(&state, location(&response), Some(&admin)).await).await;
+        assert!(body.contains("Tablet renamed."));
+        assert!(body.contains("<strong>Stands Left</strong>"));
+        assert!(body.contains("last used by Sam"));
+
+        post(
+            &state,
+            "/api/devices/1/rename?event=2026now",
+            "name=",
+            Some(&admin),
+        )
+        .await;
+        let devices = state.repo.list_devices().await.expect("devices");
+        assert_eq!(devices[0].display_name(), "Device 0191f7ac");
+    }
+
+    #[tokio::test]
+    async fn a_scout_cannot_change_assignments() {
+        let (state, _) = scouting().await;
+        let kim = with_kim(&state).await;
+        for (uri, form) in [
+            ("/api/assignments/match", "match=2026now_qm2&a.254=u%3A2"),
+            ("/api/assignments/auto?event=2026now", "assignee=u%3A2"),
+            ("/api/assignments/clear-match", "match=2026now_qm2"),
+            ("/api/assignments/clear?event=2026now", "confirm=yes"),
+            ("/api/devices/1/rename?event=2026now", "name=Mine"),
+        ] {
+            let response = post(&state, uri, form, Some(&kim)).await;
+            assert_eq!(response.status(), StatusCode::SEE_OTHER, "{uri}");
+            assert_eq!(location(&response), "/", "{uri}");
+        }
+        assert!(stored_assignments(&state).await.is_empty());
+        let devices = state.repo.list_devices().await.expect("devices");
+        assert_eq!(devices[0].name, None);
     }
 
     // ── No Unpoly: plain pages and live regions (U8) ────────────────────────

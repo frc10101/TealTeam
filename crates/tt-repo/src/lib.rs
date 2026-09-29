@@ -23,7 +23,7 @@
 
 use chrono::{DateTime, Utc};
 use thiserror::Error;
-use tt_core::assignments::Assignment;
+use tt_core::assignments::{AssigneeKey, Assignment};
 use tt_core::records::{Event, MatchRecord, Team, TeamEventStats};
 use tt_core::season::Payload;
 use tt_core::user::{Roles, Session, User};
@@ -106,6 +106,8 @@ pub struct Device {
     pub name: Option<String>,
     pub team_number: Option<i32>,
     pub last_seen_at: Option<DateTime<Utc>>,
+    /// Who was signed in at its latest heartbeat, if anyone.
+    pub last_user_id: Option<i64>,
 }
 
 impl Device {
@@ -129,13 +131,46 @@ impl Device {
     /// Whether this device has checked in recently enough to be considered
     /// present. Heartbeats are every 60s; the window allows two misses.
     pub fn is_online(&self, now: DateTime<Utc>, window: chrono::TimeDelta) -> bool {
-        self.last_seen_at
-            .is_some_and(|seen| now.signed_duration_since(seen) <= window)
+        seen_within(self.last_seen_at, now, window)
     }
 }
 
-/// How long since a heartbeat a device still counts as online.
+/// How long since a heartbeat a device, or a person, still counts as online.
 pub const DEVICE_ONLINE_WINDOW: chrono::TimeDelta = chrono::TimeDelta::minutes(3);
+
+fn seen_within(
+    last_seen: Option<DateTime<Utc>>,
+    now: DateTime<Utc>,
+    window: chrono::TimeDelta,
+) -> bool {
+    last_seen.is_some_and(|seen| now.signed_duration_since(seen) <= window)
+}
+
+/// Someone who can be handed a robot, and when their browser last checked in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Scout {
+    pub id: i64,
+    pub name: String,
+    pub team_number: Option<i32>,
+    /// From the heartbeat of a signed-in page -- not from having a session,
+    /// which outlives the person leaving by a day (REBUILD_SPEC.md 12.13).
+    pub last_seen_at: Option<DateTime<Utc>>,
+}
+
+impl Scout {
+    pub fn is_online(&self, now: DateTime<Utc>, window: chrono::TimeDelta) -> bool {
+        seen_within(self.last_seen_at, now, window)
+    }
+}
+
+/// One robot in one match for one assignee, ready to store.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewAssignment {
+    pub match_key: String,
+    pub event_key: String,
+    pub team_number: i32,
+    pub assignee: AssigneeKey,
+}
 
 /// One scout's record of one robot in one match, ready to store.
 ///
@@ -231,12 +266,14 @@ pub trait LocalRepo {
 
     /// Record a heartbeat, creating the device on first sight.
     ///
-    /// `team_number` fills in only if the device does not already have one, so a
-    /// borrowed tablet is not relabelled by whoever picks it up.
+    /// With someone signed in, they are marked as seen too (A6), and become
+    /// the device's last user. Their team fills in the device's only if it
+    /// does not already have one, so a borrowed tablet is not relabelled by
+    /// whoever picks it up.
     async fn touch_device(
         &self,
         device_uuid: &str,
-        team_number: Option<i32>,
+        user: Option<&User>,
         now: DateTime<Utc>,
     ) -> Result<Device>;
 
@@ -245,6 +282,9 @@ pub trait LocalRepo {
     async fn list_devices(&self) -> Result<Vec<Device>>;
 
     async fn rename_device(&self, id: i64, name: &str, now: DateTime<Utc>) -> Result<()>;
+
+    /// Every account, by name, with when each was last seen.
+    async fn list_scouts(&self) -> Result<Vec<Scout>>;
 
     // ── Competition graph ───────────────────────────────────────────────────
 
@@ -307,6 +347,24 @@ pub trait LocalRepo {
     /// person is the more specific instruction.
     async fn event_assignments(&self, event_key: &str) -> Result<Vec<Assignment>>;
 
+    /// Assign each robot, replacing whoever had it. All or nothing.
+    ///
+    /// Like an observation, an assignment may name a robot that the schedule
+    /// lists and no roster sync has created yet.
+    async fn set_assignments(
+        &self,
+        assignments: &[NewAssignment],
+        assigned_by: i64,
+        now: DateTime<Utc>,
+    ) -> Result<()>;
+
+    /// Remove one robot's assignment. Removing one that does not exist is fine.
+    async fn unassign(&self, match_key: &str, team_number: i32) -> Result<()>;
+
+    /// Remove every assignment at an event, or in one match of it. Returns how
+    /// many went.
+    async fn clear_assignments(&self, event_key: &str, match_key: Option<&str>) -> Result<u64>;
+
     // ── Statistics ──────────────────────────────────────────────────────────
 
     async fn upsert_team_stats(&self, stats: &TeamEventStats, now: DateTime<Utc>) -> Result<()>;
@@ -355,6 +413,7 @@ mod tests {
             name: name.map(str::to_string),
             team_number: None,
             last_seen_at: seen,
+            last_user_id: None,
         }
     }
 

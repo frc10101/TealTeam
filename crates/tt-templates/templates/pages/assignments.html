@@ -3,6 +3,10 @@
   across. A table on anything wide; under 48rem each match becomes a card of
   red over blue, like the scouting page's robot picker.
 
+  Every change (L2) is a plain form post answered with a 303 back here, so the
+  page works without JavaScript and a reload never posts twice. Tapping a
+  match opens its editor: ?edit=<match key>, in the URL like everything else.
+
   The explicit roles are there because changing a table's `display`, as the
   phone layout does, makes some browsers drop its table semantics.
 #}
@@ -25,7 +29,7 @@
     <tbody role="rowgroup">
       {% for row in rows.iter() %}
         <tr role="row" id="{{ row.id }}">
-          <th scope="row" role="rowheader">{{ row.label }}</th>
+          <th scope="row" role="rowheader"><a href="{{ row.edit_href }}" aria-label="Assign {{ row.label }}">{{ row.label }}</a></th>
           {% for cell in row.cells %}
             <td role="cell" class="slot {{ cell.color }}{% if cell.is_open() %} open{% endif %}">
               <span class="slot-station" aria-hidden="true">{{ cell.station }}</span>
@@ -54,6 +58,7 @@
 
 {% block content %}
 {% for error in errors %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endfor %}
+{% if !notice.is_empty() %}<p class="alert alert-success" role="status">{{ notice }}</p>{% endif %}
 
 <section class="card">
   <div class="card-header">
@@ -68,17 +73,95 @@
       {% else %}
         <p><strong>{{ grid.assigned }} of {{ grid.assignable }}</strong> robots in upcoming matches have a scout.</p>
       {% endif %}
-      <p class="hint">Assigning robots from this page is not built yet.</p>
+      <p class="hint">Tap a match to choose who watches each of its robots.</p>
     {% endif %}
     <p><a href="/lead-scout{{ nav.event.query() }}">Back to Lead Scout</a></p>
   </div>
 </section>
+
+{% if let Some(editor) = editor %}
+  <section class="card" id="edit">
+    <div class="card-header">
+      <h2>Assign {{ editor.label }}{% if editor.played %} <span class="badge badge-gray">played</span>{% endif %}</h2>
+    </div>
+    <div class="card-body">
+      <form method="post" action="/api/assignments/match{{ nav.event.query() }}" class="stack">
+        <input type="hidden" name="match" value="{{ editor.match_key }}">
+        <div class="editor-slots">
+          {% for slot in editor.slots %}
+            <div class="editor-slot {{ slot.color }}">
+              {% if slot.team.is_empty() %}
+                <span class="form-label">{{ slot.station }}</span>
+                <strong>TBD</strong>
+              {% else %}
+                <label class="form-label" for="{{ slot.field }}">{{ slot.station }} · <strong>{{ slot.team }}</strong>{% if !slot.team_name.is_empty() %} {{ slot.team_name }}{% endif %}</label>
+                <select class="form-select" id="{{ slot.field }}" name="{{ slot.field }}">
+                  {% for option in slot.options %}
+                    <option value="{{ option.value }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>
+                  {% endfor %}
+                </select>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" type="submit" name="then" value="stay">Save</button>
+          {% if editor.has_next %}
+            <button class="btn btn-secondary" type="submit" name="then" value="next">Save and assign {{ editor.next_label }}</button>
+          {% endif %}
+          <a class="btn btn-secondary" href="{{ editor.close_href }}">Cancel</a>
+        </div>
+      </form>
+      <form method="post" action="/api/assignments/clear-match{{ nav.event.query() }}">
+        <input type="hidden" name="match" value="{{ editor.match_key }}">
+        <button class="btn btn-danger btn-sm" type="submit">Clear {{ editor.label }}</button>
+      </form>
+    </div>
+  </section>
+{% endif %}
+
+{% if grid.is_some() %}
+  <details class="card" id="distribute">
+    <summary class="card-header"><h2>Auto-distribute</h2></summary>
+    <div class="card-body">
+      {% if pool.is_empty() %}
+        <p>Nobody has an account yet, so there is nobody to hand robots to.</p>
+      {% else %}
+        <form method="post" action="/api/assignments/auto{{ nav.event.query() }}" class="stack">
+          <fieldset class="field">
+            <legend class="form-label">Who is scouting?</legend>
+            <p class="hint">
+              Scouts online now are ticked. Tick a tablet only when it is shared
+              and nobody on it is ticked — a scout and the tablet they hold are
+              one person, and would be handed twice the robots.
+            </p>
+            <div class="pool">
+              {% for entry in pool %}
+                <label class="toggle">
+                  <input type="checkbox" name="assignee" value="{{ entry.value }}"{% if entry.checked %} checked{% endif %}>
+                  <span>{{ entry.label }}{% if entry.by_device %} <small class="muted">tablet</small>{% endif %}{% if entry.online %} <span class="badge badge-teal">online</span>{% endif %}</span>
+                </label>
+              {% endfor %}
+            </div>
+          </fieldset>
+          <div class="field">
+            <label class="form-label" for="distribute-matches">How many upcoming matches?</label>
+            <input class="form-input" type="number" id="distribute-matches" name="matches" min="1" inputmode="numeric" placeholder="All of them">
+            <p class="hint">Leave blank to fill every unplayed match. Robots already assigned are left alone, and nobody gets two robots in one match.</p>
+          </div>
+          <button class="btn btn-primary" type="submit">Hand out open robots</button>
+        </form>
+      {% endif %}
+    </div>
+  </details>
+{% endif %}
 
 {% if let Some(grid) = grid %}
   {% if !grid.stale.is_empty() %}
     <div class="alert alert-warning" role="status">
       <p>The schedule changed after these were assigned. A scout following them would watch the wrong robot:</p>
       <ul>{% for line in grid.stale %}<li>{{ line }}</li>{% endfor %}</ul>
+      <p>Open the match and save it to drop them.</p>
     </div>
   {% endif %}
 
@@ -99,5 +182,46 @@
       </div>
     </details>
   {% endif %}
+{% endif %}
+
+{% if !devices.is_empty() %}
+  <section class="card" id="tablets">
+    <div class="card-header"><h2>Tablets</h2></div>
+    <div class="card-body">
+      <p class="hint">Name a tablet for where it sits, so “Stands Left” can be assigned rather than a code.</p>
+      <ul class="devices">
+        {% for device in devices %}
+          <li>
+            <form method="post" action="/api/devices/{{ device.id }}/rename{{ nav.event.query() }}" class="device-rename">
+              <label class="form-label" for="device-{{ device.id }}">
+                <strong>{{ device.display }}</strong>
+                {% if device.online %}<span class="badge badge-teal">online</span>{% else %}<span class="muted">seen {{ device.last_seen }}</span>{% endif %}
+                {% if !device.last_user.is_empty() %}<span class="muted">· last used by {{ device.last_user }}</span>{% endif %}
+              </label>
+              <div class="inline-field">
+                <input class="form-input" id="device-{{ device.id }}" name="name" value="{{ device.name }}" maxlength="60" placeholder="e.g. Stands Left">
+                <button class="btn btn-secondary" type="submit">Rename</button>
+              </div>
+            </form>
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </section>
+{% endif %}
+
+{% if grid.is_some() %}
+  <section class="card" id="clear-all">
+    <div class="card-header"><h2>Start over</h2></div>
+    <div class="card-body">
+      <form method="post" action="/api/assignments/clear{{ nav.event.query() }}" class="stack">
+        <label class="toggle">
+          <input type="checkbox" name="confirm" value="yes" required>
+          <span>Yes, remove every assignment at {{ event_name }}, played matches included</span>
+        </label>
+        <button class="btn btn-danger" type="submit">Clear all assignments</button>
+      </form>
+    </div>
+  </section>
 {% endif %}
 {% endblock %}

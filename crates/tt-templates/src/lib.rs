@@ -12,7 +12,7 @@
 //! template consumes it, and no template ever reaches back into storage.
 
 use askama::Template;
-use tt_core::assignments::{self, Assignment};
+use tt_core::assignments::{self, AssigneeKey, Assignment};
 use tt_core::form::{FormErrors, RawAnswers, input_name, is_on};
 use tt_core::records::{Event, MatchRecord, Team};
 use tt_core::season::{FieldKind, SeasonSchema};
@@ -366,7 +366,7 @@ pub struct UpstreamPanel {
 // ── Assignments (L1) ────────────────────────────────────────────────────────
 
 /// The lead scout's assignment grid: every match, every robot, and who is
-/// watching it.
+/// watching it -- and the tools that change it (L2).
 #[derive(Template)]
 #[template(path = "pages/assignments.html")]
 pub struct AssignmentsPage {
@@ -377,7 +377,157 @@ pub struct AssignmentsPage {
     /// Why there is no grid, when there is not. Replaces the grid.
     pub unavailable: String,
     pub errors: Vec<String>,
+    /// What the change that led here did.
+    pub notice: String,
     pub grid: Option<AssignmentGrid>,
+    /// One match open for editing (`?edit=`).
+    pub editor: Option<MatchEditor>,
+    /// Who auto-distribute can hand robots to.
+    pub pool: Vec<PoolEntry>,
+    pub devices: Vec<DeviceRow>,
+}
+
+/// Someone who can be handed a robot, as a form offers them.
+#[derive(Debug, Clone)]
+pub struct AssigneeChoice {
+    pub key: AssigneeKey,
+    /// `"Sam"`, or `"Stands Left (tablet)"`.
+    pub label: String,
+}
+
+/// A checkbox in auto-distribute's "who is scouting" list.
+#[derive(Debug, Clone)]
+pub struct PoolEntry {
+    /// `u:3` or `d:2`.
+    pub value: String,
+    pub label: String,
+    pub by_device: bool,
+    pub online: bool,
+    /// Ticked when the page opens.
+    pub checked: bool,
+}
+
+/// A tablet in the list a lead scout names them from.
+#[derive(Debug, Clone)]
+pub struct DeviceRow {
+    pub id: i64,
+    /// The stored name, for the rename field. Empty when unnamed.
+    pub name: String,
+    /// What the grid calls it.
+    pub display: String,
+    pub online: bool,
+    /// `"just now"`, `"2 hours ago"`, or `"never"`.
+    pub last_seen: String,
+    /// Who was signed in on it last. Empty when nobody was.
+    pub last_user: String,
+}
+
+/// The six selects for one match (L2).
+#[derive(Debug, Clone)]
+pub struct MatchEditor {
+    pub match_key: String,
+    /// `"Q14"`.
+    pub label: String,
+    pub played: bool,
+    pub slots: Vec<EditorSlot>,
+    /// The next match, for "Save and edit next". `None` on the last one.
+    pub next_label: String,
+    pub has_next: bool,
+    /// Where Cancel goes: back to this row of the grid.
+    pub close_href: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct EditorSlot {
+    pub color: &'static str,
+    pub station: String,
+    /// Empty where the schedule has no team: nothing to assign.
+    pub team: String,
+    pub team_name: String,
+    /// The select's name: `a.254`.
+    pub field: String,
+    pub options: Vec<EditorOption>,
+}
+
+#[derive(Debug, Clone)]
+pub struct EditorOption {
+    /// Empty for "Unassigned".
+    pub value: String,
+    pub label: String,
+    pub selected: bool,
+}
+
+/// The grid page's address, optionally opened on a match's editor.
+///
+/// Not percent-encoded: event and match keys are TBA keys from the database.
+pub fn assignments_href(event_key: &str, edit: Option<&str>) -> String {
+    match edit {
+        Some(key) => format!("/lead-scout/assignments?event={event_key}&edit={key}#edit"),
+        None => format!("/lead-scout/assignments?event={event_key}"),
+    }
+}
+
+impl MatchEditor {
+    /// `chosen` overrides what is stored, team by team: a form coming back
+    /// after a refused save shows what was picked, not what was there.
+    pub fn new(
+        event_key: &str,
+        record: &MatchRecord,
+        next: Option<&MatchRecord>,
+        roster: &[Team],
+        assignments: &[Assignment],
+        choices: &[AssigneeChoice],
+        chosen: Option<&[(i32, Option<AssigneeKey>)]>,
+    ) -> Self {
+        let side = |color: &'static str, station: &str, teams: &[Option<i32>; 3]| {
+            teams
+                .iter()
+                .enumerate()
+                .map(|(i, slot)| {
+                    let current = slot.and_then(|n| match chosen {
+                        Some(chosen) => chosen.iter().find(|(t, _)| *t == n).and_then(|c| c.1),
+                        None => assignments
+                            .iter()
+                            .find(|a| a.match_key == record.key && a.team_number == n)
+                            .map(|a| a.assignee.key()),
+                    });
+                    let mut options = vec![EditorOption {
+                        value: String::new(),
+                        label: "Unassigned".into(),
+                        selected: current.is_none(),
+                    }];
+                    options.extend(choices.iter().map(|c| EditorOption {
+                        value: c.key.to_string(),
+                        label: c.label.clone(),
+                        selected: current == Some(c.key),
+                    }));
+                    EditorSlot {
+                        color,
+                        station: format!("{station} {}", i + 1),
+                        team: slot.map(|n| n.to_string()).unwrap_or_default(),
+                        team_name: slot
+                            .and_then(|n| roster.iter().find(|t| t.number == n))
+                            .map(|t| t.name.clone())
+                            .unwrap_or_default(),
+                        field: slot.map(|n| format!("a.{n}")).unwrap_or_default(),
+                        options,
+                    }
+                })
+                .collect::<Vec<_>>()
+        };
+        let mut slots = side("red", "Red", &record.red);
+        slots.extend(side("blue", "Blue", &record.blue));
+
+        Self {
+            match_key: record.key.clone(),
+            label: record.label(),
+            played: record.played,
+            slots,
+            next_label: next.map(|m| m.label()).unwrap_or_default(),
+            has_next: next.is_some(),
+            close_href: format!("{}#{}", assignments_href(event_key, None), record.key),
+        }
+    }
 }
 
 /// Matches down, the six driver stations across.
@@ -403,6 +553,8 @@ pub struct GridRow {
     pub id: String,
     /// `"Q14"`.
     pub label: String,
+    /// Opens this match's editor.
+    pub edit_href: String,
     /// Red 1-3, then blue 1-3.
     pub cells: Vec<GridCell>,
 }
@@ -435,7 +587,12 @@ impl GridCell {
 
 impl AssignmentGrid {
     /// `matches` in playing order. Names come from `roster`, the event's teams.
-    pub fn new(matches: &[MatchRecord], roster: &[Team], assignments: &[Assignment]) -> Self {
+    pub fn new(
+        event_key: &str,
+        matches: &[MatchRecord],
+        roster: &[Team],
+        assignments: &[Assignment],
+    ) -> Self {
         let name_of = |number: i32| {
             roster
                 .iter()
@@ -473,6 +630,7 @@ impl AssignmentGrid {
             GridRow {
                 id: m.key.clone(),
                 label: m.label(),
+                edit_href: assignments_href(event_key, Some(&m.key)),
                 cells,
             }
         };
@@ -1321,7 +1479,7 @@ mod tests {
     fn grid(assignments: &[Assignment]) -> AssignmentGrid {
         let matches = [scheduled(1, true), scheduled(2, false), scheduled(3, false)];
         let roster = [team(10101, "Teal Team"), team(254, "Cheesy Poofs")];
-        AssignmentGrid::new(&matches, &roster, assignments)
+        AssignmentGrid::new("2026mabil", &matches, &roster, assignments)
     }
 
     fn assignments_page(grid: Option<AssignmentGrid>, unavailable: &str) -> String {
@@ -1334,7 +1492,11 @@ mod tests {
             event_name: "Boston".into(),
             unavailable: unavailable.into(),
             errors: Vec::new(),
+            notice: String::new(),
             grid,
+            editor: None,
+            pool: Vec::new(),
+            devices: Vec::new(),
         }
         .render_html()
         .expect("render")
@@ -1414,6 +1576,82 @@ mod tests {
         );
         assert_eq!(grid.assigned, 0, "and it covers nobody");
         assert!(assignments_page(Some(grid), "").contains("would watch the wrong robot"));
+    }
+
+    #[test]
+    fn the_editor_offers_everyone_and_keeps_a_refused_pick() {
+        let matches = [scheduled(1, false), scheduled(2, false)];
+        let choices = [
+            AssigneeChoice {
+                key: AssigneeKey::Scout(1),
+                label: "Sam".into(),
+            },
+            AssigneeChoice {
+                key: AssigneeKey::Device(1),
+                label: "Stands Left (tablet)".into(),
+            },
+        ];
+        let stored = [assignment(1, 254, sam())];
+        let roster = [team(254, "Cheesy Poofs")];
+
+        let editor = MatchEditor::new(
+            "2026mabil",
+            &matches[0],
+            Some(&matches[1]),
+            &roster,
+            &stored,
+            &choices,
+            None,
+        );
+        assert_eq!(
+            (editor.label.as_str(), editor.next_label.as_str()),
+            ("Q1", "Q2")
+        );
+        assert_eq!(
+            editor.close_href,
+            "/lead-scout/assignments?event=2026mabil#2026mabil_qm1"
+        );
+        let red2 = &editor.slots[1];
+        assert_eq!(
+            (red2.field.as_str(), red2.team_name.as_str()),
+            ("a.254", "Cheesy Poofs")
+        );
+        let selected: Vec<_> = red2
+            .options
+            .iter()
+            .filter(|o| o.selected)
+            .map(|o| o.value.as_str())
+            .collect();
+        assert_eq!(selected, ["u:1"]);
+        assert_eq!(red2.options.len(), 3, "unassigned, Sam, the tablet");
+        assert!(
+            editor.slots[2].field.is_empty(),
+            "a gap has nothing to choose"
+        );
+
+        // Coming back from a refused save, the picks win over what is stored.
+        let chosen = [(254, Some(AssigneeKey::Device(1)))];
+        let editor = MatchEditor::new(
+            "2026mabil",
+            &matches[1],
+            None,
+            &roster,
+            &stored,
+            &choices,
+            Some(&chosen),
+        );
+        assert!(!editor.has_next);
+        let selected: Vec<_> = editor.slots[1]
+            .options
+            .iter()
+            .filter(|o| o.selected)
+            .map(|o| o.value.as_str())
+            .collect();
+        assert_eq!(selected, ["d:1"]);
+        assert!(
+            editor.slots[0].options[0].selected,
+            "10101 was not picked: unassigned"
+        );
     }
 
     #[test]

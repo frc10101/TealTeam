@@ -3,7 +3,7 @@
 use chrono::{DateTime, Utc};
 use sqlx::Row;
 use tt_core::user::{Roles, Session, User};
-use tt_repo::{Credentials, Device, NewUser, RepoError, Result};
+use tt_repo::{Credentials, Device, NewUser, RepoError, Result, Scout};
 
 use crate::SqliteRepo;
 
@@ -62,6 +62,7 @@ fn device_from_row(row: &sqlx::sqlite::SqliteRow) -> Device {
             .get::<Option<String>, _>("last_seen_at")
             .as_deref()
             .and_then(from_sql),
+        last_user_id: row.get("last_user_id"),
     }
 }
 
@@ -274,10 +275,27 @@ impl SqliteRepo {
     pub(crate) async fn touch_device_impl(
         &self,
         device_uuid: &str,
-        team_number: Option<i32>,
+        user: Option<&User>,
         now: DateTime<Utc>,
     ) -> Result<Device> {
         let ts = to_sql(now);
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| query_err("starting device heartbeat", e))?;
+
+        // A6: a person is online because their page just checked in, not
+        // because they hold a session that outlives their leaving by a day.
+        if let Some(user) = user {
+            sqlx::query("UPDATE users SET last_seen_at = ? WHERE id = ?")
+                .bind(&ts)
+                .bind(user.id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| query_err("recording user heartbeat", e))?;
+        }
+
         // NOTE: no `--` comments inside this string. Rust's backslash line
         // continuation removes the newline, so a SQL line comment would swallow
         // the rest of the statement -- silently, because it stays valid SQL.
@@ -285,30 +303,38 @@ impl SqliteRepo {
         // The COALESCE on team_number is what makes a borrowed tablet keep the
         // team it was first seen with, rather than being relabelled by whoever
         // picks it up next.
+        //
+        // last_user_id is simply the latest: nobody signed in leaves it null.
         let row = sqlx::query(
-            "INSERT INTO devices (device_uuid, team_number, last_seen_at, created_at, updated_at) \
-             VALUES (?, ?, ?, ?, ?) \
+            "INSERT INTO devices \
+                 (device_uuid, team_number, last_seen_at, last_user_id, created_at, updated_at) \
+             VALUES (?, ?, ?, ?, ?, ?) \
              ON CONFLICT (device_uuid) DO UPDATE SET \
                 last_seen_at = excluded.last_seen_at, \
+                last_user_id = excluded.last_user_id, \
                 team_number  = COALESCE(devices.team_number, excluded.team_number), \
                 updated_at   = excluded.updated_at \
-             RETURNING id, device_uuid, name, team_number, last_seen_at",
+             RETURNING id, device_uuid, name, team_number, last_seen_at, last_user_id",
         )
         .bind(device_uuid)
-        .bind(team_number)
+        .bind(user.and_then(|u| u.team_number))
+        .bind(&ts)
+        .bind(user.map(|u| u.id))
         .bind(&ts)
         .bind(&ts)
-        .bind(&ts)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await
         .map_err(|e| query_err("recording device heartbeat", e))?;
 
+        tx.commit()
+            .await
+            .map_err(|e| query_err("committing device heartbeat", e))?;
         Ok(device_from_row(&row))
     }
 
     pub(crate) async fn device_by_uuid_impl(&self, device_uuid: &str) -> Result<Option<Device>> {
         let row = sqlx::query(
-            "SELECT id, device_uuid, name, team_number, last_seen_at FROM devices \
+            "SELECT id, device_uuid, name, team_number, last_seen_at, last_user_id FROM devices \
              WHERE device_uuid = ?",
         )
         .bind(device_uuid)
@@ -320,7 +346,7 @@ impl SqliteRepo {
 
     pub(crate) async fn list_devices_impl(&self) -> Result<Vec<Device>> {
         let rows = sqlx::query(
-            "SELECT id, device_uuid, name, team_number, last_seen_at FROM devices \
+            "SELECT id, device_uuid, name, team_number, last_seen_at, last_user_id FROM devices \
              ORDER BY last_seen_at DESC NULLS LAST, id",
         )
         .fetch_all(&self.pool)
@@ -343,6 +369,29 @@ impl SqliteRepo {
             .await
             .map_err(|e| query_err("renaming device", e))?;
         Ok(())
+    }
+}
+
+impl SqliteRepo {
+    pub(crate) async fn list_scouts_impl(&self) -> Result<Vec<Scout>> {
+        let rows = sqlx::query(
+            "SELECT id, name, team_number, last_seen_at FROM users ORDER BY name COLLATE NOCASE, id",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| query_err("listing scouts", e))?;
+        Ok(rows
+            .iter()
+            .map(|row| Scout {
+                id: row.get("id"),
+                name: row.get("name"),
+                team_number: row.get("team_number"),
+                last_seen_at: row
+                    .get::<Option<String>, _>("last_seen_at")
+                    .as_deref()
+                    .and_then(from_sql),
+            })
+            .collect())
     }
 }
 

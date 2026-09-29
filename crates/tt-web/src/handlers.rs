@@ -10,7 +10,7 @@
 //!   empty form loses what someone typed, which on a phone in a gymnasium is the
 //!   difference between fixing a typo and giving up.
 
-use axum::extract::{Form, State};
+use axum::extract::{Form, Path, State};
 use axum::http::HeaderMap;
 use axum::http::header::ACCEPT;
 use axum::response::{IntoResponse, Redirect, Response};
@@ -21,7 +21,7 @@ use tt_core::user::{self, Roles};
 use tt_repo::{NewUser, Repo};
 use tt_templates::{AccountPage, HomePage, LeadScoutPage, Nav, Page, SignInPage, SignUpPage};
 
-use crate::assignments;
+use crate::assignments::{self, GridParams};
 use crate::auth::{
     Auth, Coach, LeadScout, MaybeAuth, SESSION_COOKIE, clear_session_cookie, device_uuid,
     hash_password, new_session, session_cookie, verify_password,
@@ -399,8 +399,11 @@ pub async fn device_heartbeat(
         return axum::Json(serde_json::json!({ "status": "no-device-id" })).into_response();
     };
 
-    let team = user.and_then(|u| u.team_number);
-    match state.repo.touch_device(&uuid, team, Utc::now()).await {
+    match state
+        .repo
+        .touch_device(&uuid, user.as_ref(), Utc::now())
+        .await
+    {
         Ok(device) => axum::Json(serde_json::json!({
             "status": "ok",
             "device": device.display_name(),
@@ -423,14 +426,102 @@ pub async fn lead_scout(
     lead_scout_page(&state, &user, requested.as_deref(), None).await
 }
 
-/// `GET /lead-scout/assignments` (L1): who scouts which robot in each match.
+// ── Assignments (L1, L2) ────────────────────────────────────────────────────
+
+/// `GET /lead-scout/assignments`: who scouts which robot in each match.
 pub async fn assignments(
     State(state): State<AppState>,
     LeadScout(user): LeadScout,
     EventParam(requested): EventParam,
+    params: GridParams,
 ) -> Response {
     let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
-    html(assignments::page(&state, nav, &context).await)
+    html(assignments::page(&state, nav, &context, &params, None, Vec::new()).await)
+}
+
+/// Answer an assignment change: a 303 back to the grid, or the grid again
+/// with why it did not happen.
+async fn assignment_outcome(
+    state: &AppState,
+    user: &tt_core::user::User,
+    requested: Option<&str>,
+    outcome: Result<String, Box<assignments::Refused>>,
+) -> Response {
+    match outcome {
+        Ok(next) => Redirect::to(&next).into_response(),
+        Err(refused) => {
+            let refused = *refused;
+            let event = refused.event_key.as_deref().or(requested);
+            let (nav, context) = event_page(state, Some(user), event).await;
+            html(
+                assignments::page(
+                    state,
+                    nav,
+                    &context,
+                    &GridParams::default(),
+                    refused.draft,
+                    refused.errors,
+                )
+                .await,
+            )
+        }
+    }
+}
+
+/// `POST /api/assignments/match`: set one match's six robots.
+pub async fn save_match_assignments(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
+    Form(pairs): Form<Vec<(String, String)>>,
+) -> Response {
+    let outcome = assignments::save_match(&state, &user, &pairs).await;
+    assignment_outcome(&state, &user, requested.as_deref(), outcome).await
+}
+
+/// `POST /api/assignments/clear-match`.
+pub async fn clear_match_assignments(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
+    Form(pairs): Form<Vec<(String, String)>>,
+) -> Response {
+    let outcome = assignments::clear_match(&state, &user, &pairs).await;
+    assignment_outcome(&state, &user, requested.as_deref(), outcome).await
+}
+
+/// `POST /api/assignments/clear?event=`.
+pub async fn clear_all_assignments(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
+    Form(pairs): Form<Vec<(String, String)>>,
+) -> Response {
+    let outcome = assignments::clear_all(&state, &user, requested.as_deref(), &pairs).await;
+    assignment_outcome(&state, &user, requested.as_deref(), outcome).await
+}
+
+/// `POST /api/assignments/auto?event=`.
+pub async fn distribute_assignments(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
+    Form(pairs): Form<Vec<(String, String)>>,
+) -> Response {
+    let outcome = assignments::distribute(&state, &user, requested.as_deref(), &pairs).await;
+    assignment_outcome(&state, &user, requested.as_deref(), outcome).await
+}
+
+/// `POST /api/devices/{id}/rename?event=`.
+pub async fn rename_device(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
+    Path(id): Path<i64>,
+    Form(pairs): Form<Vec<(String, String)>>,
+) -> Response {
+    let outcome = assignments::rename_device(&state, &user, requested.as_deref(), id, &pairs).await;
+    assignment_outcome(&state, &user, requested.as_deref(), outcome).await
 }
 
 /// `POST /api/frc/sync` (I13): refresh upstream data now.

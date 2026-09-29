@@ -85,7 +85,7 @@ The goal is an app a scout can sign into and submit through. No sync, no offline
 | A3 | Generic "Invalid email or password" on both failure modes — preserve the anti-enumeration behavior | RS §3 | S | **Done** |
 | A4 | **One typed role-guard extractor**, replacing the per-handler `if !user.is_admin && !user.is_lead_scout` repetition | RS §4 | M | **Done** |
 | A5 | Device identity: `localStorage` UUID → ten-year cookie → 60s heartbeat; `COALESCE` on upsert so a borrowed device keeps its first team | RS §3 | M | **Done** |
-| A6 | Derive user "online" from **heartbeat**, not from an unexpired 24-hour session. Auto-distribute was assigning robots to people who had gone home | RS §12.13 | S | **Done** |
+| A6 | Derive user "online" from **heartbeat**, not from an unexpired 24-hour session. Auto-distribute was assigning robots to people who had gone home | RS §12.13 | S | **Done** — completed with L2; see Phase 2 notes |
 
 ### Core interface
 
@@ -177,8 +177,8 @@ This is the highest-leverage cluster in either source document. It removes the 5
 
 | # | Action | Source | Effort | Status |
 | --- | --- | --- | --- | --- |
-| L1 | Assignment grid: matches × six robot slots, `"TBD"` for teams not in the local roster | RS §5.6 | L | **Done** — read-only; editing is L2 |
-| L2 | Set / auto-distribute / clear-all / clear-match / rename-device | RS §5.6 | M |  |
+| L1 | Assignment grid: matches × six robot slots, `"TBD"` for teams not in the local roster | RS §5.6 | L | **Done** |
+| L2 | Set / auto-distribute / clear-all / clear-match / rename-device | RS §5.6 | M | **Done** |
 | L3 | **Assignment-driven team selection** replacing the team list, with a keypad escape hatch | RI-U4 · RS §5.2 | M |  |
 | L4 | Prefill query — next unplayed match, matching `scouter_id` **OR** `device_uuid` | RS §5.2 | M |  |
 | L5 | **Lock the scouting form to the assignment**, pre-filled and restricted, with a deliberate override | RI-A1 · RS §5.2, §12 | M |  |
@@ -270,7 +270,7 @@ This is the highest-leverage cluster in either source document. It removes the 5
 
 **A lead scout can see the assignment grid (L1).** `/lead-scout/assignments` shows every match at the selected event down the side and the six driver stations across, each cell naming the robot, its team, and who is watching it — a scout by name, or a tablet by its label with "tablet" beside it. Upcoming matches come first; played ones fold away under a `<details>`, since nothing can be done about them. A count at the top says how many robots in upcoming matches have somebody on them. On a wide screen it is a table; under 48rem each match is a card of red over blue, the same shape as the scouting page's robot picker. Checked by screenshot at 1280 and 390px against the binary, with no sideways scroll on the phone.
 
-It is read-only. The action list puts setting, distributing, and clearing in L2, and the page says plainly that assigning from it is not built yet. Each row's id is its match key, so L2's post-then-303 can land the lead back on the row they just edited.
+Each row's id is its match key, so a change can land the lead back on the row it touched.
 
 **"TBD" means an empty slot, not an unknown team.** The retired grid printed "TBD" as the *name* of a team missing from the roster. Beside a real team number that reads as "team to be decided", which it is not, so a known number with no roster entry shows the number and *not on roster*; "TBD" is kept for a slot the schedule has not filled, as in playoffs before alliance selection.
 
@@ -278,9 +278,28 @@ It is read-only. The action list puts setting, distributing, and clearing in L2,
 
 **A failed read shows a message, not an empty grid.** If the schedule or the assignments cannot be read, the page says so instead of drawing a grid of "Unassigned", which would send a lead off to redo work that is already done. A failed roster read only costs the team names.
 
-**For L2:** `scout_assignments.team_number` references `teams`, like observations. Assigning a robot TBA has scheduled before FIRST's roster sync created it will fail the foreign key, so L2's set needs the same placeholder-team insert `record_observation` does. Where a row names both a scout and a tablet, the grid reports the scout; L2's set should write one or the other, never both.
+**The grid can be changed (L2).** Every change is a plain form post answered with a 303 back to the grid, scrolled to what changed, with a line saying what happened — so it works without JavaScript and a reload never posts twice. A refused change re-renders the grid with the reason.
 
-**Still open in Phase 2:** I9, I11, I14, L2-L6, L8-L12, U11-U20, and P3-P9.
+| Retired | Now |
+| --- | --- |
+| `POST /hx/assignments/set`, one robot per request | **Tap a match** (`?edit=<match>`): its six robots, each a select of every scout and tablet, online ones marked. **Save**, or **Save and assign Q15**, because a lead assigns a match at a time. A robot left blank is unassigned. |
+| Nothing stopped one person getting two robots in a match | Refused, naming them, with the picks kept so it can be fixed |
+| An assignment to a robot the schedule moved out lingered | Saving the match drops it; the grid's warning says to |
+| `POST /hx/assignments/auto`: `pool[i % n]` over every open slot in every unplayed match; pool defaulted to everyone with a live session plus every recently-seen device | **Auto-distribute**: tick who is scouting, optionally "the next N matches". Walks the pool round-robin across matches, and **never gives anyone two robots in one match** — the retired version did whenever there were fewer than six people. With fewer people than robots the rest stays open, visibly. Existing assignments are left alone. |
+| clear-all, clear-match: one click | **Clear Q14** in the match's editor; **Clear all assignments** needs a ticked confirmation box, which is a confirmation that works without JavaScript |
+| `POST /hx/devices/:id/rename` | A **Tablets** list: name, online or when last seen, who last used it, and a rename field. A blank name goes back to `Device 0191f7ac`. |
+
+**Who starts ticked in auto-distribute.** Scouts online now, and no tablets. A scout and the tablet in their hands are one person; ticking both would hand them twice the robots. The hint on the form says so — tick a tablet when it is shared.
+
+**A6 was not really done until now.** It was marked done in phase 1, but nothing recorded users' presence: only devices heartbeat. Migration `0002_presence.sql` adds `users.last_seen_at` and `devices.last_user_id`, and a heartbeat from a signed-in page stamps both. "Online" is a heartbeat in the last three minutes, for a person or a tablet. The migration was checked on the L1 demo database as well as a fresh one.
+
+**The schema facts that shaped the writes.** `scout_assignments.team_number` references `teams`, so assigning a robot TBA scheduled before FIRST's roster sync created it inserts a placeholder team first, as recording an observation does. Setting writes the scout *or* the tablet and clears the other, so no row names both. A batch — a saved match, an auto-distribute — is one transaction.
+
+Checked against the binary at 1280 and 390px: a match edit, save-and-next, auto-distribute over three matches (which handed out one robot, correctly: two matches were full and the third had one free person), and a stale assignment dropped by saving its match.
+
+**Worth knowing:** every browser that opens the app becomes a device, so the Tablets list and the pool grow with every personal phone that visits. If that gets long at an event, hide devices not seen for a day or so.
+
+**Still open in Phase 2:** I9, I11, I14, L3-L6, L8-L12, U11-U20, and P3-P9.
 
 ---
 

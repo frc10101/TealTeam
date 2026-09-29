@@ -1,14 +1,14 @@
-//! Scout assignments against SQLite (L1).
+//! Scout assignments against SQLite (L1, L2).
 //!
-//! Reads only, for the lead scout's grid. Setting, distributing, and clearing
-//! (L2) add their writes here.
+//! The grid's read, and the lead scout's writes: set, distribute, clear.
 
+use chrono::{DateTime, Utc};
 use sqlx::Row;
-use tt_core::assignments::{Assignee, Assignment};
-use tt_repo::{Device, Result};
+use tt_core::assignments::{Assignee, AssigneeKey, Assignment};
+use tt_repo::{Device, NewAssignment, Result};
 
 use crate::SqliteRepo;
-use crate::users::{from_sql, query_err};
+use crate::users::{from_sql, query_err, to_sql};
 
 fn assignment_from_row(row: &sqlx::sqlite::SqliteRow) -> Option<Assignment> {
     let scout = row
@@ -30,6 +30,7 @@ fn assignment_from_row(row: &sqlx::sqlite::SqliteRow) -> Option<Assignment> {
                 .get::<Option<String>, _>("last_seen_at")
                 .as_deref()
                 .and_then(from_sql),
+            last_user_id: None,
         };
         Some(Assignee::Device {
             id,
@@ -63,6 +64,95 @@ impl SqliteRepo {
         .await
         .map_err(|e| query_err("listing assignments", e))?;
         Ok(rows.iter().filter_map(assignment_from_row).collect())
+    }
+
+    pub(crate) async fn set_assignments_impl(
+        &self,
+        assignments: &[NewAssignment],
+        assigned_by: i64,
+        now: DateTime<Utc>,
+    ) -> Result<()> {
+        let ts = to_sql(now);
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| query_err("starting assignment write", e))?;
+
+        for a in assignments {
+            // As for observations: the schedule names robots before the roster
+            // sync creates them, and the row references `teams`. The next
+            // roster sync replaces the placeholder name.
+            sqlx::query(
+                "INSERT INTO teams (team_number, name, created_at, updated_at) \
+                 VALUES (?, ?, ?, ?) ON CONFLICT (team_number) DO NOTHING",
+            )
+            .bind(a.team_number)
+            .bind(format!("Team {}", a.team_number))
+            .bind(&ts)
+            .bind(&ts)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| query_err("ensuring assigned team exists", e))?;
+
+            // Exactly one of the two, always: replacing a scout with a tablet
+            // must clear the scout, or the row would name both.
+            let (scouter, device) = match a.assignee {
+                AssigneeKey::Scout(id) => (Some(id), None),
+                AssigneeKey::Device(id) => (None, Some(id)),
+            };
+            sqlx::query(
+                "INSERT INTO scout_assignments (match_key, team_number, event_key, scouter_id, \
+                     device_id, assigned_by, created_at, updated_at) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?) \
+                 ON CONFLICT (match_key, team_number) DO UPDATE SET \
+                    scouter_id  = excluded.scouter_id, \
+                    device_id   = excluded.device_id, \
+                    assigned_by = excluded.assigned_by, \
+                    updated_at  = excluded.updated_at",
+            )
+            .bind(&a.match_key)
+            .bind(a.team_number)
+            .bind(&a.event_key)
+            .bind(scouter)
+            .bind(device)
+            .bind(assigned_by)
+            .bind(&ts)
+            .bind(&ts)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| query_err("assigning a robot", e))?;
+        }
+
+        tx.commit()
+            .await
+            .map_err(|e| query_err("committing assignments", e))
+    }
+
+    pub(crate) async fn unassign_impl(&self, match_key: &str, team_number: i32) -> Result<()> {
+        sqlx::query("DELETE FROM scout_assignments WHERE match_key = ? AND team_number = ?")
+            .bind(match_key)
+            .bind(team_number)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| query_err("removing an assignment", e))?;
+        Ok(())
+    }
+
+    pub(crate) async fn clear_assignments_impl(
+        &self,
+        event_key: &str,
+        match_key: Option<&str>,
+    ) -> Result<u64> {
+        let done = sqlx::query(
+            "DELETE FROM scout_assignments WHERE event_key = ? AND (?2 IS NULL OR match_key = ?2)",
+        )
+        .bind(event_key)
+        .bind(match_key)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| query_err("clearing assignments", e))?;
+        Ok(done.rows_affected())
     }
 }
 
@@ -236,6 +326,123 @@ mod tests {
 
         let found = repo.event_assignments("2026mabil").await.expect("list");
         assert_eq!(found[0].assignee.name(), "Sam");
+    }
+
+    fn new_assignment(event_key: &str, team_number: i32, assignee: AssigneeKey) -> NewAssignment {
+        NewAssignment {
+            match_key: format!("{event_key}_qm1"),
+            event_key: event_key.into(),
+            team_number,
+            assignee,
+        }
+    }
+
+    #[tokio::test]
+    async fn setting_replaces_whoever_had_the_robot() {
+        let repo = repo().await;
+        let now = Utc::now();
+        repo.set_assignments(
+            &[new_assignment("2026mabil", 254, AssigneeKey::Scout(1))],
+            1,
+            now,
+        )
+        .await
+        .expect("set");
+        repo.set_assignments(
+            &[new_assignment("2026mabil", 254, AssigneeKey::Device(1))],
+            1,
+            now,
+        )
+        .await
+        .expect("replace");
+
+        let found = repo.event_assignments("2026mabil").await.expect("list");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].assignee.key(), AssigneeKey::Device(1));
+        let scouter: Option<i64> = sqlx::query_scalar("SELECT scouter_id FROM scout_assignments")
+            .fetch_one(repo.pool())
+            .await
+            .expect("row");
+        assert_eq!(
+            scouter, None,
+            "the scout is cleared, not left beside the tablet"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_robot_no_roster_has_synced_can_be_assigned() {
+        let repo = repo().await;
+        repo.set_assignments(
+            &[new_assignment("2026mabil", 9999, AssigneeKey::Scout(1))],
+            1,
+            Utc::now(),
+        )
+        .await
+        .expect("a placeholder team satisfies the key");
+        assert_eq!(
+            repo.team(9999).await.expect("team").unwrap().name,
+            "Team 9999"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_batch_is_all_or_nothing() {
+        let repo = repo().await;
+        let result = repo
+            .set_assignments(
+                &[
+                    new_assignment("2026mabil", 254, AssigneeKey::Scout(1)),
+                    // No user 42: the foreign key fails, and 254 must not stick.
+                    new_assignment("2026mabil", 1678, AssigneeKey::Scout(42)),
+                ],
+                1,
+                Utc::now(),
+            )
+            .await;
+        assert!(result.is_err());
+        assert!(
+            repo.event_assignments("2026mabil")
+                .await
+                .expect("list")
+                .is_empty()
+        );
+    }
+
+    #[tokio::test]
+    async fn clearing_takes_a_robot_a_match_or_an_event() {
+        let repo = repo().await;
+        let now = Utc::now();
+        for event_key in ["2026mabil", "2026nhgrs"] {
+            repo.set_assignments(
+                &[
+                    new_assignment(event_key, 254, AssigneeKey::Scout(1)),
+                    new_assignment(event_key, 1678, AssigneeKey::Device(2)),
+                ],
+                1,
+                now,
+            )
+            .await
+            .expect("set");
+        }
+
+        repo.unassign("2026mabil_qm1", 254).await.expect("unassign");
+        repo.unassign("2026mabil_qm1", 254)
+            .await
+            .expect("twice is fine");
+        assert_eq!(repo.event_assignments("2026mabil").await.unwrap().len(), 1);
+
+        let gone = repo
+            .clear_assignments("2026mabil", Some("2026mabil_qm1"))
+            .await
+            .expect("clear match");
+        assert_eq!(gone, 1);
+        assert_eq!(
+            repo.clear_assignments("2026nhgrs", None)
+                .await
+                .expect("clear event"),
+            2
+        );
+        assert_eq!(repo.clear_assignments("2026nhgrs", None).await.unwrap(), 0);
     }
 
     #[tokio::test]

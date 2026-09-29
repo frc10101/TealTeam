@@ -30,7 +30,8 @@ use tt_core::assignments::Assignment;
 use tt_core::records::{Event, MatchRecord, Team, TeamEventStats};
 use tt_core::user::{Session, User};
 use tt_repo::{
-    Credentials, Device, Health, NewObservation, NewUser, Recorded, Repo, RepoError, Result,
+    Credentials, Device, Health, NewAssignment, NewObservation, NewUser, Recorded, Repo, RepoError,
+    Result, Scout,
 };
 
 /// Time to wait for a connection before giving up.
@@ -172,10 +173,10 @@ impl Repo for SqliteRepo {
     async fn touch_device(
         &self,
         device_uuid: &str,
-        team_number: Option<i32>,
+        user: Option<&User>,
         now: DateTime<Utc>,
     ) -> Result<Device> {
-        self.touch_device_impl(device_uuid, team_number, now).await
+        self.touch_device_impl(device_uuid, user, now).await
     }
 
     async fn device_by_uuid(&self, device_uuid: &str) -> Result<Option<Device>> {
@@ -188,6 +189,10 @@ impl Repo for SqliteRepo {
 
     async fn rename_device(&self, id: i64, name: &str, now: DateTime<Utc>) -> Result<()> {
         self.rename_device_impl(id, name, now).await
+    }
+
+    async fn list_scouts(&self) -> Result<Vec<Scout>> {
+        self.list_scouts_impl().await
     }
 
     async fn upsert_event(&self, event: &Event, now: DateTime<Utc>) -> Result<()> {
@@ -253,6 +258,24 @@ impl Repo for SqliteRepo {
 
     async fn event_assignments(&self, event_key: &str) -> Result<Vec<Assignment>> {
         self.event_assignments_impl(event_key).await
+    }
+
+    async fn set_assignments(
+        &self,
+        assignments: &[NewAssignment],
+        assigned_by: i64,
+        now: DateTime<Utc>,
+    ) -> Result<()> {
+        self.set_assignments_impl(assignments, assigned_by, now)
+            .await
+    }
+
+    async fn unassign(&self, match_key: &str, team_number: i32) -> Result<()> {
+        self.unassign_impl(match_key, team_number).await
+    }
+
+    async fn clear_assignments(&self, event_key: &str, match_key: Option<&str>) -> Result<u64> {
+        self.clear_assignments_impl(event_key, match_key).await
     }
 
     async fn upsert_team_stats(&self, stats: &TeamEventStats, now: DateTime<Utc>) -> Result<()> {
