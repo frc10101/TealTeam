@@ -130,6 +130,7 @@ pub async fn page(
         next_duty: None,
         missed: Vec::new(),
         keypad: None,
+        declined: Vec::new(),
     };
 
     let Some(event) = &context.selected else {
@@ -164,6 +165,8 @@ pub async fn page(
         page.errors = errors;
         return page;
     }
+
+    page.declined = crate::review::declined_notices(state, user, context, &matches).await;
 
     let recorded_here = state
         .repo

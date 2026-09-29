@@ -6,11 +6,44 @@
 use chrono::{DateTime, Utc};
 use sqlx::Row;
 use tt_core::assignments::Sighting;
-use tt_core::season::payload_to_json;
-use tt_repo::{NewObservation, Recorded, RepoError, Result};
+use tt_core::review::{Decision, ReviewState};
+use tt_core::season::{parse_payload, payload_to_json};
+use tt_repo::{NewObservation, Recorded, RepoError, Result, StoredObservation};
 
 use crate::SqliteRepo;
-use crate::users::{is_unique_violation, query_err, to_sql};
+use crate::users::{from_sql, is_unique_violation, query_err, to_sql};
+
+fn stored_from_row(row: &sqlx::sqlite::SqliteRow) -> StoredObservation {
+    let ts = |column: &str| {
+        row.get::<Option<String>, _>(column)
+            .as_deref()
+            .and_then(from_sql)
+    };
+    let id: i64 = row.get("id");
+    StoredObservation {
+        id,
+        match_key: row.get("match_key"),
+        event_key: row.get("event_key"),
+        team_number: row.get("team_number"),
+        alliance: row.get("alliance"),
+        payload: parse_payload(&row.get::<String, _>("payload")).unwrap_or_else(|e| {
+            tracing::warn!("observation {id} has an unreadable payload: {e}");
+            Default::default()
+        }),
+        schema_version: row.get("schema_version"),
+        scouter_id: row.get("scouter_id"),
+        scouter_name: row.get("scouter_name"),
+        submitting_team: row.get("submitting_team"),
+        // The CHECK constraint allows nothing else; pending is the safe reading.
+        review_state: ReviewState::parse(&row.get::<String, _>("review_state"))
+            .unwrap_or(ReviewState::Pending),
+        review_note: row.get("review_note"),
+        reviewer_name: row.get("reviewer_name"),
+        reviewed_at: ts("reviewed_at"),
+        observed_at: ts("observed_at"),
+        created_at: ts("created_at"),
+    }
+}
 
 impl SqliteRepo {
     pub(crate) async fn record_observation_impl(
@@ -125,6 +158,98 @@ impl SqliteRepo {
         .fetch_all(&self.pool)
         .await
         .map_err(|e| query_err("listing recorded robots", e))
+    }
+
+    pub(crate) async fn pending_observations_impl(
+        &self,
+        event_key: &str,
+    ) -> Result<Vec<StoredObservation>> {
+        let rows = sqlx::query(
+            "SELECT o.*, s.name AS scouter_name, r.name AS reviewer_name \
+             FROM observations o \
+             LEFT JOIN users s ON s.id = o.scouter_id \
+             LEFT JOIN users r ON r.id = o.reviewed_by \
+             WHERE o.event_key = ? AND o.review_state = 'pending' \
+             ORDER BY o.created_at, o.id",
+        )
+        .bind(event_key)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| query_err("listing pending observations", e))?;
+        Ok(rows.iter().map(stored_from_row).collect())
+    }
+
+    pub(crate) async fn observation_impl(&self, id: i64) -> Result<Option<StoredObservation>> {
+        let row = sqlx::query(
+            "SELECT o.*, s.name AS scouter_name, r.name AS reviewer_name \
+             FROM observations o \
+             LEFT JOIN users s ON s.id = o.scouter_id \
+             LEFT JOIN users r ON r.id = o.reviewed_by \
+             WHERE o.id = ?",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| query_err("loading observation", e))?;
+        Ok(row.as_ref().map(stored_from_row))
+    }
+
+    pub(crate) async fn review_observation_impl(
+        &self,
+        id: i64,
+        decision: &Decision,
+        reviewer_id: i64,
+        now: DateTime<Utc>,
+    ) -> Result<bool> {
+        let note = match decision {
+            Decision::Approve => None,
+            Decision::Decline(reason) => Some(reason.as_str()),
+        };
+        let ts = to_sql(now);
+        // One statement, guarded on the state: two leads pressing at once
+        // cannot both review it, and the second learns so from the count.
+        let done = sqlx::query(
+            "UPDATE observations SET \
+                review_state = ?, review_note = ?, reviewed_by = ?, reviewed_at = ?, \
+                updated_at = ?, \
+                submitting_team = COALESCE(submitting_team, \
+                    (SELECT team_number FROM users WHERE id = observations.scouter_id)) \
+             WHERE id = ? AND review_state = 'pending'",
+        )
+        .bind(decision.state().as_str())
+        .bind(note)
+        .bind(reviewer_id)
+        .bind(&ts)
+        .bind(&ts)
+        .bind(id)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| query_err("reviewing observation", e))?;
+        Ok(done.rows_affected() == 1)
+    }
+
+    pub(crate) async fn declined_for_impl(
+        &self,
+        event_key: &str,
+        scouter_id: i64,
+    ) -> Result<Vec<StoredObservation>> {
+        let rows = sqlx::query(
+            "SELECT o.*, s.name AS scouter_name, r.name AS reviewer_name \
+             FROM observations o \
+             LEFT JOIN users s ON s.id = o.scouter_id \
+             LEFT JOIN users r ON r.id = o.reviewed_by \
+             WHERE o.event_key = ? AND o.scouter_id = ? AND o.review_state = 'declined' \
+               AND NOT EXISTS (SELECT 1 FROM observations again \
+                   WHERE again.match_key = o.match_key AND again.team_number = o.team_number \
+                     AND again.scouter_id = o.scouter_id AND again.review_state <> 'declined') \
+             ORDER BY o.reviewed_at DESC, o.id DESC",
+        )
+        .bind(event_key)
+        .bind(scouter_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| query_err("listing declined observations", e))?;
+        Ok(rows.iter().map(stored_from_row).collect())
     }
 
     pub(crate) async fn event_sightings_impl(&self, event_key: &str) -> Result<Vec<Sighting>> {
@@ -459,6 +584,100 @@ mod tests {
             (254, Some(1))
         );
         assert!(repo.event_sightings("2026nope").await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn the_queue_is_the_events_pending_observations_oldest_first() {
+        let repo = repo().await;
+        repo.record_observation(&observation(1, 254), Utc::now())
+            .await
+            .unwrap();
+        let later = NewObservation {
+            scouter_id: Some(2),
+            ..observation(2, 1)
+        };
+        repo.record_observation(&later, Utc::now() + chrono::TimeDelta::seconds(5))
+            .await
+            .unwrap();
+
+        let queue = repo.pending_observations("2026mabil").await.unwrap();
+        let teams: Vec<i32> = queue.iter().map(|o| o.team_number).collect();
+        assert_eq!(teams, [254, 1]);
+        assert_eq!(queue[0].scouter_name.as_deref(), Some("sam@example.com"));
+        assert_eq!(queue[0].payload.len(), 1, "the payload comes back parsed");
+        assert_eq!(queue[0].review_state, ReviewState::Pending);
+    }
+
+    #[tokio::test]
+    async fn approving_is_an_update_that_fills_in_the_scouts_team() {
+        let repo = repo().await;
+        let no_team = NewObservation {
+            submitting_team: None,
+            ..observation(1, 254)
+        };
+        let Recorded::Created(id) = repo.record_observation(&no_team, Utc::now()).await.unwrap()
+        else {
+            panic!("created")
+        };
+
+        assert!(
+            repo.review_observation(id, &Decision::Approve, 2, Utc::now())
+                .await
+                .unwrap()
+        );
+        let stored = repo.observation(id).await.unwrap().unwrap();
+        assert_eq!(stored.review_state, ReviewState::Approved);
+        assert_eq!(stored.submitting_team, Some(10101), "the scout's team");
+        assert_eq!(stored.reviewer_name.as_deref(), Some("kim@example.com"));
+        assert!(
+            repo.pending_observations("2026mabil")
+                .await
+                .unwrap()
+                .is_empty()
+        );
+
+        // Reviewed once is reviewed: a second press changes nothing.
+        let decline = Decision::decline("late").unwrap();
+        assert!(
+            !repo
+                .review_observation(id, &decline, 2, Utc::now())
+                .await
+                .unwrap()
+        );
+        assert_eq!(
+            repo.observation(id).await.unwrap().unwrap().review_state,
+            ReviewState::Approved
+        );
+    }
+
+    #[tokio::test]
+    async fn a_decline_keeps_the_row_and_the_reason_until_it_is_recorded_again() {
+        let repo = repo().await;
+        let Recorded::Created(id) = repo
+            .record_observation(&observation(1, 254), Utc::now())
+            .await
+            .unwrap()
+        else {
+            panic!("created")
+        };
+        let decline = Decision::decline("that was 1678").unwrap();
+        assert!(
+            repo.review_observation(id, &decline, 2, Utc::now())
+                .await
+                .unwrap()
+        );
+
+        assert_eq!(count(&repo).await, 1, "nothing is destroyed");
+        let declined = repo.declined_for("2026mabil", 1).await.unwrap();
+        assert_eq!(declined.len(), 1);
+        assert_eq!(declined[0].review_note.as_deref(), Some("that was 1678"));
+        assert!(repo.declined_for("2026mabil", 2).await.unwrap().is_empty());
+
+        // Recording the robot again is allowed, and answers the decline.
+        repo.record_observation(&observation(2, 254), Utc::now())
+            .await
+            .expect("the coverage index ignores declined rows");
+        assert!(repo.declined_for("2026mabil", 1).await.unwrap().is_empty());
     }
 
     #[tokio::test]

@@ -25,6 +25,7 @@ use chrono::{DateTime, Utc};
 use thiserror::Error;
 use tt_core::assignments::{AssigneeKey, Assignment, Sighting};
 use tt_core::records::{Event, MatchRecord, Team, TeamEventStats};
+use tt_core::review::{Decision, ReviewState};
 use tt_core::season::Payload;
 use tt_core::user::{Roles, Session, User};
 
@@ -197,6 +198,30 @@ pub struct NewObservation {
     /// When the match was watched. Not when the row reached the server, which
     /// in phase 3 can be much later.
     pub observed_at: DateTime<Utc>,
+}
+
+/// An observation as stored, with names resolved, for review (L8-L10).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StoredObservation {
+    pub id: i64,
+    pub match_key: String,
+    pub event_key: String,
+    pub team_number: i32,
+    /// `"red"` or `"blue"`.
+    pub alliance: String,
+    /// Unreadable JSON comes back empty, rather than hiding the row.
+    pub payload: Payload,
+    pub schema_version: i64,
+    pub scouter_id: Option<i64>,
+    /// `None` once the account is gone.
+    pub scouter_name: Option<String>,
+    pub submitting_team: Option<i32>,
+    pub review_state: ReviewState,
+    pub review_note: Option<String>,
+    pub reviewer_name: Option<String>,
+    pub reviewed_at: Option<DateTime<Utc>>,
+    pub observed_at: Option<DateTime<Utc>>,
+    pub created_at: Option<DateTime<Utc>>,
 }
 
 /// What recording an observation did.
@@ -403,6 +428,36 @@ pub trait LocalRepo {
     /// Every observation at an event other than a declined one, as coverage
     /// sees it (L6).
     async fn event_sightings(&self, event_key: &str) -> Result<Vec<Sighting>>;
+
+    // ── Review (L8-L10) ─────────────────────────────────────────────────────
+
+    /// An event's observations waiting for review, oldest first.
+    async fn pending_observations(&self, event_key: &str) -> Result<Vec<StoredObservation>>;
+
+    async fn observation(&self, id: i64) -> Result<Option<StoredObservation>>;
+
+    /// Approve or decline a pending observation. `false` when it was not
+    /// pending -- already reviewed, perhaps by another lead a moment ago --
+    /// and nothing changed.
+    ///
+    /// Approval resolves the scout's team if the row lacks it: it decides who
+    /// may read the notes, and the retired app needed a backfill migration
+    /// after leaving it null (REBUILD_SPEC.md 5.3).
+    async fn review_observation(
+        &self,
+        id: i64,
+        decision: &Decision,
+        reviewer_id: i64,
+        now: DateTime<Utc>,
+    ) -> Result<bool>;
+
+    /// A scout's declined observations at an event that they have not since
+    /// recorded again, newest review first: what the scout needs to be told.
+    async fn declined_for(
+        &self,
+        event_key: &str,
+        scouter_id: i64,
+    ) -> Result<Vec<StoredObservation>>;
 }
 
 #[cfg(test)]

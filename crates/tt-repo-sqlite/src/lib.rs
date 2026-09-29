@@ -28,10 +28,11 @@ use std::time::Duration;
 use tracing::warn;
 use tt_core::assignments::{Assignment, Sighting};
 use tt_core::records::{Event, MatchRecord, Team, TeamEventStats};
+use tt_core::review::Decision;
 use tt_core::user::{Session, User};
 use tt_repo::{
     Credentials, Device, Health, NewAssignment, NewObservation, NewUser, Recorded, Repo, RepoError,
-    Result, Scout,
+    Result, Scout, StoredObservation,
 };
 
 /// Time to wait for a connection before giving up.
@@ -312,6 +313,33 @@ impl Repo for SqliteRepo {
 
     async fn event_sightings(&self, event_key: &str) -> Result<Vec<Sighting>> {
         self.event_sightings_impl(event_key).await
+    }
+
+    async fn pending_observations(&self, event_key: &str) -> Result<Vec<StoredObservation>> {
+        self.pending_observations_impl(event_key).await
+    }
+
+    async fn observation(&self, id: i64) -> Result<Option<StoredObservation>> {
+        self.observation_impl(id).await
+    }
+
+    async fn review_observation(
+        &self,
+        id: i64,
+        decision: &Decision,
+        reviewer_id: i64,
+        now: DateTime<Utc>,
+    ) -> Result<bool> {
+        self.review_observation_impl(id, decision, reviewer_id, now)
+            .await
+    }
+
+    async fn declined_for(
+        &self,
+        event_key: &str,
+        scouter_id: i64,
+    ) -> Result<Vec<StoredObservation>> {
+        self.declined_for_impl(event_key, scouter_id).await
     }
 }
 

@@ -13,6 +13,7 @@ mod config;
 mod errors;
 mod events;
 mod handlers;
+mod review;
 mod scouting;
 mod startup;
 mod upstream;

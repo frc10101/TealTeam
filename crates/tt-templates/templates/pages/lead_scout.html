@@ -6,12 +6,45 @@
     <p><a class="btn btn-primary" href="/lead-scout/assignments{{ nav.event.query() }}">Assignments</a></p>
     <p class="hint">Who scouts which robot in each match.</p>
     <p class="alert alert-info">
-      The review queue and rankings are not built yet — they arrive with the
-      rest of phase 2.
+      Rankings are not built yet — they arrive with the rest of phase 2.
     </p>
     <p class="muted">Season: {{ season_name }}</p>
   </div>
 </section>
+
+{% if !reviewed.is_empty() %}<p class="alert alert-success" role="status">{{ reviewed }}</p>{% endif %}
+
+{% if let Some(queue) = queue %}
+  <section class="card" id="review">
+    <div class="card-header"><h2>Waiting for review</h2></div>
+    {# Live (L8): scouts keep submitting while the lead reads. Oldest first,
+       so the top of the list is always the next one to look at. #}
+    <div class="card-body" id="review-queue" data-live="{{ queue.live_href }}" data-live-every="30">
+      {% if queue.unavailable %}
+        <p>Could not read the queue. Reload to try again.</p>
+      {% else if queue.items.is_empty() %}
+        <p class="muted">Nothing waiting. Every observation at this event has been reviewed.</p>
+      {% else %}
+        <p><strong>{{ queue.items.len() }}</strong> waiting, oldest first.</p>
+        <ul class="queue">
+          {% for item in queue.items %}
+            <li>
+              <a class="queue-item" href="{{ item.href }}">
+                <strong>{{ item.heading }}</strong>
+                <span class="muted">{{ item.scout }} · {{ item.ago }}</span>
+                {% if item.missing_notes %}<span class="badge badge-amber">Missing notes</span>{% else %}<span class="badge badge-teal">Clean</span>{% endif %}
+              </a>
+              <form method="post" action="/api/observations/{{ item.id }}/approve{{ nav.event.query() }}">
+                <input type="hidden" name="then" value="queue">
+                <button class="btn btn-secondary" type="submit" aria-label="Approve {{ item.heading }}">Approve</button>
+              </form>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+  </section>
+{% endif %}
 
 <section class="card" id="upstream">
   <div class="card-header"><h2>FIRST and TBA data</h2></div>

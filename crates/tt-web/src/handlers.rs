@@ -11,8 +11,8 @@
 //!   difference between fixing a typo and giving up.
 
 use axum::extract::{Form, Path, State};
-use axum::http::HeaderMap;
 use axum::http::header::ACCEPT;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum_extra::extract::cookie::CookieJar;
 use chrono::Utc;
@@ -27,6 +27,7 @@ use crate::auth::{
     hash_password, new_session, session_cookie, verify_password,
 };
 use crate::events::{self, EventContext, EventParam};
+use crate::review::{self, ReviewedParam};
 use crate::scouting::{self, ScoutParams};
 use crate::startup::AppState;
 use crate::upstream::{self, ManualSync};
@@ -422,8 +423,16 @@ pub async fn lead_scout(
     State(state): State<AppState>,
     LeadScout(user): LeadScout,
     EventParam(requested): EventParam,
+    reviewed: ReviewedParam,
 ) -> Response {
-    lead_scout_page(&state, &user, requested.as_deref(), None).await
+    lead_scout_page(
+        &state,
+        &user,
+        requested.as_deref(),
+        None,
+        reviewed.message(),
+    )
+    .await
 }
 
 // ── Assignments (L1, L2) ────────────────────────────────────────────────────
@@ -540,7 +549,14 @@ pub async fn manual_sync(
     let outcome = upstream::sync_now(&state.repo, &state.upstream).await;
 
     if wants_html(&headers) {
-        lead_scout_page(&state, &user, requested.as_deref(), Some(&outcome)).await
+        lead_scout_page(
+            &state,
+            &user,
+            requested.as_deref(),
+            Some(&outcome),
+            String::new(),
+        )
+        .await
     } else {
         axum::Json(outcome).into_response()
     }
@@ -551,6 +567,7 @@ async fn lead_scout_page(
     user: &tt_core::user::User,
     requested: Option<&str>,
     outcome: Option<&ManualSync>,
+    reviewed: String,
 ) -> Response {
     let (nav, context) = event_page(state, Some(user), requested).await;
     html(LeadScoutPage {
@@ -559,7 +576,77 @@ async fn lead_scout_page(
         season_name: state.season.name.clone(),
         upstream: upstream::panel(&state.upstream, outcome, Utc::now()),
         stored: events::stored(&*state.repo, &context).await,
+        queue: review::queue(state, &context).await,
+        reviewed,
     })
+}
+
+// ── Review (L8-L10) ─────────────────────────────────────────────────────────
+
+/// `GET /lead-scout/submissions/{id}`: one observation in full.
+pub async fn review_page(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
+    reviewed: ReviewedParam,
+    Path(id): Path<i64>,
+) -> Response {
+    let (nav, _) = event_page(&state, Some(&user), requested.as_deref()).await;
+    match review::page(
+        &state,
+        nav,
+        id,
+        reviewed.message(),
+        Vec::new(),
+        String::new(),
+    )
+    .await
+    {
+        Some(page) => html(page),
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+/// `POST /api/observations/{id}/approve` and `.../decline`.
+async fn verdict(
+    state: AppState,
+    user: tt_core::user::User,
+    requested: Option<String>,
+    id: i64,
+    pairs: Vec<(String, String)>,
+    decline: bool,
+) -> Response {
+    match review::decide(&state, &user, id, &pairs, decline).await {
+        Ok(next) => Redirect::to(&next).into_response(),
+        Err(review::Refused::Missing) => StatusCode::NOT_FOUND.into_response(),
+        Err(review::Refused::Again { errors, reason }) => {
+            let (nav, _) = event_page(&state, Some(&user), requested.as_deref()).await;
+            match review::page(&state, nav, id, String::new(), errors, reason).await {
+                Some(page) => html(page),
+                None => StatusCode::NOT_FOUND.into_response(),
+            }
+        }
+    }
+}
+
+pub async fn approve_observation(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
+    Path(id): Path<i64>,
+    Form(pairs): Form<Vec<(String, String)>>,
+) -> Response {
+    verdict(state, user, requested, id, pairs, false).await
+}
+
+pub async fn decline_observation(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
+    Path(id): Path<i64>,
+    Form(pairs): Form<Vec<(String, String)>>,
+) -> Response {
+    verdict(state, user, requested, id, pairs, true).await
 }
 
 /// Whether the caller is a browser expecting a page, rather than a script

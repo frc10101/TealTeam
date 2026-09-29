@@ -333,6 +333,79 @@ pub struct LeadScoutPage {
     /// What is stored for the selected event, so a sync can be watched landing.
     /// `None` with no event, or when storage could not say.
     pub stored: Option<StoredCounts>,
+    /// The review queue (L8). `None` with no event selected.
+    pub queue: Option<ReviewQueue>,
+    /// What the review that led here did.
+    pub reviewed: String,
+}
+
+// ── Review (L8-L10) ─────────────────────────────────────────────────────────
+
+/// Observations waiting for the lead scout, oldest first.
+#[derive(Debug, Clone, Default)]
+pub struct ReviewQueue {
+    pub items: Vec<QueueItem>,
+    /// Storage could not say. Distinct from an empty queue, which is good news.
+    pub unavailable: bool,
+    /// This page, which the queue refreshes itself from.
+    pub live_href: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct QueueItem {
+    pub id: i64,
+    /// `"Q14 · 254 · Red"`.
+    pub heading: String,
+    pub scout: String,
+    /// `"5 minutes ago"`.
+    pub ago: String,
+    /// Every free-text field blank: the retired queue's yellow flag.
+    pub missing_notes: bool,
+    /// The detail page.
+    pub href: String,
+}
+
+/// One observation in full, for the lead scout to approve or decline.
+#[derive(Template)]
+#[template(path = "pages/review.html")]
+pub struct ReviewPage {
+    pub title: String,
+    pub nav: Nav,
+    pub id: i64,
+    /// `"Q14 · Team 254 · Red"`.
+    pub heading: String,
+    pub team_name: String,
+    /// `"Sam, 5 minutes ago"`.
+    pub byline: String,
+    pub state: &'static str,
+    pub state_label: &'static str,
+    /// `"Declined by Kim, 2 minutes ago: that was 1678"`. Empty while pending.
+    pub verdict: String,
+    pub answers: Vec<tt_core::review::AnswerGroup>,
+    pub missing_notes: bool,
+    /// Saved on a different version of the form than the one in use.
+    pub other_version: String,
+    pub pending: bool,
+    /// The verdict on the previous observation, when "and see the next" led
+    /// here.
+    pub notice: String,
+    pub errors: Vec<String>,
+    /// A decline reason coming back after a refused decline.
+    pub reason: String,
+    /// Waiting after this one, for "Approve" to say where it goes next.
+    pub waiting: usize,
+    pub back_href: String,
+}
+
+/// A scout's record that the lead scout declined, and how to answer it (L10).
+#[derive(Debug, Clone)]
+pub struct DeclinedNotice {
+    /// `"team 254 in Q2"`.
+    pub what: String,
+    pub reason: String,
+    pub reviewer: String,
+    /// Records the robot again.
+    pub href: String,
 }
 
 /// How much of one event the server holds.
@@ -742,6 +815,8 @@ pub struct SubmissionPage {
     pub missed: Vec<MatchLink>,
     /// The escape hatch (L3): type a team number instead of finding it.
     pub keypad: Option<Keypad>,
+    /// Records of this scout's the lead scout declined, not yet redone (L10).
+    pub declined: Vec<DeclinedNotice>,
 }
 
 /// "You are scouting 1678 · Q34 · Red 2".
@@ -1389,6 +1464,7 @@ mod tests {
             next_duty: None,
             missed: Vec::new(),
             keypad: None,
+            declined: Vec::new(),
         }
         .render_html()
         .expect("render")
@@ -1978,6 +2054,8 @@ mod tests {
                 ..UpstreamPanel::default()
             },
             stored: None,
+            queue: None,
+            reviewed: String::new(),
         };
 
         let failed = page(false).render_html().expect("render");

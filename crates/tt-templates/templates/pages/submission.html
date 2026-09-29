@@ -31,6 +31,12 @@
   <p class="alert alert-info" role="status">Your next assignment: <a href="{{ next.href }}">{{ next.label }}</a></p>
 {% endif %}
 {% for error in errors %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endfor %}
+{% for d in declined %}
+  <div class="alert alert-warning" role="status">
+    <p>{{ d.reviewer }} declined your record of {{ d.what }}: “{{ d.reason }}”</p>
+    <p><a class="btn btn-secondary" href="{{ d.href }}">Record it again</a></p>
+  </div>
+{% endfor %}
 {% if !notice.is_empty() %}<p class="alert alert-info" role="status">{{ notice }}</p>{% endif %}
 {% if !off_assignment.is_empty() %}<p class="alert alert-warning" role="status">{{ off_assignment }}</p>{% endif %}
 

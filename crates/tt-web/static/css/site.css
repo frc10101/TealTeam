@@ -297,6 +297,20 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
 
 .scout-form > .btn-lg { width: 100%; }
 
+/* ── Review (L8-L10) ────────────────────────────────────────────────────── */
+
+.queue { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.queue li { display: flex; gap: 0.5rem; align-items: stretch; }
+.queue-item {
+  flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.75rem;
+  min-height: var(--tap); padding: 0.5rem 0.75rem;
+  background: var(--gray-800); border: 1px solid var(--gray-700); border-radius: var(--radius);
+  color: var(--gray-100); text-decoration: none;
+}
+.queue-item:hover { border-color: var(--teal-500); }
+.queue form { display: flex; }
+.answers dd.text-answer { white-space: pre-wrap; }
+
 /* ── Assignment grid (L1) ───────────────────────────────────────────────── */
 
 /* Phone first: each match is a card -- its label across the top, then red 1-3

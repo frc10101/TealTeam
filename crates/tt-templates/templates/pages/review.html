@@ -1,0 +1,63 @@
+{#
+  One observation in full (L8-L10): every answer, labelled from the season
+  schema, and the lead scout's verdict. A decline needs a reason, which the
+  scout is shown on their scouting page. Nothing here deletes anything.
+#}
+{% extends "layout.html" %}
+{% block content %}
+{% if !notice.is_empty() %}<p class="alert alert-success" role="status">{{ notice }} Here is the next one.</p>{% endif %}
+{% for error in errors %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endfor %}
+
+<section class="card">
+  <div class="card-header">
+    <h1>{{ heading }}</h1>
+  </div>
+  <div class="card-body">
+    {% if !team_name.is_empty() %}<p class="muted">{{ team_name }}</p>{% endif %}
+    <p>Recorded by {{ byline }}.</p>
+    <p>
+      <span class="badge {% if state == "approved" %}badge-teal{% else if state == "declined" %}badge-red{% else %}badge-gray{% endif %}">{{ state_label }}</span>
+      {% if missing_notes %}<span class="badge badge-amber">Missing notes</span>{% endif %}
+    </p>
+    {% if !verdict.is_empty() %}<p>{{ verdict }}</p>{% endif %}
+    {% if !other_version.is_empty() %}<p class="hint">{{ other_version }}</p>{% endif %}
+    <p><a href="{{ back_href }}">Back to the queue</a></p>
+  </div>
+</section>
+
+{% for group in answers %}
+  <section class="card">
+    <div class="card-header"><h2>{{ group.label }}</h2></div>
+    <div class="card-body">
+      <dl class="detail answers">
+        {% for answer in group.answers %}
+          <dt>{{ answer.label }}</dt>
+          <dd{% if answer.is_text %} class="text-answer"{% endif %}>{{ answer.value }}</dd>
+        {% endfor %}
+      </dl>
+    </div>
+  </section>
+{% endfor %}
+
+{% if pending %}
+  <section class="card" id="verdict">
+    <div class="card-header"><h2>Verdict</h2></div>
+    <div class="card-body stack">
+      <form method="post" action="/api/observations/{{ id }}/approve{{ nav.event.query() }}">
+        <input type="hidden" name="then" value="next">
+        <button class="btn btn-primary btn-lg" type="submit">Approve{% if waiting > 0 %} and see the next{% endif %}</button>
+      </form>
+      <form method="post" action="/api/observations/{{ id }}/decline{{ nav.event.query() }}" class="stack">
+        <input type="hidden" name="then" value="next">
+        <div class="field">
+          <label class="form-label" for="reason">Why decline it?</label>
+          <textarea class="form-input" id="reason" name="reason" rows="3" maxlength="500" required
+                    placeholder="e.g. That was 1678, not 254 — record the right robot.">{{ reason }}</textarea>
+          <p class="hint">The scout sees this, with a button to record the robot again. Nothing is deleted.</p>
+        </div>
+        <button class="btn btn-danger" type="submit">Decline</button>
+      </form>
+    </div>
+  </section>
+{% endif %}
+{% endblock %}

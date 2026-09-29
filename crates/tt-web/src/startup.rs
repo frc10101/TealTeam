@@ -178,6 +178,7 @@ pub fn router(state: AppState) -> Router {
         .route("/submission", get(handlers::submission))
         .route("/lead-scout", get(handlers::lead_scout))
         .route("/lead-scout/assignments", get(handlers::assignments))
+        .route("/lead-scout/submissions/{id}", get(handlers::review_page))
         .route("/drive-coach", get(handlers::drive_coach))
         // Forms
         .route("/api/auth/login", post(handlers::login))
@@ -207,6 +208,14 @@ pub fn router(state: AppState) -> Router {
             post(handlers::distribute_assignments),
         )
         .route("/api/devices/{id}/rename", post(handlers::rename_device))
+        .route(
+            "/api/observations/{id}/approve",
+            post(handlers::approve_observation),
+        )
+        .route(
+            "/api/observations/{id}/decline",
+            post(handlers::decline_observation),
+        )
         // Operational
         .route("/health", get(health_json))
         .route("/status", get(health_page))
@@ -1928,6 +1937,210 @@ mod flow_tests {
         assert_live_regions_resolve(&state, &body, &admin).await;
     }
 
+    // ── Review (L8-L10) ─────────────────────────────────────────────────────
+
+    /// The scout (user 1, the admin) records 254 and 10101 in Q2, the second
+    /// with no notes. Returns the state, the admin's cookies, and Kim's.
+    async fn two_pending() -> (AppState, String, String) {
+        let (state, admin) = scouting().await;
+        let kim = with_kim(&state).await;
+        // Kim reviews: make Kim a lead.
+        sqlx::query("UPDATE users SET is_lead_scout = 1 WHERE id = 2")
+            .execute(state.repo.pool())
+            .await
+            .expect("promote");
+        for (team, id, answers) in [
+            (254, RECORD_ID, GOOD_ANSWERS),
+            (
+                10101,
+                "0191f7ac-1234-7000-8000-0000000000bb",
+                "f.starting_position=left&f.auto_scored=0&f.teleop_scored=1&f.penalties=0",
+            ),
+        ] {
+            let saved = post(
+                &state,
+                "/api/submission",
+                &observation_form(team, id, answers),
+                Some(&admin),
+            )
+            .await;
+            assert_eq!(saved.status(), StatusCode::SEE_OTHER);
+        }
+        (state, admin, kim)
+    }
+
+    async fn review_state(state: &AppState, id: i64) -> (String, Option<String>) {
+        sqlx::query_as("SELECT review_state, review_note FROM observations WHERE id = ?")
+            .bind(id)
+            .fetch_one(state.repo.pool())
+            .await
+            .expect("row")
+    }
+
+    #[tokio::test]
+    async fn the_queue_lists_what_is_waiting_oldest_first_with_the_notes_flag() {
+        let (state, _, kim) = two_pending().await;
+        let body = text(get(&state, "/lead-scout?event=2026now", Some(&kim)).await).await;
+
+        assert!(body.contains("<strong>2</strong> waiting, oldest first."));
+        let first = body.find("Q2 · 254 · Red 2").expect("254");
+        let second = body.find("Q2 · 10101 · Red 1").expect("10101");
+        assert!(first < second, "oldest first");
+        assert!(body[first..second].contains("badge-teal\">Clean"));
+        assert!(body[second..].contains("badge-amber\">Missing notes"));
+        assert!(body.contains(r#"href="/lead-scout/submissions/1?event=2026now""#));
+    }
+
+    #[tokio::test]
+    async fn the_review_page_reads_the_answers_off_the_form() {
+        let (state, _, kim) = two_pending().await;
+        let body = text(
+            get(
+                &state,
+                "/lead-scout/submissions/1?event=2026now",
+                Some(&kim),
+            )
+            .await,
+        )
+        .await;
+        assert!(body.contains("<h1>Q2 · Team 254 · Red 2</h1>"), "{body}");
+        assert!(body.contains("Recorded by Sam, just now."));
+        assert!(body.contains("<dt>Starting position</dt>\n          <dd>Center</dd>"));
+        assert!(body.contains("tippy on the ramp"));
+        assert!(body.contains("Approve and see the next"));
+
+        let missing = get(&state, "/lead-scout/submissions/99", Some(&kim)).await;
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn approving_moves_on_to_the_next_and_then_back_to_the_queue() {
+        let (state, _, kim) = two_pending().await;
+        let response = post(
+            &state,
+            "/api/observations/1/approve?event=2026now",
+            "then=next",
+            Some(&kim),
+        )
+        .await;
+        assert_eq!(
+            location(&response),
+            "/lead-scout/submissions/2?event=2026now&reviewed=approved"
+        );
+        assert_eq!(review_state(&state, 1).await.0, "approved");
+        let next = text(get(&state, location(&response), Some(&kim)).await).await;
+        assert!(next.contains("Approved. Here is the next one."));
+
+        let response = post(
+            &state,
+            "/api/observations/2/approve?event=2026now",
+            "then=queue",
+            Some(&kim),
+        )
+        .await;
+        assert_eq!(
+            location(&response),
+            "/lead-scout?event=2026now&reviewed=approved#review"
+        );
+        let queue = text(get(&state, location(&response), Some(&kim)).await).await;
+        assert!(queue.contains("Nothing waiting."));
+    }
+
+    #[tokio::test]
+    async fn a_decline_needs_a_reason_and_the_scout_is_told_it() {
+        let (state, admin, kim) = two_pending().await;
+
+        let refused = text(
+            post(
+                &state,
+                "/api/observations/1/decline",
+                "reason=+++",
+                Some(&kim),
+            )
+            .await,
+        )
+        .await;
+        assert!(refused.contains("Not declined. Say why, so the scout can fix it."));
+        assert_eq!(review_state(&state, 1).await.0, "pending");
+
+        let response = post(
+            &state,
+            "/api/observations/1/decline",
+            "reason=That+was+1678&then=queue",
+            Some(&kim),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        assert_eq!(
+            review_state(&state, 1).await,
+            ("declined".into(), Some("That was 1678".into())),
+            "kept, with the reason"
+        );
+
+        let scout = text(get(&state, "/submission", Some(&admin)).await).await;
+        assert!(scout.contains("Kim declined your record of team 254 in Q2: “That was 1678”"));
+        assert!(scout.contains(
+            r#"<a class="btn btn-secondary" href="/submission?event=2026now&#38;match=2026now_qm2&#38;team=254">Record it again</a>"#
+        ));
+
+        // Recording it again is allowed, and answers the decline.
+        let again = post(
+            &state,
+            "/api/submission",
+            &observation_form(254, "0191f7ac-1234-7000-8000-0000000000cc", GOOD_ANSWERS),
+            Some(&admin),
+        )
+        .await;
+        assert_eq!(again.status(), StatusCode::SEE_OTHER);
+        let scout = text(get(&state, "/submission", Some(&admin)).await).await;
+        assert!(!scout.contains("declined your record"));
+    }
+
+    #[tokio::test]
+    async fn a_second_verdict_on_one_observation_is_not_recorded() {
+        let (state, admin, kim) = two_pending().await;
+        post(&state, "/api/observations/1/approve", "", Some(&kim)).await;
+        let body = text(
+            post(
+                &state,
+                "/api/observations/1/decline",
+                "reason=late",
+                Some(&admin),
+            )
+            .await,
+        )
+        .await;
+        assert!(body.contains("This was already reviewed, so your verdict was not recorded."));
+        assert!(body.contains("Approved by Kim"));
+        assert_eq!(review_state(&state, 1).await.0, "approved");
+    }
+
+    #[tokio::test]
+    async fn only_a_lead_reviews() {
+        let (state, _, _) = two_pending().await;
+        let response = post(
+            &state,
+            "/api/auth/signup",
+            "name=Lee&email=lee%40example.com&password=longenough1&confirm_password=longenough1",
+            None,
+        )
+        .await;
+        let scout = session_cookie_from(&response).expect("session");
+        for (method_post, uri) in [
+            (false, "/lead-scout/submissions/1"),
+            (true, "/api/observations/1/approve"),
+            (true, "/api/observations/1/decline"),
+        ] {
+            let response = if method_post {
+                post(&state, uri, "reason=no", Some(&scout)).await
+            } else {
+                get(&state, uri, Some(&scout)).await
+            };
+            assert_eq!(location(&response), "/", "{uri}");
+        }
+        assert_eq!(review_state(&state, 1).await.0, "pending");
+    }
+
     // ── Assignment-driven scouting (L3-L5) ─────────────────────────────────
 
     #[tokio::test]
@@ -2150,11 +2363,14 @@ mod flow_tests {
         let (state, admin) = scouting().await;
         let body = text(get(&state, "/lead-scout?event=2026now", Some(&admin)).await).await;
 
-        let expected = (
-            "upstream-status".to_string(),
-            "/lead-scout?event=2026now".to_string(),
+        let page = "/lead-scout?event=2026now".to_string();
+        assert_eq!(
+            live_regions(&body),
+            [
+                ("review-queue".to_string(), page.clone()),
+                ("upstream-status".to_string(), page),
+            ]
         );
-        assert_eq!(live_regions(&body), [expected]);
         assert_live_regions_resolve(&state, &body, &admin).await;
 
         // Once the session is gone the refresh lands on sign-in, which has no

@@ -189,9 +189,9 @@ This is the highest-leverage cluster in either source document. It removes the 5
 
 | # | Action | Source | Effort | Status |
 | --- | --- | --- | --- | --- |
-| L8 | Pending queue ordered by `created_at`, missing-notes flag | RS §5.3 | S |  |
-| L9 | Approve: one transaction, copy into canonical + retract from queue | RS §5.3 | M |  |
-| L10 | **Decline → retract, not delete**, with an audit record and feedback to the scout. The old path destroyed data silently with no correction route | RS §12.5 | M |  |
+| L8 | Pending queue ordered by `created_at`, missing-notes flag | RS §5.3 | S | **Done** |
+| L9 | Approve: one transaction, copy into canonical + retract from queue | RS §5.3 | M | **Done** — an update, not a copy |
+| L10 | **Decline → retract, not delete**, with an audit record and feedback to the scout. The old path destroyed data silently with no correction route | RS §12.5 | M | **Done** |
 | L11 | Ranking score: weighted sum per row, then **averaged, with `n=` shown**. Summing rewarded volume alone | RS §5.5, §12.9 | M |  |
 | L12 | Weight editor: `weight_{metric}__{option}` fields, `[-100, 100]`, whole-form rejection on invalid input | RS §5.5 | S |  |
 
@@ -315,7 +315,19 @@ The top of the page counts both halves — "19 of 60 robots in upcoming matches 
 
 **It keeps itself current.** The counts and both grids are live regions refreshing from the grid's own address every 30 seconds, so the lead watches submissions land without reloading — and live.js leaves a region alone while the focus is in it. Declined observations will not count once L10 exists; the query already excludes them.
 
-**Still open in Phase 2:** I9, I11, I14, L8-L12, U11-U20, and P3-P9.
+**The review pipeline (L8-L10).** The lead-scout page has a **Waiting for review** card for the selected event: oldest first, so the top is always the next to look at, each row showing the robot, match, station, scout, and how long ago, with the retired queue's flag — **Missing notes** in amber when every free-text field is blank, **Clean** in teal. Each row can be approved where it is; tapping it opens the observation in full at `/lead-scout/submissions/{id}`, every answer labelled from the season schema in form order (options by their label, not their key), plus anything from an older form version under "Not on the current form" so nothing a scout recorded is hidden. The card refreshes itself while scouts keep submitting.
+
+**Approve (L9) is an update, not a copy.** One table with a review state means approving sets the state, who, and when — nothing moves and nothing is deleted. It also fills in the scout's team where the row lacks it, as the spec's approve did. **Approve and see the next** goes straight to the oldest still waiting, then back to the queue when it is empty.
+
+**Decline (L10) keeps everything and tells the scout.** A reason is required (500 characters at most): "declined" alone cannot help a scout do better. The row keeps its answers, the reason, who declined it, and when. The scout's scouting page then says "Kim declined your record of team 254 in Q2: “That was 1678”" with **Record it again**; the coverage index already ignores declined rows, so re-recording works, answers the notice, and the robot returns to the scout's agenda and to the grid's coverage as not yet recorded.
+
+**One verdict per observation.** The update only applies to a pending row, in one statement, so two leads pressing at once cannot both record a verdict: the second is told it was already reviewed, and shown by whom.
+
+The retired approve also started a background FIRST sync for the observed team. Not rebuilt: the background loop already keeps teams current, and a review should not reach for the internet.
+
+Checked against the binary at phone width: the queue, the review page, a decline that moved on to the next, and the scout's notice.
+
+**Still open in Phase 2:** I9, I11, I14, L11-L12, U11-U20, and P3-P9.
 
 ---
 
