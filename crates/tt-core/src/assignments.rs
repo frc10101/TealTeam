@@ -163,6 +163,66 @@ pub fn doubled(chosen: &[AssigneeKey]) -> Vec<AssigneeKey> {
     doubled
 }
 
+/// A scout's own assignments at an event, as the scouting page sees them
+/// (L3-L5).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Agenda {
+    /// What to scout now: the first assignment in an unplayed match that the
+    /// scout has not recorded. `(match key, team number)`.
+    pub next: Option<(String, i32)>,
+    /// Assignments in played matches the scout has not recorded, in playing
+    /// order -- a match can end mid-form, and an unrecorded robot is a hole
+    /// in the data.
+    pub missed: Vec<(String, i32)>,
+}
+
+impl Agenda {
+    /// The robot assigned to this scout in `match_key` that they have not
+    /// recorded yet, if any.
+    pub fn open_in(&self, match_key: &str) -> Option<i32> {
+        self.next
+            .iter()
+            .chain(&self.missed)
+            .find(|(key, _)| key == match_key)
+            .map(|(_, team)| *team)
+    }
+}
+
+/// Build a scout's agenda.
+///
+/// `me` is everything that identifies the scout: their account and the tablet
+/// they are on. An assignment to either counts, which is what lets a lead
+/// scout assign "the tablet on the left" without caring who signs in on it
+/// (REBUILD_SPEC.md 5.2). `recorded` is what the scout has already recorded,
+/// `(match key, team number)`. Assignments to a robot no longer in its match
+/// are skipped: following one would mean watching the wrong robot.
+pub fn agenda(
+    matches: &[MatchRecord],
+    assignments: &[Assignment],
+    me: &[AssigneeKey],
+    recorded: &[(String, i32)],
+) -> Agenda {
+    let mut agenda = Agenda::default();
+    for m in matches {
+        for a in assignments.iter().filter(|a| {
+            a.match_key == m.key
+                && me.contains(&a.assignee.key())
+                && m.alliance_of(a.team_number).is_some()
+                && !recorded
+                    .iter()
+                    .any(|(key, team)| *key == a.match_key && *team == a.team_number)
+        }) {
+            let duty = (a.match_key.clone(), a.team_number);
+            if m.played {
+                agenda.missed.push(duty);
+            } else if agenda.next.is_none() {
+                agenda.next = Some(duty);
+            }
+        }
+    }
+    agenda
+}
+
 /// Assignments naming a robot that is no longer in its match.
 ///
 /// TBA revises schedules -- a replay, a surrogate, a playoff slot filled in --
@@ -307,6 +367,87 @@ mod tests {
         let d = AssigneeKey::Device(1);
         assert_eq!(doubled(&[scout(1), d, scout(1), scout(1)]), [scout(1)]);
         assert!(doubled(&[scout(1), d, scout(2)]).is_empty());
+    }
+
+    fn to(match_number: i32, team_number: i32, assignee: Assignee) -> Assignment {
+        Assignment {
+            match_key: format!("2026mabil_qm{match_number}"),
+            team_number,
+            assignee,
+        }
+    }
+
+    fn tablet(id: i64) -> Assignee {
+        Assignee::Device {
+            id,
+            name: "Stands Left".into(),
+        }
+    }
+
+    fn sam() -> Assignee {
+        Assignee::Scout {
+            id: 1,
+            name: "Sam".into(),
+        }
+    }
+
+    fn key(match_number: i32, team: i32) -> (String, i32) {
+        (format!("2026mabil_qm{match_number}"), team)
+    }
+
+    /// Q1 played; Q2-Q4 to come.
+    fn schedule() -> Vec<MatchRecord> {
+        let mut q1 = scheduled(1, [1, 2, 3], [4, 5, 6]);
+        q1.played = true;
+        vec![
+            q1,
+            scheduled(2, [1, 2, 3], [4, 5, 6]),
+            scheduled(3, [1, 2, 3], [4, 5, 6]),
+            scheduled(4, [1, 2, 3], [4, 5, 6]),
+        ]
+    }
+
+    #[test]
+    fn the_next_duty_is_the_first_unplayed_unrecorded_assignment() {
+        let assignments = [to(4, 5, sam()), to(3, 2, sam()), to(2, 6, tablet(9))];
+        let agenda = agenda(&schedule(), &assignments, &[scout(1)], &[]);
+        assert_eq!(
+            agenda.next,
+            Some(key(3, 2)),
+            "Q3 before Q4; Q2 is someone else's tablet"
+        );
+
+        let agenda = super::agenda(&schedule(), &assignments, &[scout(1)], &[key(3, 2)]);
+        assert_eq!(agenda.next, Some(key(4, 5)), "once Q3 is recorded, Q4");
+    }
+
+    #[test]
+    fn an_assignment_to_the_tablet_counts_whoever_is_signed_in() {
+        let assignments = [to(2, 6, tablet(9))];
+        let me = [scout(7), AssigneeKey::Device(9)];
+        assert_eq!(
+            agenda(&schedule(), &assignments, &me, &[]).next,
+            Some(key(2, 6))
+        );
+    }
+
+    #[test]
+    fn a_played_match_not_recorded_is_missed_not_next() {
+        let assignments = [to(1, 4, sam()), to(2, 1, sam())];
+        let agenda = agenda(&schedule(), &assignments, &[scout(1)], &[]);
+        assert_eq!(agenda.next, Some(key(2, 1)));
+        assert_eq!(agenda.missed, [key(1, 4)]);
+        assert_eq!(agenda.open_in("2026mabil_qm1"), Some(4));
+        assert_eq!(agenda.open_in("2026mabil_qm3"), None);
+
+        let done = super::agenda(&schedule(), &assignments, &[scout(1)], &[key(1, 4)]);
+        assert!(done.missed.is_empty());
+    }
+
+    #[test]
+    fn a_stale_assignment_is_never_a_duty() {
+        let agenda = agenda(&schedule(), &[to(2, 99, sam())], &[scout(1)], &[]);
+        assert_eq!(agenda, Agenda::default());
     }
 
     #[test]

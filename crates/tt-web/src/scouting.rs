@@ -16,12 +16,16 @@ use axum::http::request::Parts;
 use chrono::Utc;
 use rand::RngCore;
 use tracing::{info, warn};
+use tt_core::assignments::{self, AssigneeKey};
 use tt_core::form::{FormErrors, RawAnswers, read_answers};
 use tt_core::record_id;
 use tt_core::records::MatchRecord;
 use tt_core::user::User;
 use tt_repo::{NewObservation, Recorded, Repo, RepoError};
-use tt_templates::{Draft, MatchPicker, Nav, ScoutForm, SubmissionPage};
+use tt_templates::{
+    AssignedCard, Draft, Keypad, MatchLink, MatchPicker, Nav, RosterEntry, ScoutForm,
+    SubmissionPage, choose_href, scout_href,
+};
 
 use crate::events::EventContext;
 use crate::startup::AppState;
@@ -29,7 +33,8 @@ use crate::startup::AppState;
 const STORAGE_DOWN: &str =
     "The server's storage is unavailable, so nothing can be recorded right now.";
 
-/// `?match=`, `&team=`, and `&saved=`: which step of the page to show.
+/// `?match=`, `&team=`, `&choose=`, and `&saved=`: which step of the page to
+/// show.
 ///
 /// Never rejects, like [`crate::events::EventParam`]: a mangled link should
 /// land on a working page that says what was wrong.
@@ -37,6 +42,9 @@ const STORAGE_DOWN: &str =
 pub struct ScoutParams {
     pub match_key: Option<String>,
     pub team: Option<i32>,
+    /// Show the robot picker even where the scout has an assignment: the
+    /// deliberate override (L5).
+    pub choose: bool,
     /// The robot the scout just saved, for the confirmation.
     pub saved: Option<i32>,
 }
@@ -53,6 +61,7 @@ impl<S: Send + Sync> FromRequestParts<S> for ScoutParams {
         Ok(Self {
             match_key: match_key(lookup("match")),
             team: team_number(lookup("team")),
+            choose: lookup("choose").is_some_and(|v| !v.trim().is_empty()),
             saved: team_number(lookup("saved")),
         })
     }
@@ -75,13 +84,31 @@ pub fn new_record_id() -> String {
     record_id::uuid_v7(unix_ms, random)
 }
 
+/// This browser's tablet, if it has checked in.
+pub async fn device_id(state: &AppState, device_uuid: Option<&str>) -> Option<i64> {
+    match state.repo.device_by_uuid(device_uuid?).await {
+        Ok(device) => device.map(|d| d.id),
+        Err(e) => {
+            warn!("looking up device: {e}");
+            None
+        }
+    }
+}
+
 /// Assemble the scouting page for `context`'s event.
 ///
+/// With no match or robot named, a scout with an assignment (L4) lands on it:
+/// "You are scouting 1678", form open, no picker (L5). An assignment is
+/// theirs if it names their account or the tablet they are on (`device_id`).
+///
 /// `draft` is a form coming back after a failed save; `errors` are messages
-/// from that save. Storage failures degrade to a page that says so.
+/// from that save. Storage failures degrade to a page that says so; a failed
+/// read of assignments only costs the shortcut.
+#[allow(clippy::too_many_arguments)]
 pub async fn page(
     state: &AppState,
     user: &User,
+    device_id: Option<i64>,
     nav: Nav,
     context: &EventContext,
     params: &ScoutParams,
@@ -98,6 +125,11 @@ pub async fn page(
         errors: Vec::new(),
         notice: String::new(),
         form: None,
+        assigned: None,
+        off_assignment: String::new(),
+        next_duty: None,
+        missed: Vec::new(),
+        keypad: None,
     };
 
     let Some(event) = &context.selected else {
@@ -133,27 +165,92 @@ pub async fn page(
         return page;
     }
 
-    let index = match &params.match_key {
-        Some(key) => matches.iter().position(|m| &m.key == key).or_else(|| {
-            errors.push(format!("There is no match “{key}” at {}.", event.name));
-            None
-        }),
-        None => None,
-    }
-    .unwrap_or_else(|| next_to_scout(&matches));
+    let recorded_here = state
+        .repo
+        .recorded_by(&event.key, user.id)
+        .await
+        .unwrap_or_else(|e| {
+            warn!("robots recorded by {} at {}: {e}", user.id, event.key);
+            Vec::new()
+        });
+    let event_assignments = state
+        .repo
+        .event_assignments(&event.key)
+        .await
+        .unwrap_or_else(|e| {
+            warn!("assignments for {}: {e}", event.key);
+            Vec::new()
+        });
+    let mut me = vec![AssigneeKey::Scout(user.id)];
+    me.extend(device_id.map(AssigneeKey::Device));
+    let agenda = assignments::agenda(&matches, &event_assignments, &me, &recorded_here);
+    let roster = state
+        .repo
+        .event_teams(&event.key)
+        .await
+        .unwrap_or_else(|e| {
+            warn!("roster for {}: {e}", event.key);
+            Vec::new()
+        });
+    let index_of = |key: &str| matches.iter().position(|m| m.key == key);
+
+    // Which match, which robot, and whether the robot came from an assignment.
+    let mut following = false;
+    let (index, team) = match (&params.match_key, params.team) {
+        (Some(key), team) => {
+            let index = index_of(key).or_else(|| {
+                errors.push(format!("There is no match “{key}” at {}.", event.name));
+                None
+            });
+            match index {
+                Some(i) => {
+                    let assigned = (!params.choose && team.is_none())
+                        .then(|| agenda.open_in(key))
+                        .flatten();
+                    following = assigned.is_some();
+                    (i, team.or(assigned))
+                }
+                None => (next_to_scout(&matches), None),
+            }
+        }
+        // The keypad (L3): a team, no match. Its next unplayed match, or its
+        // last one once they are all played.
+        (None, Some(team)) => {
+            let theirs = |m: &&MatchRecord| m.alliance_of(team).is_some();
+            let found = matches
+                .iter()
+                .filter(theirs)
+                .find(|m| !m.played)
+                .or_else(|| matches.iter().rfind(|m| m.alliance_of(team).is_some()));
+            match found {
+                Some(m) => (index_of(&m.key).expect("from this list"), Some(team)),
+                None => {
+                    errors.push(format!(
+                        "Team {team} is not on the schedule at {}.",
+                        event.name
+                    ));
+                    (next_to_scout(&matches), None)
+                }
+            }
+        }
+        (None, None) => match (&agenda.next, params.choose) {
+            (Some((key, team)), false) => {
+                following = true;
+                (index_of(key).expect("from this schedule"), Some(*team))
+            }
+            _ => (next_to_scout(&matches), None),
+        },
+    };
     let record = &matches[index];
     let label = record.label();
 
-    let recorded = state
-        .repo
-        .observed_teams(&record.key, user.id)
-        .await
-        .unwrap_or_else(|e| {
-            warn!("observed teams for {}: {e}", record.key);
-            Vec::new()
-        });
+    let recorded: Vec<i32> = recorded_here
+        .iter()
+        .filter(|(key, _)| *key == record.key)
+        .map(|(_, team)| *team)
+        .collect();
 
-    let team = params.team.filter(|&team| {
+    let team = team.filter(|&team| {
         let in_match = record.alliance_of(team).is_some();
         if !in_match {
             errors.push(format!("Team {team} is not in {label}."));
@@ -167,20 +264,89 @@ pub async fn page(
             format!("Saved team {saved} in {label}. It is waiting for the lead scout's review.");
     }
 
-    page.picker = Some(MatchPicker::new(
-        &event.key, &matches, index, team, &recorded,
-    ));
+    let duty_link = |(key, team): &(String, i32)| {
+        let label = matches
+            .iter()
+            .find(|m| m.key == *key)
+            .map(MatchRecord::label)
+            .unwrap_or_default();
+        MatchLink {
+            href: scout_href(&event.key, key, Some(*team)),
+            label: format!("team {team} in {label}"),
+        }
+    };
+    page.missed = agenda.missed.iter().map(duty_link).collect();
+    // Pointing at the next assignment is noise while the page shows it.
+    page.next_duty = agenda
+        .next
+        .as_ref()
+        .filter(|(key, t)| !(*key == record.key && team == Some(*t)))
+        .map(duty_link);
+
+    let assigned_here = agenda.open_in(&record.key);
+    if let (Some(team), Some(mine)) = (team, assigned_here)
+        && team != mine
+    {
+        page.off_assignment = format!(
+            "You are assigned team {mine} in {label}. Make sure {team} is the robot you are watching."
+        );
+    }
+
+    let team_name = |number: i32| {
+        roster
+            .iter()
+            .find(|t| t.number == number)
+            .map(|t| t.name.clone())
+    };
+    if following && let Some(team) = team {
+        let station = [("Red", &record.red), ("Blue", &record.blue)]
+            .into_iter()
+            .find_map(|(side, slots)| {
+                let i = slots.iter().position(|s| *s == Some(team))?;
+                Some(format!("{side} {}", i + 1))
+            })
+            .unwrap_or_default();
+        page.assigned = Some(AssignedCard {
+            team,
+            team_name: team_name(team).unwrap_or_default(),
+            where_: format!("{label} · {station}"),
+            choose_href: choose_href(&event.key, &record.key),
+        });
+    } else {
+        page.picker = Some(MatchPicker::new(
+            &event.key,
+            &matches,
+            index,
+            team,
+            &recorded,
+            assigned_here,
+        ));
+        page.keypad = Some(Keypad {
+            event_key: event.key.clone(),
+            roster: roster
+                .iter()
+                .map(|t| RosterEntry {
+                    number: t.number,
+                    name: t.name.clone(),
+                    is_viewer: false,
+                })
+                .collect(),
+        });
+    }
 
     if let Some(team) = team {
         if recorded.contains(&team) {
             page.notice = format!("You have already recorded team {team} in {label}.");
         } else {
-            let name = match state.repo.team(team).await {
-                Ok(found) => found.map(|t| t.name),
-                Err(e) => {
-                    warn!("loading team {team}: {e}");
-                    None
-                }
+            let name = match team_name(team) {
+                Some(name) => Some(name),
+                None => match state.repo.team(team).await {
+                    Ok(found) => found.map(|t| t.name),
+                    Err(e) => {
+                        warn!("loading team {team}: {e}");
+                        None
+                    }
+                },
             };
             page.form = Some(ScoutForm::new(
                 &state.season,
@@ -236,6 +402,7 @@ pub async fn submit(
     let params = ScoutParams {
         match_key: match_key(posted("match")),
         team: team_number(posted("team")),
+        choose: false,
         saved: None,
     };
     // A form that somehow lost its id still saves: the per-scout coverage
@@ -302,16 +469,7 @@ pub async fn submit(
         }
     };
 
-    let device_id = match device_uuid {
-        Some(uuid) => match state.repo.device_by_uuid(uuid).await {
-            Ok(device) => device.map(|d| d.id),
-            Err(e) => {
-                warn!("looking up device for a submission: {e}");
-                None
-            }
-        },
-        None => None,
-    };
+    let device_id = device_id(state, device_uuid).await;
 
     let now = Utc::now();
     let observation = NewObservation {

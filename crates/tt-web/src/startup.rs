@@ -1862,6 +1862,155 @@ mod flow_tests {
         assert_eq!(devices[0].name, None);
     }
 
+    // ── Assignment-driven scouting (L3-L5) ─────────────────────────────────
+
+    #[tokio::test]
+    async fn an_assigned_scout_lands_on_their_robot_with_no_list_to_pick_from() {
+        let (state, cookies) = scouting().await;
+        assign(&state, 2, 254, Some(1), None).await;
+
+        let body = text(get(&state, "/submission", Some(&cookies)).await).await;
+        assert!(body.contains("You are scouting"), "{body}");
+        assert!(
+            body.contains(r#"<p class="assigned-team"><strong>254</strong> <span>Team 254</span>"#)
+        );
+        assert!(body.contains("Q2 · Red 2"));
+        assert!(body.contains(r#"<input type="hidden" name="team" value="254">"#));
+        assert!(
+            !body.contains(r#"id="match-picker""#),
+            "no picker to mis-tap"
+        );
+        assert!(
+            body.contains(r#"href="/submission?event=2026now&#38;match=2026now_qm2&#38;choose=1""#)
+        );
+    }
+
+    #[tokio::test]
+    async fn an_assignment_to_the_tablet_holds_for_whoever_signs_in_on_it() {
+        let (state, cookies) = scouting().await;
+        assign(&state, 2, 10101, None, Some(1)).await;
+
+        let on_tablet = text(get(&state, "/submission", Some(&cookies)).await).await;
+        assert!(on_tablet.contains(r#"name="team" value="10101""#));
+
+        // The same scout in another browser is not on that tablet.
+        let session = cookies.split("; ").next().unwrap();
+        let elsewhere = text(get(&state, "/submission", Some(session)).await).await;
+        assert!(elsewhere.contains(r#"id="match-picker""#));
+        assert!(!elsewhere.contains("You are scouting"));
+    }
+
+    #[tokio::test]
+    async fn choosing_another_robot_is_deliberate_and_said_out_loud() {
+        let (state, cookies) = scouting().await;
+        assign(&state, 2, 254, Some(1), None).await;
+
+        let picker = text(
+            get(
+                &state,
+                "/submission?match=2026now_qm2&choose=1",
+                Some(&cookies),
+            )
+            .await,
+        )
+        .await;
+        assert!(picker.contains(r#"id="match-picker""#));
+        assert!(picker.contains(r#"<span class="robot-yours">Yours</span>"#));
+
+        let other = text(
+            get(
+                &state,
+                "/submission?match=2026now_qm2&team=10101",
+                Some(&cookies),
+            )
+            .await,
+        )
+        .await;
+        assert!(other.contains(
+            "You are assigned team 254 in Q2. Make sure 10101 is the robot you are watching."
+        ));
+        assert!(
+            other.contains(r#"name="team" value="10101""#),
+            "but it is allowed"
+        );
+    }
+
+    #[tokio::test]
+    async fn after_a_save_the_next_assignment_is_one_tap_away() {
+        let (state, cookies) = scouting().await;
+        seed_match(&state, 3, false).await;
+        assign(&state, 2, 254, Some(1), None).await;
+        assign(&state, 3, 10101, Some(1), None).await;
+
+        let response = post(
+            &state,
+            "/api/submission",
+            &observation_form(254, RECORD_ID, GOOD_ANSWERS),
+            Some(&cookies),
+        )
+        .await;
+        let body = text(get(&state, location(&response), Some(&cookies)).await).await;
+        assert!(body.contains("Saved team 254 in Q2."));
+        assert!(
+            body.contains(
+                r#"<a class="btn btn-primary" href="/submission?event=2026now&#38;match=2026now_qm3&#38;team=10101">Scout team 10101 in Q3</a>"#
+            ),
+            "{body}"
+        );
+
+        // And with no match named, the page is now on Q3.
+        let body = text(get(&state, "/submission", Some(&cookies)).await).await;
+        assert!(body.contains("Q3 · Red 1"));
+    }
+
+    #[tokio::test]
+    async fn a_recorded_assignment_stops_steering_the_page() {
+        let (state, cookies) = scouting().await;
+        assign(&state, 2, 254, Some(1), None).await;
+        post(
+            &state,
+            "/api/submission",
+            &observation_form(254, RECORD_ID, GOOD_ANSWERS),
+            Some(&cookies),
+        )
+        .await;
+
+        let body = text(get(&state, "/submission", Some(&cookies)).await).await;
+        assert!(!body.contains("You are scouting"));
+        assert!(body.contains(r#"id="match-picker""#));
+    }
+
+    #[tokio::test]
+    async fn an_assigned_robot_in_a_played_match_is_still_to_record() {
+        let (state, cookies) = scouting().await;
+        assign(&state, 1, 254, Some(1), None).await;
+
+        let body = text(get(&state, "/submission", Some(&cookies)).await).await;
+        assert!(body.contains("Still to record"));
+        assert!(body.contains(
+            r#"<a href="/submission?event=2026now&#38;match=2026now_qm1&#38;team=254">team 254 in Q1</a>"#
+        ));
+    }
+
+    #[tokio::test]
+    async fn a_typed_team_number_opens_its_next_match() {
+        let (state, cookies) = scouting().await;
+        let picker = text(get(&state, "/submission", Some(&cookies)).await).await;
+        assert!(
+            picker.contains(r#"<option value="254">Team 254</option>"#),
+            "type-ahead"
+        );
+
+        let body = text(get(&state, "/submission?team=254", Some(&cookies)).await).await;
+        assert!(
+            body.contains("Q2 · Team 254 · Red 2"),
+            "Q1 is played; Q2 is next"
+        );
+
+        let body = text(get(&state, "/submission?team=9999", Some(&cookies)).await).await;
+        assert!(body.contains("Team 9999 is not on the schedule at This Weekend."));
+    }
+
     // ── No Unpoly: plain pages and live regions (U8) ────────────────────────
 
     #[tokio::test]

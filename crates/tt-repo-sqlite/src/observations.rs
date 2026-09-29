@@ -108,6 +108,23 @@ impl SqliteRepo {
         .await
         .map_err(|e| query_err("listing observed teams", e))
     }
+
+    pub(crate) async fn recorded_by_impl(
+        &self,
+        event_key: &str,
+        scouter_id: i64,
+    ) -> Result<Vec<(String, i32)>> {
+        sqlx::query_as(
+            "SELECT match_key, team_number FROM observations \
+             WHERE event_key = ? AND scouter_id = ? AND review_state <> 'declined' \
+             ORDER BY match_key, team_number",
+        )
+        .bind(event_key)
+        .bind(scouter_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| query_err("listing recorded robots", e))
+    }
 }
 
 #[cfg(test)]
@@ -370,6 +387,29 @@ mod tests {
                 .unwrap()
                 .is_empty()
         );
+    }
+
+    #[tokio::test]
+    async fn recorded_by_lists_one_scouts_robots_across_the_event() {
+        let repo = repo().await;
+        for (n, team) in [(1, 254), (2, 10101)] {
+            repo.record_observation(&observation(n, team), Utc::now())
+                .await
+                .expect("record");
+        }
+        let other_scout = NewObservation {
+            scouter_id: Some(2),
+            ..observation(3, 1)
+        };
+        repo.record_observation(&other_scout, Utc::now())
+            .await
+            .expect("record");
+
+        assert_eq!(
+            repo.recorded_by("2026mabil", 1).await.unwrap(),
+            [(MATCH.to_string(), 254), (MATCH.to_string(), 10101)]
+        );
+        assert!(repo.recorded_by("2026nope", 1).await.unwrap().is_empty());
     }
 
     #[tokio::test]

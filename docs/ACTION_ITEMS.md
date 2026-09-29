@@ -179,9 +179,9 @@ This is the highest-leverage cluster in either source document. It removes the 5
 | --- | --- | --- | --- | --- |
 | L1 | Assignment grid: matches × six robot slots, `"TBD"` for teams not in the local roster | RS §5.6 | L | **Done** |
 | L2 | Set / auto-distribute / clear-all / clear-match / rename-device | RS §5.6 | M | **Done** |
-| L3 | **Assignment-driven team selection** replacing the team list, with a keypad escape hatch | RI-U4 · RS §5.2 | M |  |
-| L4 | Prefill query — next unplayed match, matching `scouter_id` **OR** `device_uuid` | RS §5.2 | M |  |
-| L5 | **Lock the scouting form to the assignment**, pre-filled and restricted, with a deliberate override | RI-A1 · RS §5.2, §12 | M |  |
+| L3 | **Assignment-driven team selection** replacing the team list, with a keypad escape hatch | RI-U4 · RS §5.2 | M | **Done** |
+| L4 | Prefill query — next unplayed match, matching `scouter_id` **OR** `device_uuid` | RS §5.2 | M | **Done** — `tt_core::assignments::agenda` |
+| L5 | **Lock the scouting form to the assignment**, pre-filled and restricted, with a deliberate override | RI-A1 · RS §5.2, §12 | M | **Done** |
 | L6 | **Coverage view**: who is assigned, who has submitted, which robots are uncovered | RI-A3 | M |  |
 | L7 | Resolve `submitting_team_id` at write time — it drives the notes privacy rule, and missing it once already required a backfill migration | RS §5.2 | S | **Done** — with U4's save |
 
@@ -299,7 +299,17 @@ Checked against the binary at 1280 and 390px: a match edit, save-and-next, auto-
 
 **Worth knowing:** every browser that opens the app becomes a device, so the Tablets list and the pool grow with every personal phone that visits. If that gets long at an event, hide devices not seen for a day or so.
 
-**Still open in Phase 2:** I9, I11, I14, L3-L6, L8-L12, U11-U20, and P3-P9.
+**A scout is handed their robot (L3-L5).** Opening Scout with an assignment skips both picking steps: the page says **You are scouting 3310 · Q5 · Red 2** in large type, with the form already open and no robot picker to mis-tap. That is the lock. Leaving it is deliberate — **Not your robot? Choose another** opens the picker, where the assigned robot is marked *Yours* — and choosing a different robot says so: "You are assigned team 3310 in Q5. Make sure 971 is the robot you are watching." The save is still accepted. The scout is the one looking at the field, and a refused observation is worse than a flagged one.
+
+**Which assignment (L4).** The first one in an unplayed match that the scout has not already recorded, naming either their account **or the tablet they are on** — the spec's `scouter_id OR device_uuid`, so "the tablet on the left" works whoever signs in on it. Assignments to a robot the schedule has since moved out are skipped. It is a pure function over the schedule, the event's assignments, and what the scout has recorded (`tt_core::assignments::agenda`), so C8 can run it offline unchanged. Opening a match from the picker's select or arrows also lands on the scout's robot in it, if they have one there.
+
+**"Unplayed" is not the whole story.** TBA marks a match played minutes after it ends, often while a scout is still typing, and a scout who misses one should still record it. So an assignment in a played match the scout has not recorded is not dropped: it is listed under **Still to record**, one tap each. After a save the confirmation offers the next assignment ("Scout team 10101 in Q3") rather than simply the next match.
+
+**The keypad (L3).** Under the robot picker: **Or type a team number**, a numeric field whose type-ahead comes from a `<datalist>` of the event's roster — `16` offers `166`, `1619`, `1678` — with no script. `?team=1678` with no match opens that team's next unplayed match, or its last one once all are played. It is the escape hatch for a robot that is not where the scout expected; the assignment and the six-robot picker remain the main paths.
+
+Checked on a phone-width screenshot against the binary, signed in as a scout with assignments.
+
+**Still open in Phase 2:** I9, I11, I14, L6, L8-L12, U11-U20, and P3-P9.
 
 ---
 

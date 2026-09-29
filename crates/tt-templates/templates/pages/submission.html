@@ -6,6 +6,9 @@
 
   Works without JavaScript: the match select has a Go button, and counters are
   plain number inputs until counter.js adds their − and + buttons.
+
+  With an assignment (L3-L5) the first two steps are skipped: the page opens on
+  "You are scouting 1678", and choosing another robot is a deliberate tap.
 #}
 {% extends "layout.html" %}
 
@@ -18,13 +21,18 @@
 {% if !saved.is_empty() %}
   <div class="alert alert-success" role="status">
     <p>{{ saved }}</p>
-    {% if let Some(picker) = picker %}{% if let Some(next) = picker.next %}
+    {% if let Some(next) = next_duty %}
+      <p><a class="btn btn-primary" href="{{ next.href }}">Scout {{ next.label }}</a></p>
+    {% else if let Some(picker) = picker %}{% if let Some(next) = picker.next %}
       <p><a class="btn btn-primary" href="{{ next.href }}">Scout {{ next.label }}</a></p>
     {% endif %}{% endif %}
   </div>
+{% else if let Some(next) = next_duty %}
+  <p class="alert alert-info" role="status">Your next assignment: <a href="{{ next.href }}">{{ next.label }}</a></p>
 {% endif %}
 {% for error in errors %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endfor %}
 {% if !notice.is_empty() %}<p class="alert alert-info" role="status">{{ notice }}</p>{% endif %}
+{% if !off_assignment.is_empty() %}<p class="alert alert-warning" role="status">{{ off_assignment }}</p>{% endif %}
 
 {% if !unavailable.is_empty() %}
   <section class="card">
@@ -33,7 +41,16 @@
   </section>
 {% endif %}
 
-{% if let Some(picker) = picker %}
+{% if let Some(card) = assigned %}
+  <section class="card assigned" id="assigned">
+    <div class="card-body">
+      <p class="assigned-kicker">You are scouting</p>
+      <p class="assigned-team"><strong>{{ card.team }}</strong>{% if !card.team_name.is_empty() %} <span>{{ card.team_name }}</span>{% endif %}</p>
+      <p class="assigned-where">{{ card.where_ }}</p>
+      <p class="muted">Not your robot? <a href="{{ card.choose_href }}">Choose another</a></p>
+    </div>
+  </section>
+{% else if let Some(picker) = picker %}
   <section class="card" id="match-picker">
     <div class="card-header">
       <h1>Scout {{ picker.label }}{% if picker.played %} <span class="badge badge-gray">played</span>{% endif %}</h1>
@@ -69,7 +86,7 @@
                   <a class="robot{% if slot.selected %} selected{% endif %}" href="{{ slot.href }}"{% if slot.selected %} aria-current="true"{% endif %}>
                     <span class="robot-station">{{ slot.station }}</span>
                     <strong>{{ slot.team }}</strong>
-                    {% if slot.recorded %}<span class="robot-done">Recorded</span>{% endif %}
+                    {% if slot.recorded %}<span class="robot-done">Recorded</span>{% else if slot.assigned %}<span class="robot-yours">Yours</span>{% endif %}
                   </a>
                 {% endif %}
               </li>
@@ -77,6 +94,23 @@
           </ul>
         {% endfor %}
       </div>
+
+      {% if let Some(keypad) = keypad %}
+        {# The escape hatch (L3): for a robot that is not in this match, or when
+           the number is quicker than the schedule. Opens that team's next match. #}
+        <form method="get" class="keypad">
+          <input type="hidden" name="event" value="{{ keypad.event_key }}">
+          <label class="form-label" for="keypad-team">Or type a team number</label>
+          <div class="inline-field">
+            <input class="form-input" id="keypad-team" name="team" inputmode="numeric" pattern="[0-9]*"
+                   autocomplete="off" list="keypad-roster" placeholder="e.g. 1678">
+            <button class="btn btn-secondary" type="submit">Find</button>
+          </div>
+          <datalist id="keypad-roster">
+            {% for team in keypad.roster %}<option value="{{ team.number }}">{{ team.name }}</option>{% endfor %}
+          </datalist>
+        </form>
+      {% endif %}
     </div>
   </section>
 {% endif %}
@@ -87,10 +121,12 @@
     <input type="hidden" name="team" value="{{ form.team_number }}">
     <input type="hidden" name="record_id" value="{{ form.record_id }}">
 
-    <div class="scout-target">
-      <h2>{{ form.heading }}</h2>
-      {% if !form.team_name.is_empty() %}<p class="muted">{{ form.team_name }}</p>{% endif %}
-    </div>
+    {% if assigned.is_none() %}
+      <div class="scout-target">
+        <h2>{{ form.heading }}</h2>
+        {% if !form.team_name.is_empty() %}<p class="muted">{{ form.team_name }}</p>{% endif %}
+      </div>
+    {% endif %}
 
     {% if form.has_errors %}
       <div class="alert alert-error" role="alert">
@@ -155,6 +191,18 @@
     {% endif %}
     <button class="btn btn-primary btn-lg" type="submit">Save observation</button>
   </form>
+{% endif %}
+
+{% if !missed.is_empty() %}
+  <section class="card" id="missed">
+    <div class="card-header"><h2>Still to record</h2></div>
+    <div class="card-body">
+      <p class="hint">Assigned to you in matches that have been played. Record them while you remember.</p>
+      <ul class="missed">
+        {% for duty in missed %}<li><a href="{{ duty.href }}">{{ duty.label }}</a></li>{% endfor %}
+      </ul>
+    </div>
+  </section>
 {% endif %}
 {% endblock %}
 

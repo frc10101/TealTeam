@@ -305,6 +305,10 @@ impl Repo for SqliteRepo {
     async fn observed_teams(&self, match_key: &str, scouter_id: i64) -> Result<Vec<i32>> {
         self.observed_teams_impl(match_key, scouter_id).await
     }
+
+    async fn recorded_by(&self, event_key: &str, scouter_id: i64) -> Result<Vec<(String, i32)>> {
+        self.recorded_by_impl(event_key, scouter_id).await
+    }
 }
 
 #[cfg(test)]

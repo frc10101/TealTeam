@@ -579,9 +579,23 @@ pub async fn submission(
     Auth(user): Auth,
     EventParam(requested): EventParam,
     params: ScoutParams,
+    headers: HeaderMap,
 ) -> Response {
     let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
-    html(scouting::page(&state, &user, nav, &context, &params, None, Vec::new()).await)
+    let device = scouting::device_id(&state, device_uuid(&headers).as_deref()).await;
+    html(
+        scouting::page(
+            &state,
+            &user,
+            device,
+            nav,
+            &context,
+            &params,
+            None,
+            Vec::new(),
+        )
+        .await,
+    )
 }
 
 /// `POST /api/submission`: save an observation, then show the next step.
@@ -602,10 +616,12 @@ pub async fn submit_observation(
             let rejected = *rejected;
             let event = rejected.event_key.as_deref().or(requested.as_deref());
             let (nav, context) = event_page(&state, Some(&user), event).await;
+            let device = scouting::device_id(&state, device.as_deref()).await;
             html(
                 scouting::page(
                     &state,
                     &user,
+                    device,
                     nav,
                     &context,
                     &rejected.params,

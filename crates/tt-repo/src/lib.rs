@@ -395,6 +395,10 @@ pub trait LocalRepo {
     /// Robots in a match that a scout has an observation of, other than a
     /// declined one, by team number.
     async fn observed_teams(&self, match_key: &str, scouter_id: i64) -> Result<Vec<i32>>;
+
+    /// Every robot a scout has an observation of at an event, other than a
+    /// declined one, as `(match key, team number)`.
+    async fn recorded_by(&self, event_key: &str, scouter_id: i64) -> Result<Vec<(String, i32)>>;
 }
 
 #[cfg(test)]

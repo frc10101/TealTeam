@@ -676,6 +676,37 @@ pub struct SubmissionPage {
     /// Something to know that is not a failure.
     pub notice: String,
     pub form: Option<ScoutForm>,
+    /// Following an assignment (L5): the robot is already chosen, and this
+    /// card stands in for the picker. Leaving it is a deliberate tap.
+    pub assigned: Option<AssignedCard>,
+    /// The scout chose a robot other than the one assigned to them in this
+    /// match. Allowed -- they are the one watching -- but said out loud.
+    pub off_assignment: String,
+    /// The scout's next assignment, when it is not what the page shows.
+    pub next_duty: Option<MatchLink>,
+    /// Assigned robots in played matches the scout has not recorded.
+    pub missed: Vec<MatchLink>,
+    /// The escape hatch (L3): type a team number instead of finding it.
+    pub keypad: Option<Keypad>,
+}
+
+/// "You are scouting 1678 · Q34 · Red 2".
+#[derive(Debug, Clone)]
+pub struct AssignedCard {
+    pub team: i32,
+    pub team_name: String,
+    /// `"Q34 · Red 2"`.
+    pub where_: String,
+    /// The same match with the robot picker open.
+    pub choose_href: String,
+}
+
+/// A team-number field. The event's roster feeds a `<datalist>`, which gives
+/// type-ahead -- `16` offers `166`, `1619`, `1678` -- with no script at all.
+#[derive(Debug, Clone)]
+pub struct Keypad {
+    pub event_key: String,
+    pub roster: Vec<RosterEntry>,
 }
 
 /// Choosing the match and the robot.
@@ -730,6 +761,8 @@ pub struct RobotSlot {
     pub selected: bool,
     /// This scout has already recorded this robot in this match.
     pub recorded: bool,
+    /// This robot is assigned to this scout.
+    pub assigned: bool,
 }
 
 /// Link to the scouting page for a match, and optionally a robot in it.
@@ -744,6 +777,11 @@ pub fn scout_href(event_key: &str, match_key: &str, team: Option<i32>) -> String
     href
 }
 
+/// The robot picker for a match, even where the scout has an assignment in it.
+pub fn choose_href(event_key: &str, match_key: &str) -> String {
+    format!("/submission?event={event_key}&match={match_key}&choose=1")
+}
+
 impl MatchPicker {
     /// `matches` in playing order, with `index` the one shown.
     pub fn new(
@@ -752,6 +790,7 @@ impl MatchPicker {
         index: usize,
         team: Option<i32>,
         recorded: &[i32],
+        assigned: Option<i32>,
     ) -> Self {
         let shown = &matches[index];
         let link = |m: &MatchRecord| MatchLink {
@@ -772,6 +811,7 @@ impl MatchPicker {
                             .unwrap_or_default(),
                         selected: slot.is_some() && *slot == team,
                         recorded: slot.is_some_and(|n| recorded.contains(&n)),
+                        assigned: slot.is_some() && *slot == assigned,
                     })
                     .collect(),
             };
@@ -1290,6 +1330,11 @@ mod tests {
             errors: Vec::new(),
             notice: String::new(),
             form,
+            assigned: None,
+            off_assignment: String::new(),
+            next_duty: None,
+            missed: Vec::new(),
+            keypad: None,
         }
         .render_html()
         .expect("render")
@@ -1306,7 +1351,7 @@ mod tests {
     #[test]
     fn the_picker_offers_the_six_robots_of_the_chosen_match() {
         let matches = [scheduled(1, true), scheduled(2, false), scheduled(3, false)];
-        let picker = MatchPicker::new("2026mabil", &matches, 1, Some(254), &[3]);
+        let picker = MatchPicker::new("2026mabil", &matches, 1, Some(254), &[3], Some(2));
 
         assert_eq!(picker.label, "Q2");
         assert_eq!(picker.options[0].label, "Q1 · played");
@@ -1326,6 +1371,10 @@ mod tests {
             "an empty slot"
         );
         assert!(picker.alliances[1].slots[1].recorded, "blue 2 is team 3");
+        assert!(
+            picker.alliances[1].slots[0].assigned,
+            "blue 1 is team 2, this scout's"
+        );
 
         let html = scouting_page(Some(picker), None);
         assert!(html.contains(r#"<ul class="alliance red""#));
@@ -1337,11 +1386,15 @@ mod tests {
     fn the_first_and_last_matches_have_no_link_past_the_end() {
         let matches = [scheduled(1, false), scheduled(2, false)];
         assert!(
-            MatchPicker::new("e", &matches, 0, None, &[])
+            MatchPicker::new("e", &matches, 0, None, &[], None)
                 .previous
                 .is_none()
         );
-        assert!(MatchPicker::new("e", &matches, 1, None, &[]).next.is_none());
+        assert!(
+            MatchPicker::new("e", &matches, 1, None, &[], None)
+                .next
+                .is_none()
+        );
     }
 
     #[test]
