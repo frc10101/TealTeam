@@ -3,7 +3,20 @@
 //! Rankings, OPRs, component OPRs, and match results. TBA allows direct browser
 //! requests, which is why the retired plan's "relay server" was unnecessary:
 //! any client with signal can fetch this itself and hand the Pi a bundle (S4).
+//!
+//! Requests are conditional (I9). TBA tags its responses with an `ETag`; the
+//! client keeps the last tagged body per path and sends the tag back as
+//! `If-None-Match`, and an unchanged resource comes back as an empty `304`.
+//! An untagged response is used and simply not kept.
+//! During quals the loop asks for the same four resources per event every two
+//! minutes and most of them have not moved, so on a phone tether this is most
+//! of the data the Pi would otherwise spend.
 
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+
+use reqwest::StatusCode;
+use reqwest::header::{ETAG, HeaderValue, IF_NONE_MATCH};
 use serde::de::DeserializeOwned;
 use tracing::{debug, warn};
 
@@ -16,12 +29,63 @@ use tt_core::upstream::{ComponentOprs, Match, Oprs, Ranking};
 const API: &str = "tba";
 pub const DEFAULT_BASE_URL: &str = "https://www.thebluealliance.com/api/v3";
 
+/// How many paths' responses are kept for revalidation. Four resources per
+/// event, so this covers sixteen events -- far more than are ever live at once.
+const CACHE_PATHS: usize = 64;
+
 #[derive(Clone)]
 pub struct TbaClient {
     http: reqwest::Client,
     base_url: String,
     auth_key: String,
     uplink: Uplink,
+    /// Shared between clones, like the uplink.
+    cache: Arc<Mutex<Cache>>,
+}
+
+/// The last good response per path, for `If-None-Match` (I9).
+///
+/// In memory only. After a restart the first pass fetches everything in full,
+/// once, which costs less than a table and a migration would.
+#[derive(Default)]
+struct Cache {
+    entries: HashMap<String, Cached>,
+    /// Bumped on every touch; the lowest `used` is the least recently used.
+    clock: u64,
+}
+
+struct Cached {
+    etag: HeaderValue,
+    body: Arc<str>,
+    used: u64,
+}
+
+impl Cache {
+    fn get(&mut self, path: &str) -> Option<(HeaderValue, Arc<str>)> {
+        self.clock += 1;
+        let clock = self.clock;
+        self.entries.get_mut(path).map(|c| {
+            c.used = clock;
+            (c.etag.clone(), c.body.clone())
+        })
+    }
+
+    fn put(&mut self, path: &str, etag: HeaderValue, body: Arc<str>) {
+        if self.entries.len() >= CACHE_PATHS && !self.entries.contains_key(path) {
+            let oldest = self
+                .entries
+                .iter()
+                .min_by_key(|(_, c)| c.used)
+                .map(|(p, _)| p.clone());
+            if let Some(oldest) = oldest {
+                self.entries.remove(&oldest);
+            }
+        }
+        self.clock += 1;
+        let used = self.clock;
+        self.entries
+            .insert(path.to_string(), Cached { etag, body, used });
+    }
 }
 
 impl TbaClient {
@@ -42,6 +106,7 @@ impl TbaClient {
             base_url: DEFAULT_BASE_URL.to_string(),
             auth_key,
             uplink,
+            cache: Arc::default(),
         })
     }
 
@@ -66,19 +131,32 @@ impl TbaClient {
         }
 
         let url = format!("{}{path}", self.base_url);
+        // Read once, before any retry: a 304 vouches for the tag that was sent,
+        // so the body it refers to is this one, whatever happens meanwhile.
+        let cached = self.cache.lock().ok().and_then(|mut c| c.get(path));
         let mut last: Option<UpstreamError> = None;
 
         for attempt in 0..MAX_ATTEMPTS {
-            let response = self
+            let mut request = self
                 .http
                 .get(&url)
                 .header("X-TBA-Auth-Key", &self.auth_key)
-                .header("Accept", "application/json")
-                .send()
-                .await;
+                .header("Accept", "application/json");
+            if let Some((etag, _)) = &cached {
+                request = request.header(IF_NONE_MATCH, etag.clone());
+            }
 
-            match response {
+            match request.send().await {
                 Ok(response) => {
+                    // Unchanged: the body we already hold is current. A 304 we
+                    // did not ask for falls through to the error below.
+                    if response.status() == StatusCode::NOT_MODIFIED
+                        && let Some((_, body)) = &cached
+                    {
+                        debug!("tba {path} not modified");
+                        return self.parse(path, body);
+                    }
+
                     let status = response.status().as_u16();
                     if !response.status().is_success() {
                         let body = truncate(&response.text().await.unwrap_or_default());
@@ -99,6 +177,7 @@ impl TbaClient {
                         return Err(error);
                     }
 
+                    let etag = response.headers().get(ETAG).cloned();
                     let body =
                         response
                             .text()
@@ -109,21 +188,14 @@ impl TbaClient {
                                 source,
                             })?;
 
-                    return match serde_json::from_str(&body) {
-                        Ok(value) => {
-                            self.uplink.record_success();
-                            Ok(value)
-                        }
-                        Err(source) => {
-                            let error = UpstreamError::Payload {
-                                api: API,
-                                path: path.to_string(),
-                                source,
-                            };
-                            self.uplink.record_error(&error.to_string());
-                            Err(error)
-                        }
-                    };
+                    let value = self.parse(path, &body)?;
+                    // Only a body that parsed is worth revalidating against.
+                    if let Some(etag) = etag
+                        && let Ok(mut cache) = self.cache.lock()
+                    {
+                        cache.put(path, etag, body.into());
+                    }
+                    return Ok(value);
                 }
                 Err(source) => {
                     let error = UpstreamError::Transport {
@@ -146,6 +218,25 @@ impl TbaClient {
         Err(last.unwrap_or(UpstreamError::Offline))
     }
 
+    /// Read a body, and tell the uplink how it went.
+    fn parse<T: DeserializeOwned>(&self, path: &str, body: &str) -> Result<T> {
+        match serde_json::from_str(body) {
+            Ok(value) => {
+                self.uplink.record_success();
+                Ok(value)
+            }
+            Err(source) => {
+                let error = UpstreamError::Payload {
+                    api: API,
+                    path: path.to_string(),
+                    source,
+                };
+                self.uplink.record_error(&error.to_string());
+                Err(error)
+            }
+        }
+    }
+
     pub async fn oprs(&self, event_key: &str) -> Result<Oprs> {
         self.get(&format!("/event/{event_key}/oprs")).await
     }
@@ -166,5 +257,42 @@ impl TbaClient {
 
     pub async fn matches(&self, event_key: &str) -> Result<Vec<Match>> {
         self.get(&format!("/event/{event_key}/matches")).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tag(n: usize) -> HeaderValue {
+        HeaderValue::from_str(&format!("\"v{n}\"")).unwrap()
+    }
+
+    #[test]
+    fn a_full_cache_forgets_the_path_least_recently_used() {
+        let mut cache = Cache::default();
+        for n in 0..CACHE_PATHS {
+            cache.put(&format!("/p{n}"), tag(n), "[]".into());
+        }
+        // Touch the oldest, so the second-oldest is now the one to go.
+        assert!(cache.get("/p0").is_some());
+
+        cache.put("/new", tag(99), "[]".into());
+        assert_eq!(cache.entries.len(), CACHE_PATHS);
+        assert!(cache.get("/p0").is_some());
+        assert!(cache.get("/p1").is_none());
+        assert!(cache.get("/new").is_some());
+    }
+
+    #[test]
+    fn replacing_a_path_does_not_evict_anything() {
+        let mut cache = Cache::default();
+        for n in 0..CACHE_PATHS {
+            cache.put(&format!("/p{n}"), tag(n), "[]".into());
+        }
+        cache.put("/p5", tag(500), "[1]".into());
+        assert_eq!(cache.entries.len(), CACHE_PATHS);
+        let (etag, body) = cache.get("/p5").unwrap();
+        assert_eq!((etag, &*body), (tag(500), "[1]"));
     }
 }

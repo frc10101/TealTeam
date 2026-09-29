@@ -219,7 +219,7 @@ This is the highest-leverage cluster in either source document. It removes the 5
 | I6 | TBA match sync: `played` derivation, `winning_alliance`, `red1..blue3` from `frc` keys, unix `0` → `NULL` not epoch | RS §6.2 | M | **Done** |
 | I7 | Background loop: 2 min during active events, 3 hr otherwise, ±7-day fallback, 24-hr lookahead, 120s per-pass timeout | RS §6.2 | M | **Done** |
 | I8 | **Pre-event bulk load** — full upstream snapshot, one command, verifiable row counts. An afternoon of work that covers most of the tedious data before you leave the shop | RI-S5 | S | **Done** — `tt-web bulk-load` |
-| I9 | ETag / conditional requests on the TBA poller | RI-S10 | S |  |
+| I9 | ETag / conditional requests on the TBA poller | RI-S10 | S | **Done** — in-memory, inside `TbaClient` |
 | I10 | Connectivity tracker: TCP connect to `1.1.1.1:443`, 1500 ms, 3s cache, skip loopback/RFC1918/link-local | RS §6.4 | S | **Done** |
 | I11 | **Four-state connection chip describing the client's link to the server**, not the server's internet — and remove all "offline mode" toggle language | RI-O11 · RS §6.4, §12 | S |  |
 | I12 | **Upstream freshness badges**; amber past 20 minutes during quals. Stale rankings that look live cause bad picks | RI-S11 | S | `is_stale` + `synced_at` done; badges pending |
@@ -327,7 +327,15 @@ The retired approve also started a background FIRST sync for the observed team. 
 
 Checked against the binary at phone width: the queue, the review page, a decline that moved on to the next, and the scout's notice.
 
-**Still open in Phase 2:** I9, I11, I14, L11-L12, U11-U20, and P3-P9.
+**The TBA poller asks before it downloads (I9).** Every TBA request carries the `ETag` of the last body the client got for that path, as `If-None-Match`, and an unchanged resource comes back as an empty `304`. During quals the loop asks for four resources per live event every two minutes, and most of them have not moved since the last ask. On a phone tether, that is most of the data the Pi would otherwise spend.
+
+**A 304 is still a sync.** The client parses the body it already holds and hands it over as if it had just arrived, so the upserts run and `synced_at` advances. Freshness (I12) means "when we last heard from TBA", and a 304 is TBA saying the stored copy is current. `sync.rs` did not change.
+
+**Kept in memory, not in the database.** The cache lives in `TbaClient` and is shared by its clones, so the loop and a manual sync revalidate against each other. It holds the 64 most recently used paths, sixteen events' worth. A restart costs one full fetch per resource, which is cheaper than a table and a migration. Only a body that parsed is kept, and a `304` the client did not ask for is an error, not empty data. The tests use a stub that honours `If-None-Match` and counts the full bodies it sends; with the header switched off, four of the five fail.
+
+**Not yet seen against live TBA.** That TBA exposes `ETag` is recorded in REFURBISH_PLAN's CORS notes, but no request in this change has gone to the real API. At the next shop session with a key, run a sync twice with `RUST_LOG=tt_upstream=debug` and look for `not modified` on the second pass.
+
+**Still open in Phase 2:** I11, I14, L11-L12, U11-U20, and P3-P9.
 
 ---
 
