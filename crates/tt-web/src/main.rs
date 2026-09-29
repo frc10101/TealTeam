@@ -18,6 +18,7 @@ mod review;
 mod scouting;
 mod standings;
 mod startup;
+mod teams;
 mod upstream;
 
 use std::process::ExitCode;

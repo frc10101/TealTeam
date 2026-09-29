@@ -1,0 +1,103 @@
+{#
+  The team profile (U11): who a team is, what the upstream feeds say about it
+  at the selected event, what scouts recorded (U12's one rule), and its
+  matches. Never waits on the internet: everything here is already stored
+  (REBUILD_SPEC.md 12.7).
+#}
+{% extends "layout.html" %}
+{% block content %}
+{% for error in errors %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endfor %}
+
+<section class="card">
+  <div class="card-header"><h1>{% if let Some(team) = team %}{{ team.number }} · {{ team.name }}{% else %}Teams{% endif %}</h1></div>
+  <div class="card-body">
+    {% if let Some(team) = team %}
+      {% if !team.location.is_empty() || !team.rookie_year.is_empty() %}
+        <p class="muted">{{ team.location }}{% if !team.location.is_empty() && !team.rookie_year.is_empty() %} · {% endif %}{% if !team.rookie_year.is_empty() %}rookie year {{ team.rookie_year }}{% endif %}</p>
+      {% endif %}
+      {% if !team.website.is_empty() %}<p><a href="{{ team.website }}" rel="noopener noreferrer">{{ team.website }}</a></p>{% endif %}
+    {% endif %}
+    {# A GET form with no action: the team shown is in the URL, bookmarkable. #}
+    <form method="get" class="keypad">
+      {% if !nav.event.selected.is_empty() %}<input type="hidden" name="event" value="{{ nav.event.selected }}">{% endif %}
+      <label class="form-label" for="team-number">Team number</label>
+      <div class="inline-field">
+        <input class="form-input" id="team-number" name="team" value="{{ query }}" inputmode="numeric" pattern="[0-9]*"
+               autocomplete="off" list="team-roster" placeholder="e.g. 1678">
+        <button class="btn btn-secondary" type="submit">Look up</button>
+      </div>
+      <datalist id="team-roster">
+        {% for entry in roster %}<option value="{{ entry.number }}">{{ entry.name }}</option>{% endfor %}
+      </datalist>
+    </form>
+  </div>
+</section>
+
+{% if !not_at_event.is_empty() %}<p class="alert alert-info" role="status">{{ not_at_event }}</p>{% endif %}
+
+{% if let Some(here) = at_event %}
+  <section class="card" id="stats">
+    <div class="card-header"><h2>At {{ here.event_name }}</h2></div>
+    <div class="card-body">
+      {% if here.stats.is_empty() %}
+        <p class="muted">No statistics synced for this team here yet.</p>
+      {% else %}
+        <p class="hint">From FIRST and The Blue Alliance, synced {{ here.synced }}{% if here.stale %} <span class="badge badge-amber">stale</span>{% endif %}. Only what they have published is listed.</p>
+        <dl class="detail stats">
+          {% for line in here.stats %}<dt>{{ line.label }}</dt><dd>{{ line.value }}</dd>{% endfor %}
+        </dl>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="card" id="scouting">
+    <div class="card-header"><h2>What scouts saw</h2></div>
+    <div class="card-body">
+      <p class="hint">
+        {% if here.observed == 0 %}No approved observations yet.{% else %}From {{ here.observed }} approved observation{% if here.observed != 1 %}s{% endif %}.{% endif %}
+        {% if here.waiting > 0 %}{{ here.waiting }} more waiting for review.{% endif %}
+        Choices are tallied, most common first; counts are the average and the best.
+      </p>
+      {% if here.observed > 0 %}
+        {% for section in here.sections %}
+          <h3 class="subhead">{{ section.label }}</h3>
+          <dl class="detail">
+            {% for line in section.fields %}<dt>{{ line.label }}</dt><dd>{{ line.text }}</dd>{% endfor %}
+          </dl>
+        {% endfor %}
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="card" id="matches">
+    <div class="card-header"><h2>Matches</h2></div>
+    <div class="card-body">
+      {% if here.matches.is_empty() %}
+        <p class="muted">Not on the match schedule here yet.</p>
+      {% else %}
+        <ul class="team-matches">
+          {% for m in here.matches %}
+            <li class="{{ m.alliance }}">
+              <strong>{{ m.label }}</strong>
+              <span>{{ m.alliance }} {{ m.partners }}</span>
+              <span class="muted">{{ m.result }}</span>
+              <a href="{{ m.scout_href }}">Scout</a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+  </section>
+{% endif %}
+
+{% if !other_events.is_empty() %}
+  <section class="card">
+    <div class="card-header"><h2>Other events</h2></div>
+    <div class="card-body">
+      <ul class="plain-links">
+        {% for event in other_events %}<li><a href="{{ event.href }}">{{ event.label }}</a></li>{% endfor %}
+      </ul>
+    </div>
+  </section>
+{% endif %}
+{% endblock %}

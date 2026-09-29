@@ -34,6 +34,7 @@ use crate::review::{self, ReviewedParam};
 use crate::scouting::{self, ScoutParams};
 use crate::standings;
 use crate::startup::AppState;
+use crate::teams::{self, TeamParam};
 use crate::upstream::{self, ManualSync};
 
 /// Shown instead of a specific reason when a login fails.
@@ -583,6 +584,19 @@ async fn lead_scout_page(
         queue: review::queue(state, &context).await,
         reviewed,
     })
+}
+
+// ── Team profile (U11) ──────────────────────────────────────────────────────
+
+/// `GET /teams?team=`: everything known about a team at the selected event.
+pub async fn team(
+    State(state): State<AppState>,
+    Auth(user): Auth,
+    EventParam(requested): EventParam,
+    team: TeamParam,
+) -> Response {
+    let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
+    html(teams::page(&state, nav, &context, &team).await)
 }
 
 // ── Rankings (L11) and point values (L12) ───────────────────────────────────

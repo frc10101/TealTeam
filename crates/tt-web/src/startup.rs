@@ -176,6 +176,7 @@ pub fn router(state: AppState) -> Router {
         .route("/sign-up", get(handlers::sign_up_page))
         .route("/account", get(handlers::account))
         .route("/submission", get(handlers::submission))
+        .route("/teams", get(handlers::team))
         .route("/lead-scout", get(handlers::lead_scout))
         .route("/lead-scout/assignments", get(handlers::assignments))
         .route("/lead-scout/submissions/{id}", get(handlers::review_page))
@@ -2474,6 +2475,87 @@ mod flow_tests {
             assert_eq!(location(&response), "/", "{uri}");
         }
         assert!(state.repo.weight_overrides().await.unwrap().is_empty());
+    }
+
+    // ── Team profile (U11, U12) ─────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn a_team_page_brings_stats_scouting_and_matches_together() {
+        let (state, admin) = ranked().await;
+        let stats = tt_core::records::TeamEventStats {
+            team_number: 254,
+            event_key: "2026now".into(),
+            rank: Some(4),
+            opr: Some(41.256),
+            wins: Some(3),
+            losses: Some(1),
+            synced_at: Some(chrono::Utc::now()),
+            ..Default::default()
+        };
+        state
+            .repo
+            .upsert_team_stats(&stats, chrono::Utc::now())
+            .await
+            .expect("stats");
+
+        let body = text(get(&state, "/teams?team=254", Some(&admin)).await).await;
+        assert!(body.contains("<h1>254 · Team 254</h1>"), "{body}");
+        assert!(body.contains("<dt>OPR</dt><dd>41.26</dd>"));
+        assert!(body.contains("<dt>Record</dt><dd>3W 1L</dd>"));
+        assert!(
+            !body.contains("<dt>DPR</dt>"),
+            "not synced is left out, never a zero"
+        );
+        assert!(body.contains("synced just now"));
+
+        // U12: both approved observations, one rule: a tally, most common
+        // first, a tie in form order.
+        assert!(body.contains("From 2 approved observations."));
+        assert!(body.contains("<dt>Starting position</dt><dd>Left 1 · Center 1</dd>"));
+        assert!(body.contains("<dt>Pieces scored in teleop</dt><dd>avg 5.0 · best 9</dd>"));
+        assert!(
+            !body.contains("tippy on the ramp"),
+            "notes are U13's to show"
+        );
+
+        assert!(body.contains("<strong>Q1</strong>") && body.contains("<strong>Q2</strong>"));
+        assert!(body.contains(
+            r#"<a href="/submission?event=2026now&#38;match=2026now_qm2&#38;team=254">Scout</a>"#
+        ));
+    }
+
+    #[tokio::test]
+    async fn a_team_page_says_what_it_cannot_show_without_going_online() {
+        let (state, admin) = ranked().await;
+
+        let empty = text(get(&state, "/teams", Some(&admin)).await).await;
+        assert!(empty.contains("<h1>Teams</h1>"));
+        assert!(
+            empty.contains(r#"<option value="254">Team 254</option>"#),
+            "type-ahead"
+        );
+
+        let typo = text(get(&state, "/teams?team=12a", Some(&admin)).await).await;
+        assert!(typo.contains("“12a” is not a team number."));
+
+        let unknown = text(get(&state, "/teams?team=9999", Some(&admin)).await).await;
+        assert!(unknown.contains("There is no team 9999 on this server yet."));
+
+        // A known team that is not at this event: pointed at where it is.
+        seed_event(&state, "2026else", "Elsewhere", (20, 22), &[7777]).await;
+        let away = text(get(&state, "/teams?event=2026now&team=7777", Some(&admin)).await).await;
+        assert!(away.contains("Team 7777 is not at This Weekend. Its other events are below."));
+        assert!(away.contains(r#"href="/teams?event=2026else&#38;team=7777""#));
+    }
+
+    #[tokio::test]
+    async fn only_signed_in_people_see_team_pages_and_the_nav_links_them() {
+        let (state, admin) = ranked().await;
+        let anonymous = get(&state, "/teams?team=254", None).await;
+        assert_eq!(location(&anonymous), "/sign-in");
+
+        let home = text(get(&state, "/", Some(&admin)).await).await;
+        assert!(home.contains(r#"<a href="/teams?event=2026now">Teams</a>"#));
     }
 
     // ── Assignment-driven scouting (L3-L5) ─────────────────────────────────

@@ -12,6 +12,12 @@
 //! template consumes it, and no template ever reaches back into storage.
 
 use askama::Template;
+
+mod team;
+pub use team::{
+    EventLink, StatLine, SummaryLine, SummarySection, TeamAtEvent, TeamCard, TeamMatchLine,
+    TeamPage, stat_lines, summary_sections, team_href,
+};
 use tt_core::assignments::{self, AssigneeKey, Assignment, Sighting, SlotState};
 use tt_core::form::{FormErrors, RawAnswers, input_name, is_on};
 use tt_core::records::{Event, MatchRecord, Team};

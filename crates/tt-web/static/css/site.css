@@ -328,6 +328,20 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
 .weights { grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); }
 .weights .field > p { margin: 0; }
 
+/* ── Team profile (U11) ──────────────────────────────────────────────────── */
+
+.subhead { margin: 0.5rem 0 0; font-size: 1rem; color: var(--teal-300); }
+.team-matches { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.375rem; }
+.team-matches li {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.75rem;
+  min-height: var(--tap); padding: 0.375rem 0.75rem; border-radius: var(--radius);
+}
+.team-matches li.red  { background: color-mix(in srgb, var(--red-900) 45%, transparent); }
+.team-matches li.blue { background: color-mix(in srgb, var(--blue-900) 45%, transparent); }
+.team-matches a { margin-left: auto; }
+.plain-links { margin: 0; padding-left: 1.25rem; display: grid; gap: 0.25rem; }
+.plain-links a { display: inline-flex; min-height: var(--tap); align-items: center; }
+
 /* ── Assignment grid (L1) ───────────────────────────────────────────────── */
 
 /* Phone first: each match is a card -- its label across the top, then red 1-3

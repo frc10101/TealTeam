@@ -199,8 +199,8 @@ This is the highest-leverage cluster in either source document. It removes the 5
 
 | # | Action | Source | Effort | Status |
 | --- | --- | --- | --- | --- |
-| U11 | **Consolidate team stats into one `TeamProfile` view model** — synced stats plus scouting aggregates, empty strings for absent values rather than zeros | RI-U8 · RS §5.4 | M |  |
-| U12 | **Pick one aggregation rule.** Mode for some fields and latest-row for others was an accident, not a design | RS §5.4, §12 | S |  |
+| U11 | **Consolidate team stats into one `TeamProfile` view model** — synced stats plus scouting aggregates, empty strings for absent values rather than zeros | RI-U8 · RS §5.4 | M || **Done** — `/teams?team=N` |
+| U12 | **Pick one aggregation rule.** Mode for some fields and latest-row for others was an accident, not a design | RS §5.4, §12 | S || **Done** — `tt_core::profile` |
 | U13 | Notes filtered to the viewer's own `submitting_team_id`; no-team viewers see none | RS §5.4 | S |  |
 | U14 | **Provenance badges** (`n=`, `scouted_at`, `synced ago`) on every aggregate | RI-U7 | S |  |
 | U15 | **Remove synchronous upstream calls from page renders.** `/teams` and the team-select fallback both blocked a render on the network | RS §12.7 | M |  |
@@ -350,6 +350,8 @@ Checked against the binary at phone width, which caught the rankings table pushi
 Checked against the binary at 390 and 1280px on a seeded 40-team event: the prefilled box, a refused save listing three bad lines in one alert, and a good save showing on the Rankings page.
 
 **U19 was already done.** `tt_core::matches::classify` implements the ±15-minute rule, with boundary tests, and has been there since the ingestion commit. **For U18:** it reads only the clock, so when an event runs 20 minutes behind, a match that has not been played reads "Completed". The coach panel should trust `matches.played` first and use the window only to pick out the current match.
+
+**The team profile (U11, U12).** `/teams?team=N` (signed in; a **Teams** nav link, a team-number box with roster type-ahead) brings together who a team is, the statistics FIRST and TBA have published for it at the selected event — only those published, never a zero for "not yet", with when they were synced and a stale badge — what scouts saw, its matches with results and a Scout link each, and its other events. It never waits on the internet: a team this server does not know is said so (REBUILD_SPEC.md 12.7). **One aggregation rule (U12):** every field over all approved observations on the current form version — a choice is a tally, most common first, ties in form order; a counter its average and best; a yes/no how often. No field is "latest row" any more. Notes are not on the page yet: who may read them is U13's rule, in progress in another session. Switching event in the header drops the team; the page's "Other events" links cover that for now.
 
 **Still open in Phase 2:** I11, U11-U18, U20, and P3-P9.
 
