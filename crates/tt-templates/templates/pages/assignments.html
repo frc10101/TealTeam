@@ -31,7 +31,7 @@
         <tr role="row" id="{{ row.id }}">
           <th scope="row" role="rowheader"><a href="{{ row.edit_href }}" aria-label="Assign {{ row.label }}">{{ row.label }}</a></th>
           {% for cell in row.cells %}
-            <td role="cell" class="slot {{ cell.color }}{% if cell.is_open() %} open{% endif %}">
+            <td role="cell" class="slot {{ cell.color }} {{ cell.state }}">
               <span class="slot-station" aria-hidden="true">{{ cell.station }}</span>
               {% if cell.team.is_empty() %}
                 <strong class="slot-team">TBD</strong>
@@ -47,6 +47,7 @@
                 {% else %}
                   <span class="slot-assignee">{{ cell.assignee }}{% if cell.by_device %} <span class="slot-kind">tablet</span>{% endif %}</span>
                 {% endif %}
+                {% if !cell.state_label.is_empty() %}<span class="slot-state">{{ cell.state_label }}</span>{% endif %}
               {% endif %}
             </td>
           {% endfor %}
@@ -68,11 +69,40 @@
     {% if !unavailable.is_empty() %}
       <p>{{ unavailable }}</p>
     {% else if let Some(grid) = grid %}
-      {% if grid.assignable == 0 %}
-        <p>Every match at this event has been played.</p>
-      {% else %}
-        <p><strong>{{ grid.assigned }} of {{ grid.assignable }}</strong> robots in upcoming matches have a scout.</p>
-      {% endif %}
+      {# Live (L6): submissions land while the lead watches, so coverage and
+         both grids re-read themselves from this page every 30 seconds. #}
+      <div class="stack" id="coverage" data-live="{{ live_href }}" data-live-every="30">
+        {% if grid.assignable == 0 %}
+          <p>Every match at this event has been played.</p>
+        {% else %}
+          <p><strong>{{ grid.assigned }} of {{ grid.assignable }}</strong> robots in upcoming matches have a scout.</p>
+        {% endif %}
+        {% if grid.played_robots > 0 %}
+          <p><strong>{{ grid.played_recorded }} of {{ grid.played_robots }}</strong> robots in played matches were recorded.</p>
+        {% endif %}
+        {% if coverage.is_empty() %}
+          <p class="muted">Nobody has been assigned anything yet.</p>
+        {% else %}
+          <div class="table-scroll">
+            <table class="data-table coverage">
+              <caption class="visually-hidden">How each scout and tablet is doing</caption>
+              <thead>
+                <tr><th scope="col">Assigned to</th><th scope="col">Recorded</th><th scope="col">Missed</th><th scope="col">To come</th></tr>
+              </thead>
+              <tbody>
+                {% for t in coverage %}
+                  <tr>
+                    <th scope="row">{{ t.name }}{% if t.by_device %} <span class="slot-kind">tablet</span>{% endif %}{% if t.online %} <span class="badge badge-teal">online</span>{% endif %}</th>
+                    <td>{{ t.recorded }}</td>
+                    {% if t.missed > 0 %}<td class="missed">{{ t.missed }}</td>{% else %}<td>0</td>{% endif %}
+                    <td>{{ t.to_come }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+      </div>
       <p class="hint">Tap a match to choose who watches each of its robots.</p>
     {% endif %}
     <p><a href="/lead-scout{{ nav.event.query() }}">Back to Lead Scout</a></p>
@@ -169,16 +199,20 @@
     <section class="card" id="upcoming">
       <div class="card-header"><h2>Upcoming matches</h2></div>
       <div class="card-body">
-        {% call grid_table(grid.upcoming, "Upcoming matches") %}{% endcall %}
+        <div id="upcoming-grid" data-live="{{ live_href }}" data-live-every="30">
+          {% call grid_table(grid.upcoming, "Upcoming matches") %}{% endcall %}
+        </div>
       </div>
     </section>
   {% endif %}
 
   {% if !grid.played.is_empty() %}
     <details class="card" id="played">
-      <summary class="card-header"><h2>Played matches ({{ grid.played.len() }})</h2></summary>
+      <summary class="card-header"><h2>Played matches ({{ grid.played.len() }}){% if grid.played_unrecorded() > 0 %} · {{ grid.played_unrecorded() }} not scouted{% endif %}</h2></summary>
       <div class="card-body">
-        {% call grid_table(grid.played, "Played matches") %}{% endcall %}
+        <div id="played-grid" data-live="{{ live_href }}" data-live-every="30">
+          {% call grid_table(grid.played, "Played matches") %}{% endcall %}
+        </div>
       </div>
     </details>
   {% endif %}

@@ -12,7 +12,7 @@
 //! template consumes it, and no template ever reaches back into storage.
 
 use askama::Template;
-use tt_core::assignments::{self, AssigneeKey, Assignment};
+use tt_core::assignments::{self, AssigneeKey, Assignment, Sighting, SlotState};
 use tt_core::form::{FormErrors, RawAnswers, input_name, is_on};
 use tt_core::records::{Event, MatchRecord, Team};
 use tt_core::season::{FieldKind, SeasonSchema};
@@ -385,6 +385,10 @@ pub struct AssignmentsPage {
     /// Who auto-distribute can hand robots to.
     pub pool: Vec<PoolEntry>,
     pub devices: Vec<DeviceRow>,
+    /// How each assignee is doing (L6).
+    pub coverage: Vec<TallyRow>,
+    /// The grid's own address, which its live regions refresh from.
+    pub live_href: String,
 }
 
 /// Someone who can be handed a robot, as a form offers them.
@@ -545,6 +549,16 @@ pub struct AssignmentGrid {
     pub assignable: usize,
     /// Assignments naming a robot no longer in its match, in words.
     pub stale: Vec<String>,
+    /// Robots in played matches, and how many of them somebody recorded (L6).
+    pub played_robots: usize,
+    pub played_recorded: usize,
+}
+
+impl AssignmentGrid {
+    /// Robots in played matches that nobody recorded.
+    pub fn played_unrecorded(&self) -> usize {
+        self.played_robots - self.played_recorded
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -576,12 +590,39 @@ pub struct GridCell {
     pub assignee: String,
     /// The assignee is a tablet rather than a person.
     pub by_device: bool,
+    /// Where the slot stands (L6): a CSS class, and words where there is news.
+    pub state: &'static str,
+    /// `"Recorded"`, `"Recorded ×2"`, `"Missed"`, `"Not scouted"`, or empty.
+    pub state_label: String,
 }
 
 impl GridCell {
-    /// A robot is here and nobody is watching it.
+    /// A robot is here, still to play, and nobody is watching it.
     pub fn is_open(&self) -> bool {
-        !self.team.is_empty() && self.assignee.is_empty()
+        self.state == "open"
+    }
+}
+
+/// One line of the coverage table: how an assignee is doing (L6).
+#[derive(Debug, Clone)]
+pub struct TallyRow {
+    pub name: String,
+    pub by_device: bool,
+    pub online: bool,
+    pub recorded: usize,
+    pub missed: usize,
+    pub to_come: usize,
+}
+
+fn state_words(state: SlotState) -> (&'static str, String) {
+    match state {
+        SlotState::Empty => ("empty", String::new()),
+        SlotState::Recorded(1) => ("recorded", "Recorded".into()),
+        SlotState::Recorded(n) => ("recorded", format!("Recorded ×{n}")),
+        SlotState::Missed => ("missed", "Missed".into()),
+        SlotState::Unscouted => ("unscouted", "Not scouted".into()),
+        SlotState::Assigned => ("assigned", String::new()),
+        SlotState::Open => ("open", String::new()),
     }
 }
 
@@ -592,6 +633,7 @@ impl AssignmentGrid {
         matches: &[MatchRecord],
         roster: &[Team],
         assignments: &[Assignment],
+        sightings: &[Sighting],
     ) -> Self {
         let name_of = |number: i32| {
             roster
@@ -614,6 +656,12 @@ impl AssignmentGrid {
                     .enumerate()
                     .map(|(i, slot)| {
                         let assignee = slot.and_then(|n| assignee_of(&m.key, n));
+                        let (state, state_label) = state_words(assignments::slot_state(
+                            m,
+                            *slot,
+                            assignee.is_some(),
+                            sightings,
+                        ));
                         GridCell {
                             color,
                             station: format!("{station} {}", i + 1),
@@ -621,6 +669,8 @@ impl AssignmentGrid {
                             team_name: slot.map(name_of).unwrap_or_default(),
                             assignee: assignee.map(|a| a.name().to_string()).unwrap_or_default(),
                             by_device: assignee.is_some_and(|a| a.is_device()),
+                            state,
+                            state_label,
                         }
                     })
                     .collect::<Vec<_>>()
@@ -637,9 +687,13 @@ impl AssignmentGrid {
 
         let (played, upcoming): (Vec<_>, Vec<_>) = matches.iter().partition(|m| m.played);
         let upcoming: Vec<GridRow> = upcoming.into_iter().map(row).collect();
+        let played: Vec<GridRow> = played.into_iter().map(row).collect();
         let cells = || upcoming.iter().flat_map(|r| &r.cells);
+        let played_cells = || played.iter().flat_map(|r| &r.cells);
 
         Self {
+            played_robots: played_cells().filter(|c| !c.team.is_empty()).count(),
+            played_recorded: played_cells().filter(|c| c.state == "recorded").count(),
             assigned: cells().filter(|c| !c.assignee.is_empty()).count(),
             assignable: cells().filter(|c| !c.team.is_empty()).count(),
             stale: assignments::stale(matches, assignments)
@@ -653,7 +707,7 @@ impl AssignmentGrid {
                     ))
                 })
                 .collect(),
-            played: played.into_iter().map(row).collect(),
+            played,
             upcoming,
         }
     }
@@ -1532,7 +1586,7 @@ mod tests {
     fn grid(assignments: &[Assignment]) -> AssignmentGrid {
         let matches = [scheduled(1, true), scheduled(2, false), scheduled(3, false)];
         let roster = [team(10101, "Teal Team"), team(254, "Cheesy Poofs")];
-        AssignmentGrid::new("2026mabil", &matches, &roster, assignments)
+        AssignmentGrid::new("2026mabil", &matches, &roster, assignments, &[])
     }
 
     fn assignments_page(grid: Option<AssignmentGrid>, unavailable: &str) -> String {
@@ -1550,6 +1604,8 @@ mod tests {
             editor: None,
             pool: Vec::new(),
             devices: Vec::new(),
+            coverage: Vec::new(),
+            live_href: "/lead-scout/assignments?event=2026mabil".into(),
         }
         .render_html()
         .expect("render")
@@ -1705,6 +1761,82 @@ mod tests {
             editor.slots[0].options[0].selected,
             "10101 was not picked: unassigned"
         );
+    }
+
+    #[test]
+    fn played_robots_say_whether_anybody_recorded_them() {
+        let matches = [scheduled(1, true), scheduled(2, false)];
+        let sighting = |team: i32| Sighting {
+            match_key: "2026mabil_qm1".into(),
+            team_number: team,
+            scouter_id: Some(1),
+            device_id: None,
+        };
+        let grid = AssignmentGrid::new(
+            "2026mabil",
+            &matches,
+            &[],
+            &[assignment(1, 254, sam())],
+            &[sighting(10101), sighting(10101)],
+        );
+        let q1 = &grid.played[0].cells;
+        assert_eq!(
+            (q1[0].state, q1[0].state_label.as_str()),
+            ("recorded", "Recorded ×2")
+        );
+        assert_eq!(
+            (q1[1].state, q1[1].state_label.as_str()),
+            ("missed", "Missed")
+        );
+        assert_eq!(
+            (q1[3].state, q1[3].state_label.as_str()),
+            ("unscouted", "Not scouted")
+        );
+        assert_eq!(q1[2].state, "empty");
+        assert_eq!((grid.played_robots, grid.played_recorded), (5, 1));
+        assert_eq!(grid.played_unrecorded(), 4);
+
+        let html = assignments_page(Some(grid), "");
+        assert!(html.contains(r#"class="slot red missed""#));
+        assert!(html.contains("1 of 5</strong> robots in played matches"));
+        assert!(html.contains("Played matches (1) · 4 not scouted"));
+    }
+
+    #[test]
+    fn the_coverage_table_lists_each_assignee() {
+        let mut page = AssignmentsPage {
+            title: "Assignments".into(),
+            nav: nav(Roles::SCOUT),
+            event_name: "Boston".into(),
+            unavailable: String::new(),
+            errors: Vec::new(),
+            notice: String::new(),
+            grid: Some(grid(&[])),
+            editor: None,
+            pool: Vec::new(),
+            devices: Vec::new(),
+            coverage: vec![TallyRow {
+                name: "Sam".into(),
+                by_device: false,
+                online: true,
+                recorded: 3,
+                missed: 1,
+                to_come: 4,
+            }],
+            live_href: "/lead-scout/assignments?event=2026mabil".into(),
+        };
+        let html = page.render_html().expect("render");
+        assert!(
+            html.contains(
+                "<th scope=\"row\">Sam <span class=\"badge badge-teal\">online</span></th>"
+            ),
+            "{html}"
+        );
+        assert!(html.contains("<td class=\"missed\">1</td>"));
+
+        page.coverage.clear();
+        let html = page.render_html().expect("render");
+        assert!(html.contains("Nobody has been assigned anything yet."));
     }
 
     #[test]

@@ -182,7 +182,7 @@ This is the highest-leverage cluster in either source document. It removes the 5
 | L3 | **Assignment-driven team selection** replacing the team list, with a keypad escape hatch | RI-U4 · RS §5.2 | M | **Done** |
 | L4 | Prefill query — next unplayed match, matching `scouter_id` **OR** `device_uuid` | RS §5.2 | M | **Done** — `tt_core::assignments::agenda` |
 | L5 | **Lock the scouting form to the assignment**, pre-filled and restricted, with a deliberate override | RI-A1 · RS §5.2, §12 | M | **Done** |
-| L6 | **Coverage view**: who is assigned, who has submitted, which robots are uncovered | RI-A3 | M |  |
+| L6 | **Coverage view**: who is assigned, who has submitted, which robots are uncovered | RI-A3 | M | **Done** — on the assignment grid |
 | L7 | Resolve `submitting_team_id` at write time — it drives the notes privacy rule, and missing it once already required a backfill migration | RS §5.2 | S | **Done** — with U4's save |
 
 ### Review pipeline
@@ -309,7 +309,13 @@ Checked against the binary at 1280 and 390px: a match edit, save-and-next, auto-
 
 Checked on a phone-width screenshot against the binary, signed in as a scout with assignments.
 
-**Still open in Phase 2:** I9, I11, I14, L6, L8-L12, U11-U20, and P3-P9.
+**The grid shows coverage (L6).** Not a separate page: the grid already shows who is assigned, so it now shows what happened too. A played robot is **Recorded** (×2 when two scouts saw it), **Missed** — assigned and nobody recorded it — or **Not scouted**, never assigned and never recorded; the last two are outlined in red, so the holes in the data are what stands out. A robot recorded by *anyone* counts as covered, whoever it was assigned to.
+
+The top of the page counts both halves — "19 of 60 robots in upcoming matches have a scout", "22 of 24 robots in played matches were recorded" — and the played section's heading carries the gap ("Played matches (4) · 2 not scouted") so it can stay folded. A table then answers **who has been submitting**: per scout or tablet, assigned robots they recorded themselves, missed, and still to come, with who is online now. A tablet's robots count as recorded when saved from that tablet, whoever held it. The logic is pure (`tt_core::assignments::{slot_state, tallies}`).
+
+**It keeps itself current.** The counts and both grids are live regions refreshing from the grid's own address every 30 seconds, so the lead watches submissions land without reloading — and live.js leaves a region alone while the focus is in it. Declined observations will not count once L10 exists; the query already excludes them.
+
+**Still open in Phase 2:** I9, I11, I14, L8-L12, U11-U20, and P3-P9.
 
 ---
 

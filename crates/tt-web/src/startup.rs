@@ -1862,6 +1862,72 @@ mod flow_tests {
         assert_eq!(devices[0].name, None);
     }
 
+    // ── Coverage (L6) ───────────────────────────────────────────────────────
+
+    /// Q1 is played: Sam (user 1) was on 254 and recorded it, Kim (user 2) was
+    /// on 10101 and did not, and nobody was on team 1.
+    async fn after_q1() -> (AppState, String) {
+        let (state, admin) = scouting().await;
+        with_kim(&state).await;
+        assign(&state, 1, 254, Some(1), None).await;
+        assign(&state, 1, 10101, Some(2), None).await;
+        let form = format!("match=2026now_qm1&team=254&record_id={RECORD_ID}&{GOOD_ANSWERS}");
+        let saved = post(&state, "/api/submission", &form, Some(&admin)).await;
+        assert_eq!(saved.status(), StatusCode::SEE_OTHER);
+        (state, admin)
+    }
+
+    #[tokio::test]
+    async fn coverage_shows_who_recorded_who_missed_and_what_nobody_watched() {
+        let (state, admin) = after_q1().await;
+        let body = text(get(&state, "/lead-scout/assignments", Some(&admin)).await).await;
+
+        assert!(body.contains("<strong>1 of 6</strong> robots in played matches were recorded."));
+        assert!(body.contains("Played matches (1) · 5 not scouted"));
+
+        let q1 = &body[body.find(r#"id="2026now_qm1""#).expect("Q1 row")..];
+        let q1 = &q1[..q1.find("</tr>").unwrap()];
+        let cell = |team: &str| {
+            let at = q1
+                .find(&format!(r#"<strong class="slot-team">{team}</strong>"#))
+                .unwrap();
+            let start = q1[..at].rfind("<td").unwrap();
+            let end = at + q1[at..].find("</td>").unwrap();
+            q1[start..end].to_string()
+        };
+        assert!(cell("254").contains("slot red recorded") && cell("254").contains(">Recorded<"));
+        assert!(cell("10101").contains("slot red missed") && cell("10101").contains(">Missed<"));
+        assert!(cell("1").contains(">Not scouted<"));
+
+        let table = &body[body.find(r#"class="data-table coverage""#).unwrap()..];
+        assert!(table.contains("<th scope=\"row\">Sam <span class=\"badge badge-teal\">online</span></th>\n                    <td>1</td>"), "{table}");
+        assert!(table.contains("<th scope=\"row\">Kim</th>"));
+        assert!(table.contains(r#"<td class="missed">1</td>"#));
+    }
+
+    #[tokio::test]
+    async fn coverage_and_both_grids_refresh_themselves() {
+        let (state, admin) = after_q1().await;
+        let body = text(
+            get(
+                &state,
+                "/lead-scout/assignments?event=2026now&edit=2026now_qm2",
+                Some(&admin),
+            )
+            .await,
+        )
+        .await;
+        let regions: Vec<String> = live_regions(&body).into_iter().map(|r| r.0).collect();
+        assert_eq!(regions, ["coverage", "upcoming-grid", "played-grid"]);
+        assert!(
+            live_regions(&body)
+                .iter()
+                .all(|r| r.1 == "/lead-scout/assignments?event=2026now"),
+            "from the grid itself, not the editor or a done= note"
+        );
+        assert_live_regions_resolve(&state, &body, &admin).await;
+    }
+
     // ── Assignment-driven scouting (L3-L5) ─────────────────────────────────
 
     #[tokio::test]

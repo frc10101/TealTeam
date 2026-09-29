@@ -23,7 +23,7 @@
 
 use chrono::{DateTime, Utc};
 use thiserror::Error;
-use tt_core::assignments::{AssigneeKey, Assignment};
+use tt_core::assignments::{AssigneeKey, Assignment, Sighting};
 use tt_core::records::{Event, MatchRecord, Team, TeamEventStats};
 use tt_core::season::Payload;
 use tt_core::user::{Roles, Session, User};
@@ -399,6 +399,10 @@ pub trait LocalRepo {
     /// Every robot a scout has an observation of at an event, other than a
     /// declined one, as `(match key, team number)`.
     async fn recorded_by(&self, event_key: &str, scouter_id: i64) -> Result<Vec<(String, i32)>>;
+
+    /// Every observation at an event other than a declined one, as coverage
+    /// sees it (L6).
+    async fn event_sightings(&self, event_key: &str) -> Result<Vec<Sighting>>;
 }
 
 #[cfg(test)]

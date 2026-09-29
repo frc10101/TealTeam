@@ -5,6 +5,7 @@
 
 use chrono::{DateTime, Utc};
 use sqlx::Row;
+use tt_core::assignments::Sighting;
 use tt_core::season::payload_to_json;
 use tt_repo::{NewObservation, Recorded, RepoError, Result};
 
@@ -124,6 +125,27 @@ impl SqliteRepo {
         .fetch_all(&self.pool)
         .await
         .map_err(|e| query_err("listing recorded robots", e))
+    }
+
+    pub(crate) async fn event_sightings_impl(&self, event_key: &str) -> Result<Vec<Sighting>> {
+        let rows = sqlx::query(
+            "SELECT match_key, team_number, scouter_id, device_id FROM observations \
+             WHERE event_key = ? AND review_state <> 'declined' \
+             ORDER BY match_key, team_number, id",
+        )
+        .bind(event_key)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| query_err("listing sightings", e))?;
+        Ok(rows
+            .iter()
+            .map(|row| Sighting {
+                match_key: row.get("match_key"),
+                team_number: row.get("team_number"),
+                scouter_id: row.get("scouter_id"),
+                device_id: row.get("device_id"),
+            })
+            .collect())
     }
 }
 
@@ -410,6 +432,33 @@ mod tests {
             [(MATCH.to_string(), 254), (MATCH.to_string(), 10101)]
         );
         assert!(repo.recorded_by("2026nope", 1).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn sightings_are_every_undeclined_observation_at_the_event() {
+        let repo = repo().await;
+        repo.record_observation(&observation(1, 254), Utc::now())
+            .await
+            .expect("record");
+        let declined = NewObservation {
+            scouter_id: Some(2),
+            ..observation(2, 1)
+        };
+        repo.record_observation(&declined, Utc::now())
+            .await
+            .expect("record");
+        sqlx::query("UPDATE observations SET review_state = 'declined' WHERE team_number = 1")
+            .execute(repo.pool())
+            .await
+            .expect("decline");
+
+        let sightings = repo.event_sightings("2026mabil").await.unwrap();
+        assert_eq!(sightings.len(), 1);
+        assert_eq!(
+            (sightings[0].team_number, sightings[0].scouter_id),
+            (254, Some(1))
+        );
+        assert!(repo.event_sightings("2026nope").await.unwrap().is_empty());
     }
 
     #[tokio::test]

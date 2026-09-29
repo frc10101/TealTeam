@@ -26,7 +26,7 @@ use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use std::str::FromStr;
 use std::time::Duration;
 use tracing::warn;
-use tt_core::assignments::Assignment;
+use tt_core::assignments::{Assignment, Sighting};
 use tt_core::records::{Event, MatchRecord, Team, TeamEventStats};
 use tt_core::user::{Session, User};
 use tt_repo::{
@@ -308,6 +308,10 @@ impl Repo for SqliteRepo {
 
     async fn recorded_by(&self, event_key: &str, scouter_id: i64) -> Result<Vec<(String, i32)>> {
         self.recorded_by_impl(event_key, scouter_id).await
+    }
+
+    async fn event_sightings(&self, event_key: &str) -> Result<Vec<Sighting>> {
+        self.event_sightings_impl(event_key).await
     }
 }
 

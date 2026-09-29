@@ -223,6 +223,129 @@ pub fn agenda(
     agenda
 }
 
+// ── Coverage (L6) ───────────────────────────────────────────────────────────
+
+/// A stored observation, as coverage sees it: which robot, and who recorded
+/// it. Declined observations are not sightings.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Sighting {
+    pub match_key: String,
+    pub team_number: i32,
+    pub scouter_id: Option<i64>,
+    pub device_id: Option<i64>,
+}
+
+impl Sighting {
+    /// Whether this assignee recorded it: the scout by account, the tablet by
+    /// the device it was saved from.
+    pub fn by(&self, assignee: AssigneeKey) -> bool {
+        match assignee {
+            AssigneeKey::Scout(id) => self.scouter_id == Some(id),
+            AssigneeKey::Device(id) => self.device_id == Some(id),
+        }
+    }
+}
+
+/// Where one driver station in one match stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SlotState {
+    /// No team in the slot yet.
+    Empty,
+    /// Somebody has recorded this robot -- this many observations. Whoever it
+    /// was, the data exists.
+    Recorded(usize),
+    /// Played, assigned, and nobody recorded it.
+    Missed,
+    /// Played, never assigned, and nobody recorded it.
+    Unscouted,
+    /// To come, with somebody on it.
+    Assigned,
+    /// To come, with nobody on it.
+    Open,
+}
+
+/// The state of `team`'s slot in `m`.
+pub fn slot_state(
+    m: &MatchRecord,
+    team: Option<i32>,
+    assigned: bool,
+    sightings: &[Sighting],
+) -> SlotState {
+    let Some(team) = team else {
+        return SlotState::Empty;
+    };
+    let seen = sightings
+        .iter()
+        .filter(|s| s.match_key == m.key && s.team_number == team)
+        .count();
+    match (seen, m.played, assigned) {
+        (n, _, _) if n > 0 => SlotState::Recorded(n),
+        (_, true, true) => SlotState::Missed,
+        (_, true, false) => SlotState::Unscouted,
+        (_, false, true) => SlotState::Assigned,
+        (_, false, false) => SlotState::Open,
+    }
+}
+
+/// How one assignee is doing: what the lead scout needs to see who has been
+/// submitting and who has not.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Tally {
+    pub assignee: AssigneeKey,
+    pub name: String,
+    /// Assigned robots they recorded.
+    pub recorded: usize,
+    /// Assigned robots in played matches they did not record -- even if
+    /// somebody else did, which the grid shows separately.
+    pub missed: usize,
+    /// Assigned robots in matches still to come.
+    pub to_come: usize,
+}
+
+/// A tally per assignee with anything assigned, in order of first appearance
+/// in the schedule. Assignments to robots no longer in their match are left
+/// out, as everywhere else.
+pub fn tallies(
+    matches: &[MatchRecord],
+    assignments: &[Assignment],
+    sightings: &[Sighting],
+) -> Vec<Tally> {
+    let mut tallies: Vec<Tally> = Vec::new();
+    for m in matches {
+        for a in assignments
+            .iter()
+            .filter(|a| a.match_key == m.key && m.alliance_of(a.team_number).is_some())
+        {
+            let key = a.assignee.key();
+            let i = match tallies.iter().position(|t| t.assignee == key) {
+                Some(i) => i,
+                None => {
+                    tallies.push(Tally {
+                        assignee: key,
+                        name: a.assignee.name().to_string(),
+                        recorded: 0,
+                        missed: 0,
+                        to_come: 0,
+                    });
+                    tallies.len() - 1
+                }
+            };
+            let done = sightings
+                .iter()
+                .any(|s| s.match_key == m.key && s.team_number == a.team_number && s.by(key));
+            let tally = &mut tallies[i];
+            if done {
+                tally.recorded += 1;
+            } else if m.played {
+                tally.missed += 1;
+            } else {
+                tally.to_come += 1;
+            }
+        }
+    }
+    tallies
+}
+
 /// Assignments naming a robot that is no longer in its match.
 ///
 /// TBA revises schedules -- a replay, a surrogate, a playoff slot filled in --
@@ -448,6 +571,67 @@ mod tests {
     fn a_stale_assignment_is_never_a_duty() {
         let agenda = agenda(&schedule(), &[to(2, 99, sam())], &[scout(1)], &[]);
         assert_eq!(agenda, Agenda::default());
+    }
+
+    fn seen(match_number: i32, team: i32, scouter: Option<i64>, device: Option<i64>) -> Sighting {
+        Sighting {
+            match_key: format!("2026mabil_qm{match_number}"),
+            team_number: team,
+            scouter_id: scouter,
+            device_id: device,
+        }
+    }
+
+    #[test]
+    fn a_slot_is_recorded_by_anyone_missed_only_by_everyone() {
+        let s = schedule();
+        let (q1, q2) = (&s[0], &s[1]);
+        let sightings = [seen(1, 1, Some(5), None), seen(1, 1, Some(6), None)];
+
+        assert_eq!(
+            slot_state(q1, Some(1), true, &sightings),
+            SlotState::Recorded(2)
+        );
+        assert_eq!(slot_state(q1, Some(2), true, &sightings), SlotState::Missed);
+        assert_eq!(
+            slot_state(q1, Some(3), false, &sightings),
+            SlotState::Unscouted
+        );
+        assert_eq!(
+            slot_state(q2, Some(1), true, &sightings),
+            SlotState::Assigned
+        );
+        assert_eq!(slot_state(q2, Some(1), false, &sightings), SlotState::Open);
+        assert_eq!(slot_state(q2, None, false, &sightings), SlotState::Empty);
+    }
+
+    #[test]
+    fn tallies_count_what_each_assignee_did_themselves() {
+        let assignments = [
+            to(1, 1, sam()),
+            to(1, 2, tablet(9)),
+            to(1, 3, sam()),
+            to(2, 4, sam()),
+            // Stale: 99 is not in Q2.
+            to(2, 99, sam()),
+        ];
+        let sightings = [
+            seen(1, 1, Some(1), None),
+            // The tablet's robot, saved from the tablet by whoever held it.
+            seen(1, 2, Some(7), Some(9)),
+            // Sam's robot, recorded by somebody else: covered, but not Sam's.
+            seen(1, 3, Some(8), None),
+        ];
+
+        let tallies = tallies(&schedule(), &assignments, &sightings);
+        assert_eq!(tallies.len(), 2);
+        assert_eq!(tallies[0].name, "Sam");
+        assert_eq!(
+            (tallies[0].recorded, tallies[0].missed, tallies[0].to_come),
+            (1, 1, 1)
+        );
+        assert_eq!(tallies[1].assignee, AssigneeKey::Device(9));
+        assert_eq!((tallies[1].recorded, tallies[1].missed), (1, 0));
     }
 
     #[test]

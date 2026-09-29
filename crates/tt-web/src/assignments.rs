@@ -1,4 +1,5 @@
-//! The lead scout's assignment grid (L1) and the changes made from it (L2).
+//! The lead scout's assignment grid (L1), the changes made from it (L2), and
+//! the coverage it shows (L6).
 //!
 //! Every match at the selected event, its six robots, and who is watching each
 //! one. A lead scout assigns a match at a time, hands the open robots out
@@ -22,6 +23,7 @@ use tt_core::user::User;
 use tt_repo::{DEVICE_ONLINE_WINDOW, Device, NewAssignment, Repo, Scout};
 use tt_templates::{
     AssigneeChoice, AssignmentGrid, AssignmentsPage, DeviceRow, MatchEditor, Nav, PoolEntry,
+    TallyRow, assignments_href,
 };
 
 use crate::events::EventContext;
@@ -163,6 +165,19 @@ impl People {
         }
     }
 
+    fn is_online(&self, key: AssigneeKey, now: DateTime<Utc>) -> bool {
+        match key {
+            AssigneeKey::Scout(id) => self
+                .scouts
+                .iter()
+                .any(|s| s.id == id && s.is_online(now, DEVICE_ONLINE_WINDOW)),
+            AssigneeKey::Device(id) => self
+                .devices
+                .iter()
+                .any(|d| d.id == id && d.is_online(now, DEVICE_ONLINE_WINDOW)),
+        }
+    }
+
     fn name_of(&self, key: AssigneeKey) -> String {
         match key {
             AssigneeKey::Scout(id) => self
@@ -278,6 +293,8 @@ pub async fn page(
         editor: None,
         pool: Vec::new(),
         devices: Vec::new(),
+        coverage: Vec::new(),
+        live_href: String::new(),
     };
 
     let Some(event) = &context.selected else {
@@ -312,8 +329,14 @@ pub async fn page(
         return page;
     }
 
-    let assignments = match state.repo.event_assignments(&event.key).await {
-        Ok(assignments) => assignments,
+    // Sightings too: without them every played robot would read "Missed".
+    let loaded = async {
+        let assignments = state.repo.event_assignments(&event.key).await?;
+        let sightings = state.repo.event_sightings(&event.key).await?;
+        tt_repo::Result::Ok((assignments, sightings))
+    };
+    let (assignments, sightings) = match loaded.await {
+        Ok(loaded) => loaded,
         Err(e) => {
             warn!("assignments for {}: {e}", event.key);
             page.unavailable = "Could not read the assignments. Reload to try again.".into();
@@ -365,13 +388,26 @@ pub async fn page(
         }
     }
 
+    page.coverage = assignments::tallies(&matches, &assignments, &sightings)
+        .into_iter()
+        .map(|t| TallyRow {
+            by_device: matches!(t.assignee, AssigneeKey::Device(_)),
+            online: people.is_online(t.assignee, now),
+            name: t.name,
+            recorded: t.recorded,
+            missed: t.missed,
+            to_come: t.to_come,
+        })
+        .collect();
     page.pool = people.pool(now);
     page.devices = people.device_rows(now);
+    page.live_href = assignments_href(&event.key, None);
     page.grid = Some(AssignmentGrid::new(
         &event.key,
         &matches,
         &roster,
         &assignments,
+        &sightings,
     ));
     page
 }
