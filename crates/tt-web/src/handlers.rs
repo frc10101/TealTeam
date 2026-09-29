@@ -21,6 +21,7 @@ use tt_core::user::{self, Roles};
 use tt_repo::{NewUser, Repo};
 use tt_templates::{AccountPage, HomePage, LeadScoutPage, Nav, Page, SignInPage, SignUpPage};
 
+use crate::assignments;
 use crate::auth::{
     Auth, Coach, LeadScout, MaybeAuth, SESSION_COOKIE, clear_session_cookie, device_uuid,
     hash_password, new_session, session_cookie, verify_password,
@@ -420,6 +421,16 @@ pub async fn lead_scout(
     EventParam(requested): EventParam,
 ) -> Response {
     lead_scout_page(&state, &user, requested.as_deref(), None).await
+}
+
+/// `GET /lead-scout/assignments` (L1): who scouts which robot in each match.
+pub async fn assignments(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
+) -> Response {
+    let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
+    html(assignments::page(&state, nav, &context).await)
 }
 
 /// `POST /api/frc/sync` (I13): refresh upstream data now.

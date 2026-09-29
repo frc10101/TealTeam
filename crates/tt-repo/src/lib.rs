@@ -23,6 +23,7 @@
 
 use chrono::{DateTime, Utc};
 use thiserror::Error;
+use tt_core::assignments::Assignment;
 use tt_core::records::{Event, MatchRecord, Team, TeamEventStats};
 use tt_core::season::Payload;
 use tt_core::user::{Roles, Session, User};
@@ -297,6 +298,14 @@ pub trait LocalRepo {
 
     /// Matches involving a team, in playing order.
     async fn team_matches(&self, event_key: &str, team_number: i32) -> Result<Vec<MatchRecord>>;
+
+    // ── Assignments ─────────────────────────────────────────────────────────
+
+    /// Every assignment at an event, with the assignee's name resolved.
+    ///
+    /// Where a row names both a scout and a tablet, the scout is reported: a
+    /// person is the more specific instruction.
+    async fn event_assignments(&self, event_key: &str) -> Result<Vec<Assignment>>;
 
     // ── Statistics ──────────────────────────────────────────────────────────
 

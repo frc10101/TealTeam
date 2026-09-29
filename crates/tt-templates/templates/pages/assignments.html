@@ -1,0 +1,103 @@
+{#
+  The lead scout's assignment grid (L1): matches down, the six driver stations
+  across. A table on anything wide; under 48rem each match becomes a card of
+  red over blue, like the scouting page's robot picker.
+
+  The explicit roles are there because changing a table's `display`, as the
+  phone layout does, makes some browsers drop its table semantics.
+#}
+{% extends "layout.html" %}
+
+{% macro grid_table(rows, caption) %}
+  <table class="assignment-grid" role="table">
+    <caption class="visually-hidden">{{ caption }}</caption>
+    <thead role="rowgroup">
+      <tr role="row">
+        <th scope="col" role="columnheader">Match</th>
+        <th scope="col" role="columnheader" class="red">Red 1</th>
+        <th scope="col" role="columnheader" class="red">Red 2</th>
+        <th scope="col" role="columnheader" class="red">Red 3</th>
+        <th scope="col" role="columnheader" class="blue">Blue 1</th>
+        <th scope="col" role="columnheader" class="blue">Blue 2</th>
+        <th scope="col" role="columnheader" class="blue">Blue 3</th>
+      </tr>
+    </thead>
+    <tbody role="rowgroup">
+      {% for row in rows.iter() %}
+        <tr role="row" id="{{ row.id }}">
+          <th scope="row" role="rowheader">{{ row.label }}</th>
+          {% for cell in row.cells %}
+            <td role="cell" class="slot {{ cell.color }}{% if cell.is_open() %} open{% endif %}">
+              <span class="slot-station" aria-hidden="true">{{ cell.station }}</span>
+              {% if cell.team.is_empty() %}
+                <strong class="slot-team">TBD</strong>
+              {% else %}
+                <strong class="slot-team">{{ cell.team }}</strong>
+                {% if cell.team_name.is_empty() %}
+                  <span class="slot-name unknown">not on roster</span>
+                {% else %}
+                  <span class="slot-name">{{ cell.team_name }}</span>
+                {% endif %}
+                {% if cell.assignee.is_empty() %}
+                  <span class="slot-assignee">Unassigned</span>
+                {% else %}
+                  <span class="slot-assignee">{{ cell.assignee }}{% if cell.by_device %} <span class="slot-kind">tablet</span>{% endif %}</span>
+                {% endif %}
+              {% endif %}
+            </td>
+          {% endfor %}
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endmacro %}
+
+{% block content %}
+{% for error in errors %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endfor %}
+
+<section class="card">
+  <div class="card-header">
+    <h1>Assignments{% if !event_name.is_empty() %} · {{ event_name }}{% endif %}</h1>
+  </div>
+  <div class="card-body">
+    {% if !unavailable.is_empty() %}
+      <p>{{ unavailable }}</p>
+    {% else if let Some(grid) = grid %}
+      {% if grid.assignable == 0 %}
+        <p>Every match at this event has been played.</p>
+      {% else %}
+        <p><strong>{{ grid.assigned }} of {{ grid.assignable }}</strong> robots in upcoming matches have a scout.</p>
+      {% endif %}
+      <p class="hint">Assigning robots from this page is not built yet.</p>
+    {% endif %}
+    <p><a href="/lead-scout{{ nav.event.query() }}">Back to Lead Scout</a></p>
+  </div>
+</section>
+
+{% if let Some(grid) = grid %}
+  {% if !grid.stale.is_empty() %}
+    <div class="alert alert-warning" role="status">
+      <p>The schedule changed after these were assigned. A scout following them would watch the wrong robot:</p>
+      <ul>{% for line in grid.stale %}<li>{{ line }}</li>{% endfor %}</ul>
+    </div>
+  {% endif %}
+
+  {% if !grid.upcoming.is_empty() %}
+    <section class="card" id="upcoming">
+      <div class="card-header"><h2>Upcoming matches</h2></div>
+      <div class="card-body">
+        {% call grid_table(grid.upcoming, "Upcoming matches") %}{% endcall %}
+      </div>
+    </section>
+  {% endif %}
+
+  {% if !grid.played.is_empty() %}
+    <details class="card" id="played">
+      <summary class="card-header"><h2>Played matches ({{ grid.played.len() }})</h2></summary>
+      <div class="card-body">
+        {% call grid_table(grid.played, "Played matches") %}{% endcall %}
+      </div>
+    </details>
+  {% endif %}
+{% endif %}
+{% endblock %}

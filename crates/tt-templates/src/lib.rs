@@ -12,6 +12,7 @@
 //! template consumes it, and no template ever reaches back into storage.
 
 use askama::Template;
+use tt_core::assignments::{self, Assignment};
 use tt_core::form::{FormErrors, RawAnswers, input_name, is_on};
 use tt_core::records::{Event, MatchRecord, Team};
 use tt_core::season::{FieldKind, SeasonSchema};
@@ -360,6 +361,144 @@ pub struct UpstreamPanel {
     pub result_headline: String,
     pub result_ok: bool,
     pub result_problems: Vec<String>,
+}
+
+// ── Assignments (L1) ────────────────────────────────────────────────────────
+
+/// The lead scout's assignment grid: every match, every robot, and who is
+/// watching it.
+#[derive(Template)]
+#[template(path = "pages/assignments.html")]
+pub struct AssignmentsPage {
+    pub title: String,
+    pub nav: Nav,
+    /// Empty when no event is selected.
+    pub event_name: String,
+    /// Why there is no grid, when there is not. Replaces the grid.
+    pub unavailable: String,
+    pub errors: Vec<String>,
+    pub grid: Option<AssignmentGrid>,
+}
+
+/// Matches down, the six driver stations across.
+///
+/// Upcoming matches first, since those are the ones a lead scout can still do
+/// something about; played ones follow, folded away.
+#[derive(Debug, Clone)]
+pub struct AssignmentGrid {
+    pub upcoming: Vec<GridRow>,
+    pub played: Vec<GridRow>,
+    /// Robots in upcoming matches that have an assignee.
+    pub assigned: usize,
+    /// Robots in upcoming matches. Empty slots are not counted: there is
+    /// nobody to watch.
+    pub assignable: usize,
+    /// Assignments naming a robot no longer in its match, in words.
+    pub stale: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct GridRow {
+    /// The match key, used as the row's id so a link can land on it.
+    pub id: String,
+    /// `"Q14"`.
+    pub label: String,
+    /// Red 1-3, then blue 1-3.
+    pub cells: Vec<GridCell>,
+}
+
+/// One driver station in one match.
+#[derive(Debug, Clone)]
+pub struct GridCell {
+    /// `"red"` or `"blue"`, for the CSS class.
+    pub color: &'static str,
+    /// `"Red 1"`.
+    pub station: String,
+    /// Empty where the schedule has no team yet, as in playoffs before
+    /// alliance selection.
+    pub team: String,
+    /// Empty when the team is not on the event's synced roster. The number is
+    /// what a scout needs; the name is a courtesy.
+    pub team_name: String,
+    /// Empty when nobody is assigned.
+    pub assignee: String,
+    /// The assignee is a tablet rather than a person.
+    pub by_device: bool,
+}
+
+impl GridCell {
+    /// A robot is here and nobody is watching it.
+    pub fn is_open(&self) -> bool {
+        !self.team.is_empty() && self.assignee.is_empty()
+    }
+}
+
+impl AssignmentGrid {
+    /// `matches` in playing order. Names come from `roster`, the event's teams.
+    pub fn new(matches: &[MatchRecord], roster: &[Team], assignments: &[Assignment]) -> Self {
+        let name_of = |number: i32| {
+            roster
+                .iter()
+                .find(|t| t.number == number)
+                .map(|t| t.name.clone())
+                .unwrap_or_default()
+        };
+        let assignee_of = |match_key: &str, number: i32| {
+            assignments
+                .iter()
+                .find(|a| a.match_key == match_key && a.team_number == number)
+                .map(|a| &a.assignee)
+        };
+
+        let row = |m: &MatchRecord| {
+            let side = |color: &'static str, station: &str, teams: &[Option<i32>; 3]| {
+                teams
+                    .iter()
+                    .enumerate()
+                    .map(|(i, slot)| {
+                        let assignee = slot.and_then(|n| assignee_of(&m.key, n));
+                        GridCell {
+                            color,
+                            station: format!("{station} {}", i + 1),
+                            team: slot.map(|n| n.to_string()).unwrap_or_default(),
+                            team_name: slot.map(name_of).unwrap_or_default(),
+                            assignee: assignee.map(|a| a.name().to_string()).unwrap_or_default(),
+                            by_device: assignee.is_some_and(|a| a.is_device()),
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            };
+            let mut cells = side("red", "Red", &m.red);
+            cells.extend(side("blue", "Blue", &m.blue));
+            GridRow {
+                id: m.key.clone(),
+                label: m.label(),
+                cells,
+            }
+        };
+
+        let (played, upcoming): (Vec<_>, Vec<_>) = matches.iter().partition(|m| m.played);
+        let upcoming: Vec<GridRow> = upcoming.into_iter().map(row).collect();
+        let cells = || upcoming.iter().flat_map(|r| &r.cells);
+
+        Self {
+            assigned: cells().filter(|c| !c.assignee.is_empty()).count(),
+            assignable: cells().filter(|c| !c.team.is_empty()).count(),
+            stale: assignments::stale(matches, assignments)
+                .into_iter()
+                .filter_map(|a| {
+                    let label = matches.iter().find(|m| m.key == a.match_key)?.label();
+                    Some(format!(
+                        "{label}: team {} is assigned to {}, but is no longer in that match.",
+                        a.team_number,
+                        a.assignee.name()
+                    ))
+                })
+                .collect(),
+            played: played.into_iter().map(row).collect(),
+            upcoming,
+        }
+    }
 }
 
 // ── Scouting (U4) ───────────────────────────────────────────────────────────
@@ -1147,6 +1286,142 @@ mod tests {
         let html = scouting_page(None, Some(form));
         assert!(html.contains(r#"data-step="1" aria-label="One more" hidden"#));
         assert!(html.contains("/static/js/counter.js"));
+    }
+
+    // ── Assignments (L1) ────────────────────────────────────────────────────
+
+    fn assignment(
+        match_number: i32,
+        team_number: i32,
+        assignee: assignments::Assignee,
+    ) -> Assignment {
+        Assignment {
+            match_key: format!("2026mabil_qm{match_number}"),
+            team_number,
+            assignee,
+        }
+    }
+
+    fn sam() -> assignments::Assignee {
+        assignments::Assignee::Scout {
+            id: 1,
+            name: "Sam".into(),
+        }
+    }
+
+    fn tablet() -> assignments::Assignee {
+        assignments::Assignee::Device {
+            id: 1,
+            name: "Stands Left".into(),
+        }
+    }
+
+    /// Q1 played, Q2 and Q3 to come. Each has 10101, 254, and a gap on red, and
+    /// 2, 3, 4 on blue; only 10101 and 254 are on the roster.
+    fn grid(assignments: &[Assignment]) -> AssignmentGrid {
+        let matches = [scheduled(1, true), scheduled(2, false), scheduled(3, false)];
+        let roster = [team(10101, "Teal Team"), team(254, "Cheesy Poofs")];
+        AssignmentGrid::new(&matches, &roster, assignments)
+    }
+
+    fn assignments_page(grid: Option<AssignmentGrid>, unavailable: &str) -> String {
+        AssignmentsPage {
+            title: "Assignments".into(),
+            nav: nav(Roles {
+                is_lead_scout: true,
+                ..Roles::SCOUT
+            }),
+            event_name: "Boston".into(),
+            unavailable: unavailable.into(),
+            errors: Vec::new(),
+            grid,
+        }
+        .render_html()
+        .expect("render")
+    }
+
+    #[test]
+    fn the_grid_puts_upcoming_matches_first_and_folds_played_ones_away() {
+        let grid = grid(&[]);
+        let labels = |rows: &[GridRow]| rows.iter().map(|r| r.label.clone()).collect::<Vec<_>>();
+        assert_eq!(labels(&grid.upcoming), ["Q2", "Q3"]);
+        assert_eq!(labels(&grid.played), ["Q1"]);
+
+        let stations: Vec<_> = grid.upcoming[0]
+            .cells
+            .iter()
+            .map(|c| c.station.as_str())
+            .collect();
+        assert_eq!(
+            stations,
+            ["Red 1", "Red 2", "Red 3", "Blue 1", "Blue 2", "Blue 3"]
+        );
+
+        let html = assignments_page(Some(grid), "");
+        assert!(html.contains(r#"<tr role="row" id="2026mabil_qm2">"#));
+        let played = html
+            .find(r#"<details class="card" id="played">"#)
+            .expect("played folded");
+        assert!(html.find(r#"id="2026mabil_qm1""#).unwrap() > played);
+        assert!(html.find(r#"id="2026mabil_qm2""#).unwrap() < played);
+    }
+
+    #[test]
+    fn each_cell_names_the_robot_and_who_is_watching_it() {
+        let grid = grid(&[assignment(2, 10101, sam()), assignment(2, 2, tablet())]);
+        let q2 = &grid.upcoming[0].cells;
+
+        assert_eq!(
+            (q2[0].team.as_str(), q2[0].team_name.as_str()),
+            ("10101", "Teal Team")
+        );
+        assert_eq!(q2[0].assignee, "Sam");
+        assert!(!q2[0].by_device && !q2[0].is_open());
+
+        assert_eq!(q2[3].assignee, "Stands Left");
+        assert!(q2[3].by_device);
+        assert!(q2[3].team_name.is_empty(), "team 2 is not on the roster");
+
+        assert!(q2[1].is_open(), "254 has nobody");
+        assert!(
+            q2[2].team.is_empty() && !q2[2].is_open(),
+            "a gap is not open"
+        );
+
+        let html = assignments_page(Some(grid), "");
+        assert!(html.contains(r#"<td role="cell" class="slot red open">"#));
+        assert!(html.contains("Sam"));
+        assert!(html.contains(r#"Stands Left <span class="slot-kind">tablet</span>"#));
+        assert!(html.contains(r#"<strong class="slot-team">TBD</strong>"#));
+        assert!(html.contains(r#"<span class="slot-name unknown">not on roster</span>"#));
+        assert!(html.contains("Unassigned"));
+    }
+
+    #[test]
+    fn coverage_counts_only_upcoming_robots() {
+        // One in a played match, which no longer needs a scout.
+        let grid = grid(&[assignment(1, 254, sam()), assignment(3, 4, sam())]);
+        assert_eq!((grid.assigned, grid.assignable), (1, 10));
+        assert!(assignments_page(Some(grid), "").contains("<strong>1 of 10</strong> robots"));
+    }
+
+    #[test]
+    fn an_assignment_the_schedule_moved_away_from_is_called_out() {
+        let grid = grid(&[assignment(2, 99, sam())]);
+        assert_eq!(
+            grid.stale,
+            ["Q2: team 99 is assigned to Sam, but is no longer in that match."]
+        );
+        assert_eq!(grid.assigned, 0, "and it covers nobody");
+        assert!(assignments_page(Some(grid), "").contains("would watch the wrong robot"));
+    }
+
+    #[test]
+    fn with_no_grid_the_page_says_why() {
+        let html = assignments_page(None, "Boston has no match schedule yet.");
+        assert!(html.contains("Boston has no match schedule yet."));
+        assert!(!html.contains("<table"));
+        assert!(html.contains(r#"href="/lead-scout""#), "and the way back");
     }
 
     #[test]

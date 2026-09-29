@@ -177,7 +177,7 @@ This is the highest-leverage cluster in either source document. It removes the 5
 
 | # | Action | Source | Effort | Status |
 | --- | --- | --- | --- | --- |
-| L1 | Assignment grid: matches × six robot slots, `"TBD"` for teams not in the local roster | RS §5.6 | L |  |
+| L1 | Assignment grid: matches × six robot slots, `"TBD"` for teams not in the local roster | RS §5.6 | L | **Done** — read-only; editing is L2 |
 | L2 | Set / auto-distribute / clear-all / clear-match / rename-device | RS §5.6 | M |  |
 | L3 | **Assignment-driven team selection** replacing the team list, with a keypad escape hatch | RI-U4 · RS §5.2 | M |  |
 | L4 | Prefill query — next unplayed match, matching `scouter_id` **OR** `device_uuid` | RS §5.2 | M |  |
@@ -268,7 +268,19 @@ This is the highest-leverage cluster in either source document. It removes the 5
 
 **One route, two callers.** A script gets JSON counts, per the spec. A browser posting the new **Sync now** button on `/lead-scout` gets the page back with the outcome, because without Unpoly (U8) a JSON body would be the whole screen. The page's "FIRST and TBA data" card shows the server's uplink, when it last synced (relative time, so no timezone question), and which feeds are configured. An uplink nobody has tested yet reads "Not checked yet", not "No internet" — otherwise a server with no credentials claims to be offline. `.badge-amber` was referenced by `UplinkState` but never defined in `site.css`; it is now, with `.badge-gray`.
 
-**Still open in Phase 2:** I9, I11, I14, L1-L6, L8-L12, U11-U20, and P3-P9.
+**A lead scout can see the assignment grid (L1).** `/lead-scout/assignments` shows every match at the selected event down the side and the six driver stations across, each cell naming the robot, its team, and who is watching it — a scout by name, or a tablet by its label with "tablet" beside it. Upcoming matches come first; played ones fold away under a `<details>`, since nothing can be done about them. A count at the top says how many robots in upcoming matches have somebody on them. On a wide screen it is a table; under 48rem each match is a card of red over blue, the same shape as the scouting page's robot picker. Checked by screenshot at 1280 and 390px against the binary, with no sideways scroll on the phone.
+
+It is read-only. The action list puts setting, distributing, and clearing in L2, and the page says plainly that assigning from it is not built yet. Each row's id is its match key, so L2's post-then-303 can land the lead back on the row they just edited.
+
+**"TBD" means an empty slot, not an unknown team.** The retired grid printed "TBD" as the *name* of a team missing from the roster. Beside a real team number that reads as "team to be decided", which it is not, so a known number with no roster entry shows the number and *not on roster*; "TBD" is kept for a slot the schedule has not filled, as in playoffs before alliance selection.
+
+**An assignment the schedule moved away from is called out.** TBA revises schedules — replays, surrogates — and an assignment made against the old one points at a robot no longer in the match. Once assignments pre-fill the form (L4) that is a scout watching the wrong robot, the exact mistake assignments exist to prevent, so the grid lists them in a warning above the table (`tt_core::assignments::stale`). They are not counted as coverage.
+
+**A failed read shows a message, not an empty grid.** If the schedule or the assignments cannot be read, the page says so instead of drawing a grid of "Unassigned", which would send a lead off to redo work that is already done. A failed roster read only costs the team names.
+
+**For L2:** `scout_assignments.team_number` references `teams`, like observations. Assigning a robot TBA has scheduled before FIRST's roster sync created it will fail the foreign key, so L2's set needs the same placeholder-team insert `record_observation` does. Where a row names both a scout and a tablet, the grid reports the scout; L2's set should write one or the other, never both.
+
+**Still open in Phase 2:** I9, I11, I14, L2-L6, L8-L12, U11-U20, and P3-P9.
 
 ---
 

@@ -177,6 +177,7 @@ pub fn router(state: AppState) -> Router {
         .route("/account", get(handlers::account))
         .route("/submission", get(handlers::submission))
         .route("/lead-scout", get(handlers::lead_scout))
+        .route("/lead-scout/assignments", get(handlers::assignments))
         .route("/drive-coach", get(handlers::drive_coach))
         // Forms
         .route("/api/auth/login", post(handlers::login))
@@ -620,7 +621,13 @@ mod flow_tests {
     #[tokio::test]
     async fn anonymous_visitors_are_sent_to_sign_in() {
         let state = migrated_state().await;
-        for path in ["/account", "/submission", "/lead-scout", "/drive-coach"] {
+        for path in [
+            "/account",
+            "/submission",
+            "/lead-scout",
+            "/lead-scout/assignments",
+            "/drive-coach",
+        ] {
             let response = get(&state, path, None).await;
             assert_eq!(response.status(), StatusCode::SEE_OTHER, "{path}");
             assert_eq!(
@@ -645,7 +652,7 @@ mod flow_tests {
         .await;
         let scout = session_cookie_from(&response).expect("session");
 
-        for path in ["/lead-scout", "/drive-coach"] {
+        for path in ["/lead-scout", "/lead-scout/assignments", "/drive-coach"] {
             let response = get(&state, path, Some(&scout)).await;
             assert_eq!(response.status(), StatusCode::SEE_OTHER, "{path}");
             assert_eq!(
@@ -661,7 +668,12 @@ mod flow_tests {
         let state = migrated_state().await;
         let admin = signed_up(&state).await;
 
-        for path in ["/lead-scout", "/drive-coach", "/submission"] {
+        for path in [
+            "/lead-scout",
+            "/lead-scout/assignments",
+            "/drive-coach",
+            "/submission",
+        ] {
             let response = get(&state, path, Some(&admin)).await;
             assert_eq!(response.status(), StatusCode::OK, "{path}");
         }
@@ -1378,6 +1390,91 @@ mod flow_tests {
         assert_eq!(response.status(), StatusCode::SEE_OTHER);
         assert_eq!(response.headers()[header::LOCATION], "/sign-in");
         assert_eq!(observations(&state).await, 0);
+    }
+
+    // ── Assignment grid (L1) ────────────────────────────────────────────────
+
+    /// Assign `team` in `2026now_qm{number}` to a scout or a tablet.
+    async fn assign(
+        state: &AppState,
+        number: i32,
+        team: i32,
+        scouter: Option<i64>,
+        device: Option<i64>,
+    ) {
+        let now = chrono::Utc::now().to_rfc3339();
+        sqlx::query(
+            "INSERT INTO scout_assignments \
+                 (match_key, team_number, event_key, scouter_id, device_id, created_at, updated_at) \
+             VALUES (?, ?, '2026now', ?, ?, ?, ?)",
+        )
+        .bind(format!("2026now_qm{number}"))
+        .bind(team)
+        .bind(scouter)
+        .bind(device)
+        .bind(&now)
+        .bind(&now)
+        .execute(state.repo.pool())
+        .await
+        .expect("assign");
+    }
+
+    #[tokio::test]
+    async fn the_assignment_grid_shows_who_watches_each_robot() {
+        let (state, admin) = scouting().await;
+        // Sam (the admin, user 1) on 254 and Sam's tablet (device 1) on 10101.
+        assign(&state, 2, 254, Some(1), None).await;
+        assign(&state, 2, 10101, None, Some(1)).await;
+
+        let response = get(&state, "/lead-scout/assignments", Some(&admin)).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = text(response).await;
+
+        assert!(body.contains("Assignments · This Weekend"), "{body}");
+        assert!(body.contains("<strong>2 of 6</strong> robots in upcoming matches"));
+        let q2 = &body[body.find(r#"id="2026now_qm2""#).expect("Q2 row")..];
+        let q2 = &q2[..q2.find("</tr>").unwrap()];
+        assert!(q2.contains("Device 0191f7ac"), "an unnamed tablet: {q2}");
+        assert!(q2.contains(r#"<span class="slot-kind">tablet</span>"#));
+        assert!(q2.contains(">Sam<"));
+        assert!(q2.contains(r#"<span class="slot-name">Team 254</span>"#));
+        assert_eq!(q2.matches("Unassigned").count(), 4);
+
+        // Q1 is played: still listed, folded away below.
+        let played = body.find(r#"id="played""#).expect("played section");
+        assert!(body.find(r#"id="2026now_qm1""#).unwrap() > played);
+    }
+
+    #[tokio::test]
+    async fn the_grid_waits_for_a_match_schedule() {
+        let state = migrated_state().await;
+        seed_event(&state, "2026now", "This Weekend", (-1, 1), &[10101]).await;
+        let admin = signed_up(&state).await;
+
+        let body = text(get(&state, "/lead-scout/assignments", Some(&admin)).await).await;
+        assert!(body.contains("This Weekend has no match schedule yet."));
+        assert!(!body.contains("<table"));
+    }
+
+    #[tokio::test]
+    async fn the_grid_is_one_tap_from_the_lead_scout_page_and_keeps_the_event() {
+        let (state, admin) = scouting().await;
+        let body = text(get(&state, "/lead-scout?event=2026now", Some(&admin)).await).await;
+        assert!(body.contains(r#"href="/lead-scout/assignments?event=2026now""#));
+
+        let grid = text(
+            get(
+                &state,
+                "/lead-scout/assignments?event=2026now",
+                Some(&admin),
+            )
+            .await,
+        )
+        .await;
+        assert!(
+            grid.contains(r#"href="/lead-scout?event=2026now""#),
+            "and back"
+        );
     }
 
     // ── No Unpoly: plain pages and live regions (U8) ────────────────────────

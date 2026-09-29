@@ -3,9 +3,11 @@
 <section class="card">
   <div class="card-header"><h1>Lead Scout</h1></div>
   <div class="card-body">
-    <p>Assignments, review queue, and rankings.</p>
+    <p><a class="btn btn-primary" href="/lead-scout/assignments{{ nav.event.query() }}">Assignments</a></p>
+    <p class="hint">Who scouts which robot in each match.</p>
     <p class="alert alert-info">
-      Not built yet — these arrive with the rest of phase 2.
+      The review queue and rankings are not built yet — they arrive with the
+      rest of phase 2.
     </p>
     <p class="muted">Season: {{ season_name }}</p>
   </div>

@@ -15,6 +15,7 @@
 //!
 //! The pool is capped at one connection deliberately -- see [`connect`].
 
+mod assignments;
 mod competition;
 pub mod migrate;
 mod observations;
@@ -25,6 +26,7 @@ use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use std::str::FromStr;
 use std::time::Duration;
 use tracing::warn;
+use tt_core::assignments::Assignment;
 use tt_core::records::{Event, MatchRecord, Team, TeamEventStats};
 use tt_core::user::{Session, User};
 use tt_repo::{
@@ -247,6 +249,10 @@ impl Repo for SqliteRepo {
 
     async fn team_matches(&self, event_key: &str, team_number: i32) -> Result<Vec<MatchRecord>> {
         self.team_matches_impl(event_key, team_number).await
+    }
+
+    async fn event_assignments(&self, event_key: &str) -> Result<Vec<Assignment>> {
+        self.event_assignments_impl(event_key).await
     }
 
     async fn upsert_team_stats(&self, stats: &TeamEventStats, now: DateTime<Utc>) -> Result<()> {
