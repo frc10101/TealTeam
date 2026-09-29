@@ -15,6 +15,7 @@ pub mod error;
 pub mod form;
 pub mod matches;
 pub mod record_id;
+pub mod ranking;
 pub mod records;
 pub mod review;
 pub mod season;

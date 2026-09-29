@@ -1,0 +1,50 @@
+{#
+  Point values (L12): what each answer is worth in the scouting score. Starts
+  at the season schema's values; a lead scout retunes them mid-event without a
+  rebuild. Whole numbers from -100 to 100, and one bad value saves nothing.
+#}
+{% extends "layout.html" %}
+{% block content %}
+{% if !notice.is_empty() %}<p class="alert alert-success" role="status">{{ notice }}</p>{% endif %}
+{% for error in errors %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endfor %}
+{% if rejected %}
+  <p class="alert alert-error" role="alert">Nothing was saved. Fix the values marked below, then save again.</p>
+{% endif %}
+
+<section class="card">
+  <div class="card-header"><h1>Point values</h1></div>
+  <div class="card-body">
+    <p>What each answer adds to a team's scouting score. Rankings average these over a team's approved observations.</p>
+    <p class="hint">
+      {% if changed == 0 %}All values are the season's defaults.{% else %}{{ changed }} changed from the season's defaults.{% endif %}
+    </p>
+    <p><a href="/lead-scout/rankings{{ nav.event.query() }}">Back to Rankings</a></p>
+  </div>
+</section>
+
+<form method="post" action="/api/weights{{ nav.event.query() }}" class="stack" id="weights">
+  {% for group in groups %}
+    <section class="card">
+      <div class="card-header"><h2>{{ group.field_label }}</h2></div>
+      <div class="card-body weights">
+        {% for input in group.inputs %}
+          <div class="field">
+            <label class="form-label" for="{{ input.name }}">{{ input.option_label }}{% if input.changed %} <span class="badge badge-amber">changed</span>{% endif %}</label>
+            <input class="form-input" type="number" id="{{ input.name }}" name="{{ input.name }}" value="{{ input.value }}"
+                   min="-100" max="100" step="1" inputmode="numeric" required>
+            <p class="hint">Default {{ input.default }}</p>
+            {% if !input.error.is_empty() %}<p class="form-error">{{ input.error }}</p>{% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+  {% endfor %}
+  <button class="btn btn-primary btn-lg" type="submit">Save point values</button>
+</form>
+
+{% if changed > 0 %}
+  <form method="post" action="/api/weights/reset{{ nav.event.query() }}">
+    <button class="btn btn-secondary" type="submit">Put every value back to the season's default</button>
+  </form>
+{% endif %}
+{% endblock %}

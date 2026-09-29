@@ -3,11 +3,12 @@
 <section class="card">
   <div class="card-header"><h1>Lead Scout</h1></div>
   <div class="card-body">
-    <p><a class="btn btn-primary" href="/lead-scout/assignments{{ nav.event.query() }}">Assignments</a></p>
-    <p class="hint">Who scouts which robot in each match.</p>
-    <p class="alert alert-info">
-      Rankings are not built yet — they arrive with the rest of phase 2.
+    <p class="actions">
+      <a class="btn btn-primary" href="/lead-scout/assignments{{ nav.event.query() }}">Assignments</a>
+      <a class="btn btn-primary" href="/lead-scout/rankings{{ nav.event.query() }}">Rankings</a>
+      <a class="btn btn-secondary" href="/lead-scout/weights{{ nav.event.query() }}">Point values</a>
     </p>
+    <p class="hint">Who scouts which robot, how teams compare, and what each answer is worth.</p>
     <p class="muted">Season: {{ season_name }}</p>
   </div>
 </section>

@@ -1,0 +1,61 @@
+{#
+  Rankings (L11): every team at the event, with the event's own rank and the
+  average score of its approved observations. Averaged, with n shown -- the
+  retired app summed, so being scouted often beat playing well
+  (REBUILD_SPEC.md 12.9). Each column header sorts, in the URL.
+#}
+{% extends "layout.html" %}
+{% block content %}
+{% for error in errors %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endfor %}
+
+<section class="card">
+  <div class="card-header"><h1>Rankings{% if !event_name.is_empty() %} · {{ event_name }}{% endif %}</h1></div>
+  <div class="card-body">
+    {% if !unavailable.is_empty() %}
+      <p>{{ unavailable }}</p>
+    {% else %}
+      <p class="hint">
+        Score is the average of a team's approved observations, with how many
+        there were beside it. Fewer than three is marked thin.
+        {% if pending > 0 %}{{ pending }} more {% if pending == 1 %}is{% else %}are{% endif %} waiting for review and not counted yet.{% endif %}
+      </p>
+      <p class="hint">
+        {% if weights_changed == 0 %}Point values are the season's defaults.{% else %}{{ weights_changed }} point {% if weights_changed == 1 %}value is{% else %}values are{% endif %} changed from the season's defaults.{% endif %}
+        <a href="/lead-scout/weights{{ nav.event.query() }}">Point values</a>
+      </p>
+    {% endif %}
+    <p><a href="/lead-scout{{ nav.event.query() }}">Back to Lead Scout</a></p>
+  </div>
+</section>
+
+{% if !rows.is_empty() %}
+  <section class="card">
+    <div class="card-body table-scroll">
+      <table class="data-table rankings">
+        <caption class="visually-hidden">Teams, sorted by the underlined column</caption>
+        <thead>
+          <tr>
+            {% for column in columns %}
+              <th scope="col"{% if column.numeric %} class="num"{% endif %}{% if column.current %} aria-sort="{% if column.label == "Score" %}descending{% else %}ascending{% endif %}"{% endif %}>
+                <a href="{{ column.href }}"{% if column.current %} class="current"{% endif %}>{{ column.label }}</a>
+              </th>
+            {% endfor %}
+            <th scope="col" class="num">n</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              <td class="num">{{ row.rank }}</td>
+              <th scope="row">{{ row.team }}</th>
+              <td class="name">{{ row.name }}</td>
+              <td class="num">{% if row.score.is_empty() %}—{% else %}{{ row.score }}{% endif %}</td>
+              <td class="num{% if row.thin %} thin{% endif %}">{{ row.n }}{% if row.thin && row.n > 0 %} <span class="badge badge-gray">thin</span>{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+{% endif %}
+{% endblock %}

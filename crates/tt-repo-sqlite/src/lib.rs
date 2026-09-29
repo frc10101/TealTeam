@@ -20,6 +20,7 @@ mod competition;
 pub mod migrate;
 mod observations;
 mod users;
+mod weights;
 
 use chrono::{DateTime, Utc};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
@@ -28,7 +29,8 @@ use std::time::Duration;
 use tracing::warn;
 use tt_core::assignments::{Assignment, Sighting};
 use tt_core::records::{Event, MatchRecord, Team, TeamEventStats};
-use tt_core::review::Decision;
+use tt_core::review::{Decision, ReviewState};
+use tt_core::season::WeightOverrides;
 use tt_core::user::{Session, User};
 use tt_repo::{
     Credentials, Device, Health, NewAssignment, NewObservation, NewUser, Recorded, Repo, RepoError,
@@ -316,7 +318,25 @@ impl Repo for SqliteRepo {
     }
 
     async fn pending_observations(&self, event_key: &str) -> Result<Vec<StoredObservation>> {
-        self.pending_observations_impl(event_key).await
+        self.observations_in_state_impl(event_key, ReviewState::Pending)
+            .await
+    }
+
+    async fn approved_observations(&self, event_key: &str) -> Result<Vec<StoredObservation>> {
+        self.observations_in_state_impl(event_key, ReviewState::Approved)
+            .await
+    }
+
+    async fn weight_overrides(&self) -> Result<WeightOverrides> {
+        self.weight_overrides_impl().await
+    }
+
+    async fn replace_weight_overrides(
+        &self,
+        overrides: &WeightOverrides,
+        now: DateTime<Utc>,
+    ) -> Result<()> {
+        self.replace_weight_overrides_impl(overrides, now).await
     }
 
     async fn observation(&self, id: i64) -> Result<Option<StoredObservation>> {

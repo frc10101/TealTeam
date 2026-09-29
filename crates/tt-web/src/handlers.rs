@@ -27,6 +27,7 @@ use crate::auth::{
     hash_password, new_session, session_cookie, verify_password,
 };
 use crate::events::{self, EventContext, EventParam};
+use crate::ranking::{self, RankingParams};
 use crate::review::{self, ReviewedParam};
 use crate::scouting::{self, ScoutParams};
 use crate::startup::AppState;
@@ -579,6 +580,85 @@ async fn lead_scout_page(
         queue: review::queue(state, &context).await,
         reviewed,
     })
+}
+
+// ── Rankings (L11) and point values (L12) ───────────────────────────────────
+
+/// `GET /lead-scout/rankings?sort=`.
+pub async fn rankings(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
+    params: RankingParams,
+) -> Response {
+    let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
+    html(ranking::page(&state, nav, &context, params.sort).await)
+}
+
+/// `GET /lead-scout/weights`.
+pub async fn weights(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
+    params: RankingParams,
+) -> Response {
+    let (nav, _) = event_page(&state, Some(&user), requested.as_deref()).await;
+    let notice = match params.saved.as_deref() {
+        Some("reset") => "Every point value is back to the season's default.",
+        Some(_) => "Saved. Rankings use the new values now.",
+        None => "",
+    };
+    html(ranking::weights_page(&state, nav, notice.into(), None).await)
+}
+
+fn weights_saved(requested: Option<&str>, what: &str) -> Response {
+    let event = requested
+        .map(|key| format!("event={key}&"))
+        .unwrap_or_default();
+    Redirect::to(&format!("/lead-scout/weights?{event}saved={what}")).into_response()
+}
+
+/// `POST /api/weights`: the whole form, or nothing.
+pub async fn save_weights(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
+    Form(pairs): Form<Vec<(String, String)>>,
+) -> Response {
+    match ranking::save_weights(&state, &user, &pairs).await {
+        Ok(()) => weights_saved(requested.as_deref(), "1"),
+        Err(refused) => {
+            let (nav, _) = event_page(&state, Some(&user), requested.as_deref()).await;
+            let (errors, storage) = match refused {
+                ranking::WeightsRefused::Invalid(errors) => (errors, false),
+                ranking::WeightsRefused::Storage => (Default::default(), true),
+            };
+            let mut page =
+                ranking::weights_page(&state, nav, String::new(), Some((&pairs, errors))).await;
+            if storage {
+                page.errors
+                    .push("Not saved: the server's storage did not answer. Try again.".into());
+            }
+            html(page)
+        }
+    }
+}
+
+/// `POST /api/weights/reset`.
+pub async fn reset_weights(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
+) -> Response {
+    if ranking::reset_weights(&state, &user).await {
+        weights_saved(requested.as_deref(), "reset")
+    } else {
+        let (nav, _) = event_page(&state, Some(&user), requested.as_deref()).await;
+        let mut page = ranking::weights_page(&state, nav, String::new(), None).await;
+        page.errors
+            .push("Not reset: the server's storage did not answer. Try again.".into());
+        html(page)
+    }
 }
 
 // ── Review (L8-L10) ─────────────────────────────────────────────────────────

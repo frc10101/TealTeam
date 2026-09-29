@@ -192,8 +192,8 @@ This is the highest-leverage cluster in either source document. It removes the 5
 | L8 | Pending queue ordered by `created_at`, missing-notes flag | RS §5.3 | S | **Done** |
 | L9 | Approve: one transaction, copy into canonical + retract from queue | RS §5.3 | M | **Done** — an update, not a copy |
 | L10 | **Decline → retract, not delete**, with an audit record and feedback to the scout. The old path destroyed data silently with no correction route | RS §12.5 | M | **Done** |
-| L11 | Ranking score: weighted sum per row, then **averaged, with `n=` shown**. Summing rewarded volume alone | RS §5.5, §12.9 | M |  |
-| L12 | Weight editor: `weight_{metric}__{option}` fields, `[-100, 100]`, whole-form rejection on invalid input | RS §5.5 | S |  |
+| L11 | Ranking score: weighted sum per row, then **averaged, with `n=` shown**. Summing rewarded volume alone | RS §5.5, §12.9 | M | **Done** |
+| L12 | Weight editor: `weight_{metric}__{option}` fields, `[-100, 100]`, whole-form rejection on invalid input | RS §5.5 | S | **Done** |
 
 ### Team analysis
 
@@ -335,7 +335,13 @@ Checked against the binary at phone width: the queue, the review page, a decline
 
 **Not yet seen against live TBA.** That TBA exposes `ETag` is recorded in REFURBISH_PLAN's CORS notes, but no request in this change has gone to the real API. At the next shop session with a key, run a sync twice with `RUST_LOG=tt_upstream=debug` and look for `not modified` on the second pass.
 
-**Still open in Phase 2:** I11, I14, L11-L12, U11-U20, and P3-P9.
+**Rankings (L11).** `/lead-scout/rankings` lists every team at the event — the roster, plus anyone ranked or scouted who is not on it yet — with the event's own rank and a **scouting score: the average of its approved observations, with n beside it**, marked *thin* under three. The retired score was a sum, so a team scouted twelve times outranked a better one scouted four times (§12.9). Only approved observations count, and only those recorded on the current form version, since an older version's fields mean different things; pending ones are counted in a line saying they are not included yet. Column headers sort by rank (unranked last), score (highest first, unscored last), number, or name, ties broken by team number then name, with the order in the URL. The logic is pure (`tt_core::ranking`). The rank column reads `team_event_stats`, so manually entered rankings (I14) appear there with no change.
+
+**Point values (L12).** `/lead-scout/weights` shows every scored answer — each option, a counter's value per piece, a toggle's value when ticked; free text is never scored — with its current points and the season default. Whole numbers from −100 to 100, and **one bad value saves nothing**, the form coming back as typed with the value marked. Only values that differ from the default are stored, so a stored row always means "changed on purpose", the page can say how many are changed, and **Put every value back** simply empties the table. A row naming a field the schema no longer has is ignored by scoring, as before. Weights are global rather than per event, as the table always was.
+
+Checked against the binary at phone width, which caught the rankings table pushing the score off the edge of a 390px screen; its cells tighten and names wrap there now.
+
+**Still open in Phase 2:** I11, I14, U11-U20, and P3-P9.
 
 ---
 

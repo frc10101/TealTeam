@@ -26,7 +26,7 @@ use thiserror::Error;
 use tt_core::assignments::{AssigneeKey, Assignment, Sighting};
 use tt_core::records::{Event, MatchRecord, Team, TeamEventStats};
 use tt_core::review::{Decision, ReviewState};
-use tt_core::season::Payload;
+use tt_core::season::{Payload, WeightOverrides};
 use tt_core::user::{Roles, Session, User};
 
 /// Anything that can go wrong reaching storage.
@@ -429,10 +429,26 @@ pub trait LocalRepo {
     /// sees it (L6).
     async fn event_sightings(&self, event_key: &str) -> Result<Vec<Sighting>>;
 
+    // ── Point weights (L12) ─────────────────────────────────────────────────
+
+    /// The lead scout's overrides of the season schema's point values.
+    async fn weight_overrides(&self) -> Result<WeightOverrides>;
+
+    /// Replace every override with these. All or nothing.
+    async fn replace_weight_overrides(
+        &self,
+        overrides: &WeightOverrides,
+        now: DateTime<Utc>,
+    ) -> Result<()>;
+
     // ── Review (L8-L10) ─────────────────────────────────────────────────────
 
     /// An event's observations waiting for review, oldest first.
     async fn pending_observations(&self, event_key: &str) -> Result<Vec<StoredObservation>>;
+
+    /// An event's approved observations, oldest first: what rankings are
+    /// computed from (L11).
+    async fn approved_observations(&self, event_key: &str) -> Result<Vec<StoredObservation>>;
 
     async fn observation(&self, id: i64) -> Result<Option<StoredObservation>>;
 

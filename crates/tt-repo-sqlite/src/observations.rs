@@ -160,22 +160,25 @@ impl SqliteRepo {
         .map_err(|e| query_err("listing recorded robots", e))
     }
 
-    pub(crate) async fn pending_observations_impl(
+    /// An event's observations in one review state, oldest first.
+    pub(crate) async fn observations_in_state_impl(
         &self,
         event_key: &str,
+        state: ReviewState,
     ) -> Result<Vec<StoredObservation>> {
         let rows = sqlx::query(
             "SELECT o.*, s.name AS scouter_name, r.name AS reviewer_name \
              FROM observations o \
              LEFT JOIN users s ON s.id = o.scouter_id \
              LEFT JOIN users r ON r.id = o.reviewed_by \
-             WHERE o.event_key = ? AND o.review_state = 'pending' \
+             WHERE o.event_key = ? AND o.review_state = ? \
              ORDER BY o.created_at, o.id",
         )
         .bind(event_key)
+        .bind(state.as_str())
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| query_err("listing pending observations", e))?;
+        .map_err(|e| query_err("listing observations", e))?;
         Ok(rows.iter().map(stored_from_row).collect())
     }
 

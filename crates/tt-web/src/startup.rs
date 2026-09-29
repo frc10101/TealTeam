@@ -179,6 +179,8 @@ pub fn router(state: AppState) -> Router {
         .route("/lead-scout", get(handlers::lead_scout))
         .route("/lead-scout/assignments", get(handlers::assignments))
         .route("/lead-scout/submissions/{id}", get(handlers::review_page))
+        .route("/lead-scout/rankings", get(handlers::rankings))
+        .route("/lead-scout/weights", get(handlers::weights))
         .route("/drive-coach", get(handlers::drive_coach))
         // Forms
         .route("/api/auth/login", post(handlers::login))
@@ -208,6 +210,8 @@ pub fn router(state: AppState) -> Router {
             post(handlers::distribute_assignments),
         )
         .route("/api/devices/{id}/rename", post(handlers::rename_device))
+        .route("/api/weights", post(handlers::save_weights))
+        .route("/api/weights/reset", post(handlers::reset_weights))
         .route(
             "/api/observations/{id}/approve",
             post(handlers::approve_observation),
@@ -2139,6 +2143,195 @@ mod flow_tests {
             assert_eq!(location(&response), "/", "{uri}");
         }
         assert_eq!(review_state(&state, 1).await.0, "pending");
+    }
+
+    // ── Rankings (L11) and point values (L12) ───────────────────────────────
+
+    /// What the season schema scores these answers at, so the tests do not
+    /// hard-code 2026's point values.
+    fn scored(
+        state: &AppState,
+        answers: &str,
+        overrides: &tt_core::season::WeightOverrides,
+    ) -> i64 {
+        let pairs: Vec<(String, String)> = answers
+            .split('&')
+            .filter_map(|kv| kv.split_once('='))
+            .map(|(k, v)| (k.to_string(), v.replace('+', " ")))
+            .collect();
+        let payload = tt_core::form::read_answers(
+            &state.season,
+            &tt_core::form::RawAnswers::from_pairs(&pairs),
+        )
+        .expect("valid answers");
+        state.season.score(&payload, overrides)
+    }
+
+    const FEW_ANSWERS: &str =
+        "f.starting_position=left&f.auto_scored=0&f.teleop_scored=1&f.penalties=0";
+
+    /// Team 254 in Q2: Sam's observation and Kim's, both approved; 10101: Sam's,
+    /// still pending.
+    async fn ranked() -> (AppState, String) {
+        let (state, admin, kim) = two_pending().await;
+        let kims = observation_form(254, "0191f7ac-1234-7000-8000-0000000000dd", FEW_ANSWERS);
+        let saved = post(&state, "/api/submission", &kims, Some(&kim)).await;
+        assert_eq!(saved.status(), StatusCode::SEE_OTHER);
+        for id in [1, 3] {
+            post(
+                &state,
+                &format!("/api/observations/{id}/approve"),
+                "",
+                Some(&kim),
+            )
+            .await;
+        }
+        (state, admin)
+    }
+
+    fn ranking_row(body: &str, team: i32) -> &str {
+        let at = body
+            .find(&format!("<th scope=\"row\">{team}</th>"))
+            .unwrap_or_else(|| panic!("row for {team}"));
+        let start = body[..at].rfind("<tr>").unwrap();
+        let end = at + body[at..].find("</tr>").unwrap();
+        &body[start..end]
+    }
+
+    #[tokio::test]
+    async fn rankings_average_approved_observations_and_say_how_many() {
+        let (state, admin) = ranked().await;
+        let none = tt_core::season::WeightOverrides::new();
+        let average =
+            (scored(&state, GOOD_ANSWERS, &none) + scored(&state, FEW_ANSWERS, &none)) as f64 / 2.0;
+
+        let body = text(get(&state, "/lead-scout/rankings", Some(&admin)).await).await;
+        let row = ranking_row(&body, 254);
+        assert!(
+            row.contains(&format!("<td class=\"num\">{average:.1}</td>")),
+            "{row}"
+        );
+        assert!(row.contains("2 <span class=\"badge badge-gray\">thin</span>"));
+
+        // 10101's only observation is pending: listed, unscored, and counted
+        // as waiting.
+        let row = ranking_row(&body, 10101);
+        assert!(row.contains("<td class=\"num\">—</td>"));
+        assert!(body.contains("1 more is waiting for review and not counted yet."));
+    }
+
+    #[tokio::test]
+    async fn rankings_sort_by_the_column_asked_for() {
+        let (state, admin) = ranked().await;
+        let body = text(
+            get(
+                &state,
+                "/lead-scout/rankings?event=2026now&sort=number",
+                Some(&admin),
+            )
+            .await,
+        )
+        .await;
+        assert!(
+            body.find("<th scope=\"row\">254</th>") < body.find("<th scope=\"row\">10101</th>")
+        );
+        assert!(body.contains(
+            r#"<a href="/lead-scout/rankings?event=2026now&#38;sort=number" class="current">Team</a>"#
+        ));
+
+        let body = text(
+            get(
+                &state,
+                "/lead-scout/rankings?event=2026now&sort=bogus",
+                Some(&admin),
+            )
+            .await,
+        )
+        .await;
+        assert!(
+            body.contains(r#"sort=rank" class="current">Rank</a>"#),
+            "unknown is the default"
+        );
+    }
+
+    #[tokio::test]
+    async fn changed_point_values_change_the_rankings() {
+        let (state, admin) = ranked().await;
+        let form = text(get(&state, "/lead-scout/weights", Some(&admin)).await).await;
+        assert!(form.contains(r#"name="weight_teleop_scored____each" value="2""#));
+
+        let response = post(
+            &state,
+            "/api/weights?event=2026now",
+            "weight_teleop_scored____each=5",
+            Some(&admin),
+        )
+        .await;
+        assert_eq!(
+            location(&response),
+            "/lead-scout/weights?event=2026now&saved=1"
+        );
+        let saved = text(get(&state, location(&response), Some(&admin)).await).await;
+        assert!(saved.contains("Saved. Rankings use the new values now."));
+        assert!(saved.contains("1 changed from the season"));
+
+        let mut overrides = tt_core::season::WeightOverrides::new();
+        overrides.set("teleop_scored", tt_core::season::COUNTER_UNIT, 5);
+        let average = (scored(&state, GOOD_ANSWERS, &overrides)
+            + scored(&state, FEW_ANSWERS, &overrides)) as f64
+            / 2.0;
+        let body = text(get(&state, "/lead-scout/rankings", Some(&admin)).await).await;
+        assert!(ranking_row(&body, 254).contains(&format!("{average:.1}")));
+
+        let response = post(&state, "/api/weights/reset", "", Some(&admin)).await;
+        assert_eq!(location(&response), "/lead-scout/weights?saved=reset");
+        assert!(state.repo.weight_overrides().await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn one_bad_point_value_saves_nothing() {
+        let (state, admin) = ranked().await;
+        let response = post(
+            &state,
+            "/api/weights",
+            "weight_teleop_scored____each=5&weight_auto_scored____each=500",
+            Some(&admin),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = text(response).await;
+        assert!(body.contains("Nothing was saved."));
+        assert!(
+            body.contains(r#"name="weight_auto_scored____each" value="500""#),
+            "as typed"
+        );
+        assert!(body.contains("A whole number from -100 to 100."));
+        assert!(state.repo.weight_overrides().await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn only_a_lead_sees_rankings_or_changes_point_values() {
+        let (state, _, _) = two_pending().await;
+        let response = post(
+            &state,
+            "/api/auth/signup",
+            "name=Lee&email=lee%40example.com&password=longenough1&confirm_password=longenough1",
+            None,
+        )
+        .await;
+        let scout = session_cookie_from(&response).expect("session");
+        for uri in ["/lead-scout/rankings", "/lead-scout/weights"] {
+            assert_eq!(
+                location(&get(&state, uri, Some(&scout)).await),
+                "/",
+                "{uri}"
+            );
+        }
+        for uri in ["/api/weights", "/api/weights/reset"] {
+            let response = post(&state, uri, "weight_teleop_scored____each=9", Some(&scout)).await;
+            assert_eq!(location(&response), "/", "{uri}");
+        }
+        assert!(state.repo.weight_overrides().await.unwrap().is_empty());
     }
 
     // ── Assignment-driven scouting (L3-L5) ─────────────────────────────────

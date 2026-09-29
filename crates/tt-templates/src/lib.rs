@@ -339,6 +339,90 @@ pub struct LeadScoutPage {
     pub reviewed: String,
 }
 
+// ── Rankings (L11) and weights (L12) ────────────────────────────────────────
+
+/// Teams at an event, by official rank or by what scouts recorded.
+#[derive(Template)]
+#[template(path = "pages/rankings.html")]
+pub struct RankingsPage {
+    pub title: String,
+    pub nav: Nav,
+    pub event_name: String,
+    /// Why there is no table, when there is not.
+    pub unavailable: String,
+    pub errors: Vec<String>,
+    pub rows: Vec<RankingView>,
+    /// The column headers, each a link that sorts by it.
+    pub columns: Vec<SortLink>,
+    /// Observations still waiting for review: not counted yet.
+    pub pending: usize,
+    /// Point values the lead scout has changed from the schema.
+    pub weights_changed: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct SortLink {
+    pub label: &'static str,
+    pub href: String,
+    /// This column orders the table.
+    pub current: bool,
+    /// Right-aligned numbers.
+    pub numeric: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct RankingView {
+    /// Empty when the event has not ranked the team.
+    pub rank: String,
+    pub team: i32,
+    pub name: String,
+    /// `"12.5"`; empty when no approved observation counts.
+    pub score: String,
+    /// How many observations the score averages.
+    pub n: usize,
+    /// Too few observations to lean on.
+    pub thin: bool,
+}
+
+/// Fewer observations than this and a score is marked as thin.
+pub const THIN_BELOW: usize = 3;
+
+/// The point values behind the scouting score (L12).
+#[derive(Template)]
+#[template(path = "pages/weights.html")]
+pub struct WeightsPage {
+    pub title: String,
+    pub nav: Nav,
+    pub groups: Vec<WeightGroup>,
+    /// What the save that led here did.
+    pub notice: String,
+    /// The form came back with values to fix: nothing was saved.
+    pub rejected: bool,
+    /// Anything else that stopped a save.
+    pub errors: Vec<String>,
+    /// Point values currently changed from the schema.
+    pub changed: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct WeightGroup {
+    pub field_label: String,
+    pub inputs: Vec<WeightInput>,
+}
+
+#[derive(Debug, Clone)]
+pub struct WeightInput {
+    /// `weight_{field}__{option}`.
+    pub name: String,
+    pub option_label: String,
+    /// As stored, or as typed when the form came back.
+    pub value: String,
+    pub default: i64,
+    /// Differs from the default.
+    pub changed: bool,
+    pub error: String,
+}
+
 // ── Review (L8-L10) ─────────────────────────────────────────────────────────
 
 /// Observations waiting for the lead scout, oldest first.

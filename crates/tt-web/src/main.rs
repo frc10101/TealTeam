@@ -13,6 +13,7 @@ mod config;
 mod errors;
 mod events;
 mod handlers;
+mod ranking;
 mod review;
 mod scouting;
 mod startup;
