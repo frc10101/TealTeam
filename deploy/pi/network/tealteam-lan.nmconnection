@@ -1,0 +1,23 @@
+# The wired side: the Pi's own Ethernet port, cabled to an unmanaged switch
+# that every client plugs into (P6). Static, and never a default route: the
+# uplink is the tethered phone, not this port.
+#
+# Installed to /etc/NetworkManager/system-connections/ (mode 0600) by setup.sh.
+[connection]
+id=tealteam-lan
+type=ethernet
+interface-name=eth0
+autoconnect=true
+autoconnect-priority=100
+
+[ethernet]
+
+[ipv4]
+method=manual
+address1=10.101.0.1/24
+never-default=true
+# No DNS servers of the Pi's own come from this link.
+ignore-auto-dns=true
+
+[ipv6]
+method=disabled

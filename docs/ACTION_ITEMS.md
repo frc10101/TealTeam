@@ -240,9 +240,9 @@ This is the highest-leverage cluster in either source document. It removes the 5
 | # | Action | Source | Effort | Status |
 | --- | --- | --- | --- | --- |
 | P3 | SQLite WAL, single writer, on **NVMe/USB SSD — not the SD card** | RI-N2 · RS §10 | M | **Done** (software) — `tt_repo_sqlite::storage`, [PI_STORAGE.md](PI_STORAGE.md); the hardware steps are untested |
-| P4 | Avahi → `http://tealteam.local`. Removes the most common event-day support question | RI-N3 · RS §10 | S |  |
+| P4 | Avahi → `http://tealteam.local`. Removes the most common event-day support question | RI-N3 · RS §10 | S | **Done, untested on a Pi** — `deploy/pi/network/`, `docs/PI_NETWORK.md` |
 | P5 | Asset resolution: walk up from both the exe and cwd, or embed assets in the binary | RS §10 | S | **Done** — embedded: `tt-web/build.rs`, `src/assets.rs` |
-| P6 | Wired Ethernet to clients + USB tethering as the uplink (`usb0`, route metric). **Build no Wi-Fi AP** — it violates E143 | RI-N4, RI-N5 · RS §10 | M |  |
+| P6 | Wired Ethernet to clients + USB tethering as the uplink (`usb0`, route metric). **Build no Wi-Fi AP** — it violates E143 | RI-N4, RI-N5 · RS §10 | M | **Done, untested on a Pi** — with P4; the rules check is still P2 |
 | P7 | Buy per-client 25 ft flat Ethernet, gaff tape, and USB-C Ethernet adapters (~$15 each) | RI §1 | S |  |
 | P8 | One-page laminated event-day setup runbook with a photo of the correct cabling | RI-N7 | S |  |
 | P9 | Practice the full network setup and teardown twice at the shop, timed, by a student who did not design it | RI §1 | S |  |
@@ -412,7 +412,9 @@ Checked by copying the debug binary alone into a directory outside the repo and 
 
 Checked on a development machine: a database on the encrypted btrfs root was reported "on dm-0" (through the mountinfo fallback), one on tmpfs "on an unknown device", and the SD-card wording by unit test.
 
-**Still open in Phase 2:** U17, P4, P6, P7, P8, and P9.
+**The Pi's network (P4, P6) is written but has never run on a Pi.** `deploy/pi/network/setup.sh` is idempotent and has `--dry-run`. It sets `eth0` to a static `10.101.0.1` with no default route, and runs dnsmasq DHCP on `eth0` only with **no gateway**, so tablets keep their own cellular. dnsmasq also answers `tealteam.local` over plain DNS for clients that do not do mDNS. Avahi advertises it, and a tethered phone (`usb0` Android, `eth1` iPhone) is the uplink at route metric 50. An nftables redirect lets the URL drop the port. It deletes any Wi-Fi AP profile it finds. `status.sh` is the read-only event-day check. What was verified here: ShellCheck, the nftables ruleset loading twice in a scratch namespace, and a dry run. `docs/PI_NETWORK.md` lists the nine shop checks still owed. The first is whether Android routes to a wired network with no internet; the doc explains why that matters. P2's E143 question is still open. This follows the plan: design for the compliant path, and unplug the phone if the FTA objects.
+
+**Still open in Phase 2:** U17, P7, P8, and P9.
 
 ---
 

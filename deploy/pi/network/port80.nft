@@ -1,0 +1,18 @@
+#!/usr/sbin/nft -f
+# http://tealteam.local, with no port: redirect 80 to the app's own port, so
+# the server needs no privilege to bind (P4). Loaded by tealteam-port80.service.
+# The add-then-delete pair makes reloading it replace, not duplicate.
+table ip tealteam_port80
+delete table ip tealteam_port80
+
+table ip tealteam_port80 {
+    chain prerouting {
+        type nat hook prerouting priority dstnat; policy accept;
+        iifname "eth0" tcp dport 80 redirect to :8080
+    }
+    # So `curl http://localhost` on the Pi reaches the app too.
+    chain output {
+        type nat hook output priority -100; policy accept;
+        oifname "lo" tcp dport 80 redirect to :8080
+    }
+}

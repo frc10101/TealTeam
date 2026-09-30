@@ -1,0 +1,14 @@
+# Loads port80.nft at boot (P4). Installed to /etc/systemd/system/ by setup.sh.
+[Unit]
+Description=TealTeam: redirect port 80 to the app
+After=network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/tealteam/port80.nft
+ExecStop=/usr/sbin/nft delete table ip tealteam_port80
+
+[Install]
+WantedBy=multi-user.target

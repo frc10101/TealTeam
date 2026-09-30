@@ -1,0 +1,25 @@
+# The uplink: one phone, USB-tethered, owned by one person (P6). Android
+# names the interface usb0; an iPhone shows up as eth1 (ipheth). DHCP from
+# the phone, and the lowest route metric on the Pi, so the default route goes
+# through the phone whenever it is plugged in -- and through nothing when it
+# is not, which the server handles as "no internet" (I10).
+#
+# Installed to /etc/NetworkManager/system-connections/ (mode 0600) by setup.sh.
+[connection]
+id=tealteam-uplink
+type=ethernet
+autoconnect=true
+autoconnect-priority=50
+
+[match]
+interface-name=usb0;eth1
+
+[ethernet]
+
+[ipv4]
+method=auto
+route-metric=50
+
+[ipv6]
+method=auto
+route-metric=50
