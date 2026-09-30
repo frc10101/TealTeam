@@ -19,7 +19,7 @@
 
 {% block content %}
 {% if !saved.is_empty() %}
-  <div class="alert alert-success" role="status">
+  <div class="alert alert-success" role="status"{% if !saved_draft.is_empty() %} data-draft-clear="{{ saved_draft }}"{% endif %}>
     <p>{{ saved }}</p>
     {% if let Some(next) = next_duty %}
       <p><a class="btn btn-primary" href="{{ next.href }}">Scout {{ next.label }}</a></p>
@@ -122,7 +122,10 @@
 {% endif %}
 
 {% if let Some(form) = form %}
-  <form method="post" action="/api/submission{{ nav.event.query() }}" class="scout-form stack" id="scout-form">
+  {# data-draft: where draft.js keeps unsaved answers (C3). data-draft-posted:
+     these are the answers just posted, newer than any draft. #}
+  <form method="post" action="/api/submission{{ nav.event.query() }}" class="scout-form stack" id="scout-form"
+        data-draft="{{ form.draft_key }}"{% if form.has_errors %} data-draft-posted{% endif %}>
     <input type="hidden" name="match" value="{{ form.match_key }}">
     <input type="hidden" name="team" value="{{ form.team_number }}">
     <input type="hidden" name="record_id" value="{{ form.record_id }}">
@@ -212,4 +215,5 @@
 {% endif %}
 {% endblock %}
 
-{% block scripts %}<script src="/static/js/counter.js" defer></script>{% endblock %}
+{% block scripts %}<script src="/static/js/counter.js" defer></script>
+<script src="/static/js/draft.js" defer></script>{% endblock %}

@@ -24,7 +24,7 @@ use tt_core::user::User;
 use tt_repo::{NewObservation, Recorded, Repo, RepoError};
 use tt_templates::{
     AssignedCard, Draft, Keypad, MatchLink, MatchPicker, Nav, RosterEntry, ScoutForm,
-    SubmissionPage, choose_href, scout_href,
+    SubmissionPage, choose_href, draft_key, scout_href,
 };
 
 use crate::events::EventContext;
@@ -122,6 +122,7 @@ pub async fn page(
         unavailable: String::new(),
         picker: None,
         saved: String::new(),
+        saved_draft: String::new(),
         errors: Vec::new(),
         notice: String::new(),
         form: None,
@@ -268,6 +269,13 @@ pub async fn page(
     if let Some(saved) = params.saved.filter(|t| recorded.contains(t)) {
         page.saved =
             format!("Saved team {saved} in {label}. It is waiting for the lead scout's review.");
+        page.saved_draft = draft_key(
+            user.id,
+            &event.key,
+            &record.key,
+            saved,
+            state.season.version,
+        );
     }
 
     let duty_link = |(key, team): &(String, i32)| {
@@ -354,14 +362,17 @@ pub async fn page(
                     }
                 },
             };
-            page.form = Some(ScoutForm::new(
+            let mut form = ScoutForm::new(
                 &state.season,
                 record,
                 team,
                 name.as_deref(),
                 draft.unwrap_or_else(|| Draft::fresh(new_record_id())),
                 user.team_number.is_none(),
-            ));
+            );
+            form.draft_key =
+                draft_key(user.id, &event.key, &record.key, team, state.season.version);
+            page.form = Some(form);
         }
     }
 

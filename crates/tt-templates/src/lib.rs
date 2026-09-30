@@ -972,6 +972,8 @@ pub struct SubmissionPage {
     pub picker: Option<MatchPicker>,
     /// Confirmation of the save that led here.
     pub saved: String,
+    /// The [`draft_key`] of that save, for `draft.js` to throw away (C3).
+    pub saved_draft: String,
     pub errors: Vec<String>,
     /// Something to know that is not a failure.
     pub notice: String,
@@ -1165,6 +1167,21 @@ pub struct ScoutForm {
     pub has_errors: bool,
     /// The scout has no team, so their notes will be readable by nobody.
     pub notes_unshared: bool,
+    /// Where `draft.js` keeps unsaved answers (C3): [`draft_key`].
+    pub draft_key: String,
+}
+
+/// The browser storage key for one scout's unsaved answers on one robot in
+/// one match, on one version of the form (C3). Everything that makes a form a
+/// different form is in it, so a draft can only come back into its own.
+pub fn draft_key(
+    user_id: i64,
+    event_key: &str,
+    match_key: &str,
+    team_number: i32,
+    schema_version: i64,
+) -> String {
+    format!("tt-draft:v1:{user_id}:{event_key}:{match_key}:{team_number}:{schema_version}")
 }
 
 /// What a form holds between being shown and being saved.
@@ -1262,6 +1279,7 @@ impl ScoutForm {
             has_errors: !draft.errors.is_empty(),
             errors: draft.errors.form,
             notes_unshared,
+            draft_key: String::new(),
         }
     }
 }
@@ -1629,6 +1647,7 @@ mod tests {
             unavailable: String::new(),
             picker,
             saved: String::new(),
+            saved_draft: String::new(),
             errors: Vec::new(),
             notice: String::new(),
             form,

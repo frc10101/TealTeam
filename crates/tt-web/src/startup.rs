@@ -1369,6 +1369,80 @@ mod flow_tests {
     }
 
     #[tokio::test]
+    async fn a_form_names_its_draft_and_a_confirmed_save_names_the_one_to_drop() {
+        // C3: draft.js keeps unsaved answers under the form's key, and drops
+        // the saved one's. One scout, event, match, robot, and form version.
+        let (state, cookies) = scouting().await;
+        let key = format!(
+            "tt-draft:v1:1:2026now:2026now_qm2:254:{}",
+            state.season.version
+        );
+
+        let form = text(
+            get(
+                &state,
+                "/submission?event=2026now&match=2026now_qm2&team=254",
+                Some(&cookies),
+            )
+            .await,
+        )
+        .await;
+        assert!(form.contains(&format!(r#"data-draft="{key}""#)), "{form}");
+        assert!(!form.contains("data-draft-posted"), "nothing posted yet");
+        assert!(form.contains("/static/js/draft.js"));
+
+        let bad = text(
+            post(
+                &state,
+                "/api/submission?event=2026now",
+                &observation_form(254, RECORD_ID, ""),
+                Some(&cookies),
+            )
+            .await,
+        )
+        .await;
+        assert!(
+            bad.contains("data-draft-posted"),
+            "the posted answers win over a draft"
+        );
+
+        post(
+            &state,
+            "/api/submission?event=2026now",
+            &observation_form(254, RECORD_ID, GOOD_ANSWERS),
+            Some(&cookies),
+        )
+        .await;
+        let saved = text(
+            get(
+                &state,
+                "/submission?event=2026now&match=2026now_qm2&saved=254",
+                Some(&cookies),
+            )
+            .await,
+        )
+        .await;
+        assert!(
+            saved.contains(&format!(r#"data-draft-clear="{key}""#)),
+            "{saved}"
+        );
+
+        let claimed = text(
+            get(
+                &state,
+                "/submission?event=2026now&match=2026now_qm2&saved=10101",
+                Some(&cookies),
+            )
+            .await,
+        )
+        .await;
+        assert!(
+            !claimed.contains("data-draft-clear"),
+            "not saved, so nothing to drop"
+        );
+    }
+
+    #[tokio::test]
     async fn a_saved_observation_is_pending_review_with_who_where_and_when() {
         let (state, cookies) = scouting().await;
         let response = post(

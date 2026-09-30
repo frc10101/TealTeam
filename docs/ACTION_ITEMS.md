@@ -427,7 +427,7 @@ The architectural payoff. Phase 2 must be shipping before this starts.
 | --- | --- | --- | --- |
 | C1 | **Service Worker + app-shell precache + navigation fallback.** WASM alone makes nothing offline; this is the piece that does | RI-O1 | M |
 | C2 | Web App Manifest, icons, installability, `navigator.storage.persist()` | RI-O2 | S |
-| C3 | Debounced form-state persistence and restore — no more lost in-progress entries | RI-O3 | S |
+| C3 | Debounced form-state persistence and restore — no more lost in-progress entries | RI-O3 | S | **Done** — `static/js/draft.js`; see Phase 3 notes |
 | C4 | `tt-repo-sqlite` for the browser over SQLite-WASM/OPFS | RI-O7 | L |
 | C5 | Service Worker fragment interception → wasm handler dispatch | RI-O8 | M |
 | C6 | Migrate read-only `/hx/*` routes to wasm, one at a time | RI-O9 | L |
@@ -454,6 +454,10 @@ The architectural payoff. Phase 2 must be shipping before this starts.
 | S11 | Schema version handshake + blocking update banner. The mid-event deploy footgun | RI-O18 | S |
 | S12 | Clients compute and record their clock offset against the server on each sync, so device skew is measurable rather than mysterious | RI §Time Sync | S |
 
+
+### Phase 3 notes
+
+**Unsaved answers survive a reload, a crash, or a flat battery (C3).** `static/js/draft.js` writes the scouting form to `localStorage` 400 ms after the last change, and at once when the page is hidden or left. On the next load, a draft that differs from what the server rendered is put back. A note above the form says "Restored your unsaved answers from 10:42 AM", with a button to discard them. The draft keeps the form's `record_id`, so a retry after a save that did land but whose reply was lost is stored once (D7). The server builds the key, `tt-draft:v1:{user}:{event}:{match}:{team}:{form version}` (`tt_templates::draft_key`), so a draft can only return to its own scout, robot, match, and form. The script also checks the match and team before restoring. A confirmed save puts that key on the success message for the script to delete. When the server shows a form it just rejected, the posted answers are newer and they replace the draft. Drafts older than three days are deleted. Storage failures (full, private browsing) are ignored, and the form still works. The format is deliberately simple JSON, for the outbox (C7) to replace. Checked: the page carries the right keys (a Rust test), and the script, in headless Chromium, against a copy of the form. That covered restore, a draft for another match, just-posted answers, debounced saving, clearing, and expiry. Not checked: on a real tablet, and the discard button.
 ---
 
 ## Phase 4 — Analysis and communication
