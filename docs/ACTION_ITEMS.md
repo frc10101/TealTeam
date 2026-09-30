@@ -425,34 +425,34 @@ The architectural payoff. Phase 2 must be shipping before this starts.
 
 | # | Action | Source | Effort | Status |
 | --- | --- | --- | --- | --- |
-| C1 | **Service Worker + app-shell precache + navigation fallback.** WASM alone makes nothing offline; this is the piece that does | RI-O1 | M |
+| C1 | **Service Worker + app-shell precache + navigation fallback.** WASM alone makes nothing offline; this is the piece that does | RI-O1 | M |  |
 | C2 | Web App Manifest, icons, installability, `navigator.storage.persist()` | RI-O2 | S | **Done** — manifest, placeholder icons, `static/js/persist.js`; installs only over https, see open decision 9 |
 | C3 | Debounced form-state persistence and restore — no more lost in-progress entries | RI-O3 | S | **Done** — `static/js/draft.js`; see Phase 3 notes |
-| C4 | `tt-repo-sqlite` for the browser over SQLite-WASM/OPFS | RI-O7 | L |
-| C5 | Service Worker fragment interception → wasm handler dispatch | RI-O8 | M |
-| C6 | Migrate read-only `/hx/*` routes to wasm, one at a time | RI-O9 | L |
-| C7 | Outbox + sync client in `tt-client` | RI-O10 | L |
-| C8 | **Make assignments available offline.** An assignment a scout cannot see when the network drops is worse than no assignment | RI-A5 | M |
-| C9 | Offline auth tokens (PASETO) layered onto device identity | RI-O12 | M |
-| C10 | Conflict review screen for the lead scout | RI-O13 | M |
-| C11 | Repo-trait round-trip tests run against **both** implementations, so server and browser cannot diverge | RS §11 | M |
+| C4 | `tt-repo-sqlite` for the browser over SQLite-WASM/OPFS | RI-O7 | L |  |
+| C5 | Service Worker fragment interception → wasm handler dispatch | RI-O8 | M |  |
+| C6 | Migrate read-only `/hx/*` routes to wasm, one at a time | RI-O9 | L |  |
+| C7 | Outbox + sync client in `tt-client` | RI-O10 | L |  |
+| C8 | **Make assignments available offline.** An assignment a scout cannot see when the network drops is worse than no assignment | RI-A5 | M |  |
+| C9 | Offline auth tokens (PASETO) layered onto device identity | RI-O12 | M |  |
+| C10 | Conflict review screen for the lead scout | RI-O13 | M |  |
+| C11 | Repo-trait round-trip tests run against **both** implementations, so server and browser cannot diverge | RS §11 | M |  |
 
 ### Sync architecture
 
-| # | Action | Source | Effort |
-| --- | --- | --- | --- |
-| S1 | `upstream` append-only log fed by the FIRST/TBA clients | RI-S2 | M |
-| S2 | `changes` append-only log + `/api/sync/pull` with a lag window. **Not** per-table watermarks — those cannot see deletions and have a commit-ordering race | RI-O15 | M |
-| S3 | Scoped subscription filtering + a never-replicate allowlist, so other teams' notes never leak | RI-O16 | M |
-| S4 | Compile the FIRST/TBA clients for `wasm32`; client-side conditional fetch with ETags. **Both APIs allow direct browser requests**, so no relay server is needed | RI-S3 | M |
-| S5 | Bundle import on the Pi: role-gate the push, `ATTACH`, upsert, advance cursor, audit-log | RI-S4 | M |
-| S6 | USB tether as the Pi's automatic uplink; pull bundles whenever `usb0` is up | RI-S6 | M |
-| S7 | Opportunistic client fetch: detect signal, fetch upstream, queue bundle, push on reconnect | RI-S7 | M |
-| S8 | **SSE fan-out endpoint** with `Last-Event-ID` resume and a polling fallback | RI-S9 | M |
-| S9 | **Push assignment changes over SSE** instead of re-rendering the whole grid on every click | RI-A2 · RS §12.8 | M |
-| S10 | SQLite snapshot bootstrap (`/api/sync/snapshot`, OPFS import) — ship a file, not a million rows | RI-O17 | M |
-| S11 | Schema version handshake + blocking update banner. The mid-event deploy footgun | RI-O18 | S |
-| S12 | Clients compute and record their clock offset against the server on each sync, so device skew is measurable rather than mysterious | RI §Time Sync | S |
+| # | Action | Source | Effort | Status |
+| --- | --- | --- | --- | --- |
+| S1 | `upstream` append-only log fed by the FIRST/TBA clients | RI-S2 | M |  |
+| S2 | `changes` append-only log + `/api/sync/pull` with a lag window. **Not** per-table watermarks — those cannot see deletions and have a commit-ordering race | RI-O15 | M |  |
+| S3 | Scoped subscription filtering + a never-replicate allowlist, so other teams' notes never leak | RI-O16 | M |  |
+| S4 | Compile the FIRST/TBA clients for `wasm32`; client-side conditional fetch with ETags. **Both APIs allow direct browser requests**, so no relay server is needed | RI-S3 | M |  |
+| S5 | Bundle import on the Pi: role-gate the push, `ATTACH`, upsert, advance cursor, audit-log | RI-S4 | M |  |
+| S6 | USB tether as the Pi's automatic uplink; pull bundles whenever `usb0` is up | RI-S6 | M |  |
+| S7 | Opportunistic client fetch: detect signal, fetch upstream, queue bundle, push on reconnect | RI-S7 | M |  |
+| S8 | **SSE fan-out endpoint** with `Last-Event-ID` resume and a polling fallback | RI-S9 | M |  |
+| S9 | **Push assignment changes over SSE** instead of re-rendering the whole grid on every click | RI-A2 · RS §12.8 | M |  |
+| S10 | SQLite snapshot bootstrap (`/api/sync/snapshot`, OPFS import) — ship a file, not a million rows | RI-O17 | M |  |
+| S11 | Schema version handshake + blocking update banner. The mid-event deploy footgun | RI-O18 | S |  |
+| S12 | Clients compute and record their clock offset against the server on each sync, so device skew is measurable rather than mysterious | RI §Time Sync | S |  |
 
 ### Phase 3 notes
 
@@ -475,20 +475,20 @@ So on the event LAN today, C2 does what it can: an Android "Add to Home screen" 
 
 ## Phase 4 — Analysis and communication
 
-| # | Action | Source | Effort |
-| --- | --- | --- | --- |
-| U21 | **Graph view**: uPlot + tap-to-toggle metric chips + team chips. Tap, not drag — drag is a desktop metaphor | RI-U5 | L |
-| U22 | Notes panel as a separate, filterable, timestamped view | RI-U6 | M |
-| L13 | Rotation fairness — track matches scouted per person and suggest rotation, instead of making the lead scout remember | RI-A4 | M |
-| L14 | `yrs`-backed collaborative pick list. The one place in this app where a CRDT genuinely earns its keep — two leads reordering currently clobber each other silently | RI-O14 · RS §5.8 | M |
-| X1 | `messages` table, `POST /api/messages`, history endpoint with cursor paging | RI-M1 | M |
-| X2 | SSE message stream sharing the S8 event channel | RI-M2 | S |
-| X3 | Side panel (desktop) + full-screen view (mobile) with unread badges | RI-M3 | M |
-| X4 | Offline outbox integration and pending-message rendering | RI-M4 | S |
-| X5 | Hybrid logical clock ordering; dual-timestamp display for delayed messages | RI-M5 | M |
-| X6 | `#team` / `#match` autocomplete and context chips — the reason to build chat in-app rather than adopt Matrix | RI-M6 | M |
-| X7 | **Moderation: mentor log view, retract-not-delete, rate limiting.** Non-negotiable; the users are minors | RI-M7 | M |
-| S13 | QR transfer: Rust encoder, browser scanner with `BarcodeDetector` + zxing-wasm fallback | RI-N6, RI-S12 | L |
+| # | Action | Source | Effort | Status |
+| --- | --- | --- | --- | --- |
+| U21 | **Graph view**: uPlot + tap-to-toggle metric chips + team chips. Tap, not drag — drag is a desktop metaphor | RI-U5 | L |  |
+| U22 | Notes panel as a separate, filterable, timestamped view | RI-U6 | M |  |
+| L13 | Rotation fairness — track matches scouted per person and suggest rotation, instead of making the lead scout remember | RI-A4 | M |  |
+| L14 | `yrs`-backed collaborative pick list. The one place in this app where a CRDT genuinely earns its keep — two leads reordering currently clobber each other silently | RI-O14 · RS §5.8 | M |  |
+| X1 | `messages` table, `POST /api/messages`, history endpoint with cursor paging | RI-M1 | M |  |
+| X2 | SSE message stream sharing the S8 event channel | RI-M2 | S |  |
+| X3 | Side panel (desktop) + full-screen view (mobile) with unread badges | RI-M3 | M |  |
+| X4 | Offline outbox integration and pending-message rendering | RI-M4 | S |  |
+| X5 | Hybrid logical clock ordering; dual-timestamp display for delayed messages | RI-M5 | M |  |
+| X6 | `#team` / `#match` autocomplete and context chips — the reason to build chat in-app rather than adopt Matrix | RI-M6 | M |  |
+| X7 | **Moderation: mentor log view, retract-not-delete, rate limiting.** Non-negotiable; the users are minors | RI-M7 | M |  |
+| S13 | QR transfer: Rust encoder, browser scanner with `BarcodeDetector` + zxing-wasm fallback | RI-N6, RI-S12 | L |  |
 
 ---
 
