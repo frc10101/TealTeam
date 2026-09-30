@@ -20,6 +20,7 @@ mod picklist;
 mod ranking;
 mod review;
 mod scouting;
+mod shell;
 mod standings;
 mod startup;
 mod sync;

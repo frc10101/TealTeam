@@ -20,7 +20,14 @@
   var DISCONNECTED_MS = 5000;
   var TIMEOUT_MS = 5000;
 
-  var reachable = true; // The page itself just came from the server.
+  // The page itself just came from the server -- unless it is the offline
+  // shell (C1), which the service worker served from its cache because the
+  // server did not answer. That one checks at once, and reloads the moment
+  // the server is back, so the scout gets the page they asked for. At
+  // /offline itself there is nothing better to reload into, and doing so
+  // would reload forever.
+  var shell = !!document.getElementById("offline-shell") && location.pathname !== "/offline";
+  var reachable = !shell;
   var sending = false;
   var timer = null;
   var checking = false;
@@ -46,7 +53,10 @@
 
     // Any answer at all means the server is there; only no answer is offline.
     fetch("/health", { cache: "no-store", credentials: "same-origin", signal: abort && abort.signal })
-      .then(function () { reachable = true; })
+      .then(function () {
+        reachable = true;
+        if (shell) location.reload();
+      })
       .catch(function () { reachable = false; })
       .then(function () {
         clearTimeout(giveUp);
@@ -85,5 +95,6 @@
 
   if (navigator.onLine === false) reachable = false;
   show();
-  schedule();
+  if (shell) check();
+  else schedule();
 })();

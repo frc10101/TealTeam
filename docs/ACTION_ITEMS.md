@@ -425,7 +425,7 @@ The architectural payoff. Phase 2 must be shipping before this starts.
 
 | # | Action | Source | Effort | Status |
 | --- | --- | --- | --- | --- |
-| C1 | **Service Worker + app-shell precache + navigation fallback.** WASM alone makes nothing offline; this is the piece that does | RI-O1 | M |  |
+| C1 | **Service Worker + app-shell precache + navigation fallback.** WASM alone makes nothing offline; this is the piece that does | RI-O1 | M | **Done** — `/sw.js` (`src/sw.js`, `src/shell.rs`), `/offline`; works on https and localhost only, see open decision 9 |
 | C2 | Web App Manifest, icons, installability, `navigator.storage.persist()` | RI-O2 | S | **Done** — manifest, placeholder icons, `static/js/persist.js`; installs only over https, see open decision 9 |
 | C3 | Debounced form-state persistence and restore — no more lost in-progress entries | RI-O3 | S | **Done** — `static/js/draft.js`; see Phase 3 notes |
 | C4 | `tt-repo-sqlite` for the browser over SQLite-WASM/OPFS | RI-O7 | L |  |
@@ -482,6 +482,34 @@ So on the event LAN today, C2 does what it can: an Android "Add to Home screen" 
 - **The pull.** `GET /api/sync/pull?changes=<cursor>&upstream=<cursor>` returns both streams, each with its next cursor and a `more` flag. At most 500 changes and 20 upstream bodies come per request. Changes are served only once they are two seconds old: the lag window for a change whose `seq` is taken but not yet committed. The changes cursor moves past rows the viewer may not see, so nobody is sent back for them.
 - **Visibility is decided in one place,** `tt_web::sync::visible`. A pick list goes only to its team, since `team_scope` is the owning team. Another team's observation arrives with its notes removed by `tt_core::notes::redact`. Unreadable answers are sent as none, never passed through. **S3's subscription scope is a marked hook there,** to be applied before these two rules and never instead of them. Only these three tables have triggers. users, sessions, and devices have none, and the migration says they must never get one.
 - **Not built:** compaction. An event writes a few thousand change rows, mostly pick-list reorders, a few MB at most. When it matters, superseded upserts can be pruned per `entity_pk` as S1 prunes per path, but tombstones must stay longer than any client stays offline. Nothing consumes the pull yet; C7's sync client is the first.
+
+**A reload with no server shows a page, not the browser's error (C1).** This is where a secure context allows it: https, or localhost (open decision 9). `static/js/shell.js` registers `/sw.js`, and does nothing at all when `!isSecureContext`. The worker's source is `src/sw.js`; `src/shell.rs` serves it from the root, so its scope is the whole site, and fills in its precache list from the embedded asset table. The worker does four things:
+
+- **On install,** it precaches `/offline` and every static file into `tealteam-shell-<build>`.
+- **Pages** always come from the network. Only when that fails does the worker show the cached `/offline` page, at the address that was asked for.
+- **Static files** also come from the network first, so a page and its stylesheet are always from the same build, with the cache only as the fallback.
+- **Everything else passes through untouched:** POSTs, `/health`, `/api`, and the live regions' fetches. Nothing is written to the cache after install, so no one's page is ever kept.
+
+**The shell is the same for everyone.** `/offline` (`OfflinePage`) renders with an anonymous nav, with no account links at all, and as if storage were fine, so no device's copy says anything about who cached it. It says the server cannot be reached, that a half-typed scouting form is kept on the device (C3), and that it will reload by itself. `static/js/link.js` sees `#offline-shell`, checks `/health` every 5 seconds, and reloads into the real page when the server answers. It does not do this at `/offline` itself, where it would reload forever, a loop the browser test caught.
+
+**Versioned by the build.** `build.rs` hashes every static file, every template, and the worker's source into `BUILD_VERSION`. A binary that changes any of them serves a different `/sw.js`. Browsers look for a changed worker on every navigation, and `/sw.js` is `no-cache`. The new worker installs its own cache, takes over at once (`skipWaiting` and `clients.claim`), and deletes the old one. Because pages and files come from the network first, taking over at once cannot pair a new page with an old stylesheet.
+
+**For S11 (the version handshake).** `/health` now reports `{"storage":…,"build":"<BUILD_VERSION>"}`, and `link.js` already polls it. What S11 still needs:
+- Render the page's own build into it, e.g. a `<meta>` from `Nav`, and compare it with `/health`'s on each check. A difference is the "Update required — tap to reload" banner.
+- Flush or export the outbox (C7) before that reload.
+- Compare the schema version as well as the build. The build changes whenever a template does, which a sync does not care about, so the migration count (`_sqlx_migrations`) is the number the sync protocol should refuse on.
+
+A new worker is already fetched by the next navigation. S11 decides when the page reloads into it.
+
+**Checked in Chromium over the DevTools protocol:** `crates/tt-web/tests/browser/service-worker.mjs` runs 14 checks, and all pass.
+- On `127.0.0.1`, the worker registers and precaches 18 files, and the only page among them is `/offline`.
+- With the server stopped, reloading `/teams` shows the offline page at `/teams`, styled from the cache, with the chip saying offline. A POST fails rather than being answered from the cache. With the server back, the page reloads itself into Teams.
+- `/offline` opened directly stays put.
+- A second binary, differing only in a CSS comment, replaced the cache with one holding the new stylesheet.
+- From the LAN address over plain http, there is no service worker API, the page works, and the console is empty.
+
+Not checked: Safari, Firefox, or a real tablet.
+
 ---
 
 ## Phase 4 — Analysis and communication

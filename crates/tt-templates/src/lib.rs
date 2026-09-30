@@ -74,6 +74,9 @@ pub struct Nav {
     pub event: EventSwitcher,
     /// The connection chip in the header.
     pub link: LinkChips,
+    /// The offline shell (C1), which cannot know who is looking: no account
+    /// links at all, rather than a "Sign in" to someone who is signed in.
+    pub offline_shell: bool,
 }
 
 impl Nav {
@@ -96,6 +99,7 @@ impl Nav {
                 storage_ready,
                 event: EventSwitcher::default(),
                 link: LinkChips::default(),
+                offline_shell: false,
             },
             None => Self::anonymous(storage_ready),
         }
@@ -310,6 +314,28 @@ pub struct PlaceholderPage {
     pub heading: String,
     pub summary: String,
     pub season_name: String,
+}
+
+/// The offline shell (C1): what the service worker shows when a page cannot
+/// be fetched. Cached once per build for every device, so it is built from
+/// nothing about the viewer: an anonymous nav, and storage taken as working.
+#[derive(Template)]
+#[template(path = "pages/offline.html")]
+pub struct OfflinePage {
+    pub title: String,
+    pub nav: Nav,
+}
+
+impl Default for OfflinePage {
+    fn default() -> Self {
+        OfflinePage {
+            title: "Offline".into(),
+            nav: Nav {
+                offline_shell: true,
+                ..Nav::anonymous(true)
+            },
+        }
+    }
 }
 
 /// Which dead end a browser reached (U10). Picks the wording on the error page;

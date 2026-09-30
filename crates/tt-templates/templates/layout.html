@@ -75,7 +75,7 @@
             <form method="post" action="/api/auth/logout" class="inline">
               <button type="submit" class="btn btn-secondary">Sign out</button>
             </form>
-          {% else %}
+          {% else if !nav.offline_shell %}
             <a href="/sign-in" class="btn btn-secondary">Sign in</a>
           {% endif %}
         </div>
@@ -100,6 +100,7 @@
     <script src="/static/js/autosubmit.js" defer></script>
     <script src="/static/js/live.js" defer></script>
     <script src="/static/js/link.js" defer></script>
+    <script src="/static/js/shell.js" defer></script>
     <script src="/static/js/tabs.js" defer></script>
     {% if nav.signed_in %}<script src="/static/js/persist.js" defer></script>{% endif %}
     {% block scripts %}{% endblock %}

@@ -1,0 +1,24 @@
+{#
+  The offline shell (C1). The service worker caches this page once per build
+  and shows it, at whatever address was asked for, when a page cannot be
+  fetched. So it holds nothing about anyone: every device gets the same copy.
+  static/js/link.js sees #offline-shell, checks the server straight away, and
+  reloads the page when it answers.
+#}
+{% extends "layout.html" %}
+{% block content %}
+<section class="card narrow" id="offline-shell">
+  <div class="card-header"><h1>Can't reach the TealTeam server</h1></div>
+  <div class="card-body">
+    <p>
+      This page comes from the server, and this device can't reach it right now.
+      It will reload by itself as soon as the server answers.
+    </p>
+    <p>
+      Anything you had typed into a scouting form is kept on this device, and comes
+      back when you open that form again.
+    </p>
+    <a class="btn btn-primary" href="">Try again</a>
+  </div>
+</section>
+{% endblock %}

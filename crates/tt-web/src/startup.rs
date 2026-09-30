@@ -276,6 +276,9 @@ pub fn router(state: AppState) -> Router {
             post(handlers::decline_observation),
         )
         // Operational
+        // The offline shell (C1).
+        .route("/sw.js", get(crate::shell::service_worker))
+        .route("/offline", get(crate::shell::offline_page))
         .route("/health", get(health_json))
         .route("/status", get(health_page))
         // Compiled in (P5): the binary is the whole deploy.
@@ -325,11 +328,13 @@ async fn health_page(State(state): State<AppState>) -> impl IntoResponse {
 /// which is what a supervisor needs to know. Storage state is in the body.
 async fn health_json(State(state): State<AppState>) -> impl IntoResponse {
     let ready = state.repo.health().await.is_ready();
-    let body = if ready {
-        r#"{"storage":"ready"}"#
-    } else {
-        r#"{"storage":"down"}"#
-    };
+    // The build (C1) is the service worker's cache version, and what S11's
+    // version handshake compares against.
+    let body = format!(
+        r#"{{"storage":"{}","build":"{}"}}"#,
+        if ready { "ready" } else { "down" },
+        crate::assets::BUILD_VERSION
+    );
     (
         [(axum::http::header::CONTENT_TYPE, "application/json")],
         body,
@@ -427,7 +432,13 @@ mod tests {
             .expect("request");
 
         assert_eq!(response.status(), StatusCode::OK);
-        assert_eq!(body_string(response).await, r#"{"storage":"down"}"#);
+        assert_eq!(
+            body_string(response).await,
+            format!(
+                r#"{{"storage":"down","build":"{}"}}"#,
+                crate::assets::BUILD_VERSION
+            )
+        );
     }
 
     #[tokio::test]
@@ -442,7 +453,11 @@ mod tests {
             .await
             .expect("request");
 
-        assert_eq!(body_string(response).await, r#"{"storage":"ready"}"#);
+        assert!(
+            body_string(response)
+                .await
+                .starts_with(r#"{"storage":"ready","build":""#)
+        );
     }
 }
 
@@ -649,6 +664,33 @@ mod flow_tests {
             manifest.headers()[header::CONTENT_TYPE],
             "application/manifest+json"
         );
+    }
+
+    #[tokio::test]
+    async fn the_service_worker_and_its_shell_are_served_to_anyone() {
+        // C1.
+        let state = migrated_state().await;
+        let cookie = signed_up(&state).await;
+
+        let worker = get(&state, "/sw.js", None).await;
+        assert_eq!(worker.status(), StatusCode::OK);
+        assert_eq!(
+            worker.headers()[header::CONTENT_TYPE],
+            "text/javascript; charset=utf-8"
+        );
+        assert_eq!(worker.headers()[header::CACHE_CONTROL], "no-cache");
+        let js = text(worker).await;
+        assert!(js.contains(r#""/offline""#) && js.contains(r#""/static/css/site.css""#));
+
+        // Signed in or not, the shell is the same page, with no one in it.
+        let anonymous = text(get(&state, "/offline", None).await).await;
+        let signed_in = text(get(&state, "/offline", Some(&cookie)).await).await;
+        assert_eq!(anonymous, signed_in);
+        assert!(!signed_in.contains("Sam"));
+
+        // Every page offers the worker; the script decides whether it may.
+        let page = text(get(&state, "/", Some(&cookie)).await).await;
+        assert!(page.contains(r#"src="/static/js/shell.js""#));
     }
 
     #[test]
