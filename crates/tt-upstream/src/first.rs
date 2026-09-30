@@ -17,6 +17,10 @@ use tt_core::upstream::{FirstEvent, FirstTeam};
 const API: &str = "first";
 pub const DEFAULT_BASE_URL: &str = "https://frc-api.firstinspires.org/v3.0";
 
+/// The most pages of one listing to follow. The largest roster, a
+/// Championship division, is two.
+const MAX_PAGES: u32 = 10;
+
 /// Default country filter, applied only when no event or team filter is set.
 pub const DEFAULT_COUNTRY: &str = "USA";
 
@@ -195,16 +199,34 @@ impl FirstClient {
         Ok(events)
     }
 
+    /// An event's roster, every page of it. FIRST sends 65 teams a page, and
+    /// a Championship division has more: reading only the first left nine of
+    /// Milstein's 74 off in 2026.
     pub async fn event_teams(&self, event_code: &str) -> Result<Vec<FirstTeam>> {
         #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
         struct Envelope {
             #[serde(default)]
             teams: Vec<FirstTeam>,
+            #[serde(default)]
+            page_total: Option<u32>,
         }
-        let mut query = HashMap::new();
-        query.insert("eventCode".to_string(), event_code.to_string());
-        let envelope: Envelope = self.get(&format!("/{}/teams", self.season), &query).await?;
-        Ok(envelope.teams)
+        let mut teams = Vec::new();
+        let mut page = 1;
+        loop {
+            let mut query = HashMap::new();
+            query.insert("eventCode".to_string(), event_code.to_string());
+            if page > 1 {
+                query.insert("page".to_string(), page.to_string());
+            }
+            let envelope: Envelope = self.get(&format!("/{}/teams", self.season), &query).await?;
+            teams.extend(envelope.teams);
+            // A bound, in case a page count ever came back nonsense.
+            if page >= envelope.page_total.unwrap_or(1).min(MAX_PAGES) {
+                return Ok(teams);
+            }
+            page += 1;
+        }
     }
 }
 

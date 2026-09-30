@@ -53,6 +53,12 @@ pub fn classify(scheduled: Option<DateTime<Utc>>, now: DateTime<Utc>) -> MatchSt
 pub enum CompLevel {
     #[serde(rename = "qm")]
     Qualification,
+    /// Octofinals, before 2023, at events with sixteen alliances.
+    #[serde(rename = "ef")]
+    EighthFinal,
+    /// Before 2023. The double-elimination bracket calls every round `sf`.
+    #[serde(rename = "qf")]
+    QuarterFinal,
     #[serde(rename = "sf")]
     Semifinal,
     #[serde(rename = "f")]
@@ -65,6 +71,8 @@ impl CompLevel {
     pub fn parse(raw: &str) -> Option<Self> {
         match raw.trim().to_ascii_lowercase().as_str() {
             "qm" | "" => Some(Self::Qualification),
+            "ef" => Some(Self::EighthFinal),
+            "qf" => Some(Self::QuarterFinal),
             "sf" => Some(Self::Semifinal),
             "f" => Some(Self::Final),
             _ => None,
@@ -74,6 +82,8 @@ impl CompLevel {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Qualification => "qm",
+            Self::EighthFinal => "ef",
+            Self::QuarterFinal => "qf",
             Self::Semifinal => "sf",
             Self::Final => "f",
         }
@@ -86,13 +96,20 @@ impl CompLevel {
     /// for all thirteen (`2026mabil_sf5m1`). Labelled by `match_number` they
     /// were all `SF1`. A second match in a set -- a replay, or a best-of-three
     /// from before 2023 -- reads `SF5-2`. The finals are one set of up to
-    /// three, so those are numbered by match.
+    /// three, so those are numbered by match. Quarter- and eighth-finals,
+    /// from before 2023, read like a best-of-three semifinal: `QF4-3`.
     pub fn label(self, set_number: i32, match_number: i32) -> String {
-        match self {
-            Self::Qualification => format!("Q{match_number}"),
-            Self::Semifinal if match_number > 1 => format!("SF{set_number}-{match_number}"),
-            Self::Semifinal => format!("SF{set_number}"),
-            Self::Final => format!("F{match_number}"),
+        let round = match self {
+            Self::Qualification => return format!("Q{match_number}"),
+            Self::Final => return format!("F{match_number}"),
+            Self::EighthFinal => "EF",
+            Self::QuarterFinal => "QF",
+            Self::Semifinal => "SF",
+        };
+        if match_number > 1 {
+            format!("{round}{set_number}-{match_number}")
+        } else {
+            format!("{round}{set_number}")
         }
     }
 }
@@ -143,7 +160,9 @@ mod tests {
     fn comp_level_parse_is_case_insensitive_and_rejects_junk() {
         assert_eq!(CompLevel::parse("QM"), Some(CompLevel::Qualification));
         assert_eq!(CompLevel::parse("SF"), Some(CompLevel::Semifinal));
-        assert_eq!(CompLevel::parse("qf"), None);
+        assert_eq!(CompLevel::parse("QF"), Some(CompLevel::QuarterFinal));
+        assert_eq!(CompLevel::parse("sf1"), None);
+        assert_eq!(CompLevel::parse("practice"), None);
     }
 
     #[test]
@@ -188,10 +207,30 @@ mod tests {
     fn comp_level_round_trips_through_its_string() {
         for level in [
             CompLevel::Qualification,
+            CompLevel::EighthFinal,
+            CompLevel::QuarterFinal,
             CompLevel::Semifinal,
             CompLevel::Final,
         ] {
             assert_eq!(CompLevel::parse(level.as_str()), Some(level));
         }
+    }
+
+    #[test]
+    fn rounds_order_the_way_a_bracket_is_played() {
+        use CompLevel::*;
+        let mut levels = [Final, QuarterFinal, Semifinal, Qualification, EighthFinal];
+        levels.sort();
+        assert_eq!(
+            levels,
+            [Qualification, EighthFinal, QuarterFinal, Semifinal, Final]
+        );
+    }
+
+    #[test]
+    fn an_old_bracket_labels_like_a_best_of_three_semifinal() {
+        assert_eq!(CompLevel::QuarterFinal.label(4, 1), "QF4");
+        assert_eq!(CompLevel::QuarterFinal.label(4, 3), "QF4-3");
+        assert_eq!(CompLevel::EighthFinal.label(8, 2), "EF8-2");
     }
 }

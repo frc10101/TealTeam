@@ -372,7 +372,8 @@ impl SqliteRepo {
                     red1, red2, red3, blue1, blue2, blue3, red_score, blue_score, winner, played, \
                     scheduled_at, actual_at \
              FROM matches WHERE event_key = ? \
-             ORDER BY CASE comp_level WHEN 'qm' THEN 0 WHEN 'sf' THEN 1 ELSE 2 END, \
+             ORDER BY CASE comp_level WHEN 'qm' THEN 0 WHEN 'ef' THEN 1 WHEN 'qf' THEN 2 \
+                      WHEN 'sf' THEN 3 ELSE 4 END, \
                       set_number, match_number",
         )
         .bind(event_key)
@@ -394,7 +395,8 @@ impl SqliteRepo {
              FROM matches \
              WHERE event_key = ? \
                AND ? IN (red1, red2, red3, blue1, blue2, blue3) \
-             ORDER BY CASE comp_level WHEN 'qm' THEN 0 WHEN 'sf' THEN 1 ELSE 2 END, \
+             ORDER BY CASE comp_level WHEN 'qm' THEN 0 WHEN 'ef' THEN 1 WHEN 'qf' THEN 2 \
+                      WHEN 'sf' THEN 3 ELSE 4 END, \
                       set_number, match_number",
         )
         .bind(event_key)

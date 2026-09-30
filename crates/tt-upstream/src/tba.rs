@@ -24,7 +24,7 @@ use crate::{
     MAX_ATTEMPTS, REQUEST_TIMEOUT, Result, Uplink, UpstreamError, backoff, is_retryable, probe,
     truncate,
 };
-use tt_core::upstream::{ComponentOprs, Match, Oprs, Ranking};
+use tt_core::upstream::{ComponentOprs, Match, Oprs, Rankings};
 
 const API: &str = "tba";
 pub const DEFAULT_BASE_URL: &str = "https://www.thebluealliance.com/api/v3";
@@ -237,26 +237,30 @@ impl TbaClient {
         }
     }
 
+    // Each of these reads a `null` body as empty: TBA answers `null`, not
+    // `{}`, for an event it has nothing for yet.
+
     pub async fn oprs(&self, event_key: &str) -> Result<Oprs> {
-        self.get(&format!("/event/{event_key}/oprs")).await
+        self.get_or_empty(&format!("/event/{event_key}/oprs")).await
     }
 
     pub async fn component_oprs(&self, event_key: &str) -> Result<ComponentOprs> {
-        self.get(&format!("/event/{event_key}/coprs")).await
+        self.get_or_empty(&format!("/event/{event_key}/coprs"))
+            .await
     }
 
-    pub async fn rankings(&self, event_key: &str) -> Result<Vec<Ranking>> {
-        #[derive(serde::Deserialize)]
-        struct Envelope {
-            #[serde(default)]
-            rankings: Vec<Ranking>,
-        }
-        let envelope: Envelope = self.get(&format!("/event/{event_key}/rankings")).await?;
-        Ok(envelope.rankings)
+    pub async fn rankings(&self, event_key: &str) -> Result<Rankings> {
+        self.get_or_empty(&format!("/event/{event_key}/rankings"))
+            .await
     }
 
     pub async fn matches(&self, event_key: &str) -> Result<Vec<Match>> {
-        self.get(&format!("/event/{event_key}/matches")).await
+        self.get_or_empty(&format!("/event/{event_key}/matches"))
+            .await
+    }
+
+    async fn get_or_empty<T: DeserializeOwned + Default>(&self, path: &str) -> Result<T> {
+        Ok(self.get::<Option<T>>(path).await?.unwrap_or_default())
     }
 }
 

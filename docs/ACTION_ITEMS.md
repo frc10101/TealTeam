@@ -460,7 +460,7 @@ The architectural payoff. Phase 2 must be shipping before this starts.
 | # | Action | Source | Effort | Status |
 | --- | --- | --- | --- | --- |
 | Q1 | `tt-core` unit tests: scoring, mode aggregation, match-status, connectivity classification, match-number normalization, TBA fallback extraction. **Every one of these had a bug** | RS §11 | M | **Done** — gaps filled in `tt-core`; two bugs fixed, see notes |
-| Q2 | Deserialization tests against **recorded** FIRST/TBA payloads, including at least one from a prior season | RS §11 | M |  |
+| Q2 | Deserialization tests against **recorded** FIRST/TBA payloads, including at least one from a prior season | RS §11 | M | **Done** — `tt-upstream/tests/recorded.rs` over `tests/fixtures/`; six fixes, see notes |
 | Q3 | Load test before the season: 30 simulated clients, two hours, p95 latency and SSE stability — with the cable pulled, the power killed, and a client's storage filled, deliberately | RI §Load Testing · RS §11 | M |  |
 | Q4 | Backups: timed dump to the SSD (10-minute interval, 24-hour retention), USB copy between match blocks, and **one deliberate restore test** before you need it | RI §Backups | M |  |
 | Q5 | Store everything in UTC; render in the event's IANA zone per `TIMEZONE_HANDLING.md` | RI §Time Sync | S |  |
@@ -472,7 +472,21 @@ The architectural payoff. Phase 2 must be shipping before this starts.
 - **Every double-elimination playoff match was labelled `SF1`.** TBA keys them `sf1m1` to `sf13m1`: the set is the match, and `match_number` is always 1. The label used `match_number`, so the scouting page, the assignment grid, and the coach panel showed thirteen `SF1`s. The sync test asserted `sf2m1` read `SF1`. `CompLevel::label` now takes the set: `SF5`, `SF5-2` for a replay or a pre-2023 best-of-three, and finals by match, `F1` to `F3`. Storage and ordering were already right (D3 keys on `tba_key`); only the label was wrong.
 - **One `null` failed a whole event's sync.** TBA sends `"actual_time": null` for every unplayed match, and serde's `default` covers a missing field, not a null one. Every non-`Option` field in `tt_core::upstream` now reads `null` as missing, through one `or_default` helper (`set_number` stays 1, a score stays TBA's `-1`).
 
-**Left for Q2:** `tt-upstream`'s rankings envelope is not an `Option`, and TBA answers `null` for an event with no rankings yet. `CompLevel::parse` rejects `qf` and `ef`, so a pre-2023 event's quarterfinals are skipped with a problem line. Both want recorded payloads to confirm.
+**Left for Q2:** the rankings `null` and `qf`/`ef`, both done in Q2 below.
+
+**Q2: recorded payloads.** `crates/tt-upstream/tests/fixtures/` holds real FIRST and TBA responses, recorded with the shop's keys on 2026-09-30. Only bodies were kept: no headers and no keys. The match lists keep Q1-Q3 and every playoff match. The events: 2026 Magnolia (10101's own), 2019 Bayou for TBA's prior season, and 2025 Bayou for FIRST's, since FIRST's 2019 events endpoint returned a 500. Also 2026 Arizona League before it happened, and the 2026 Milstein division. `tests/recorded.rs` serves them to the real clients and syncs them into SQLite. Running them turned up six faults, all fixed:
+
+- **Championship division rosters were cut at 65.** FIRST pages its teams endpoint. `event_teams` read page 1 only, so Milstein's roster lost 9 of 74. It now follows `pageTotal`.
+- **Auto OPR changed from sync to sync.** 2026 has `autoTowerPoints` and `totalAutoPoints`, and `phase_opr` took the first points component a `HashMap` handed it. It now prefers points, then "total", then name order. For 10101 at Magnolia that is 2.50 rather than 0.0.
+- **Average match points were whatever sat in `sort_orders[1]`.** In 2019 that column is Cargo. `tt_core::upstream::Rankings` keeps `sort_order_info` and reads the column named "Avg Match". A season without one stores none. Without names, it falls back to the position.
+- **`qf` and `ef` were dropped.** `CompLevel` has `QuarterFinal` and `EighthFinal`, labelled `QF4-3` like a best-of-three semifinal, and matches order qm, ef, qf, sf, f in SQL as in Rust.
+- **A `null` body failed the fetch.** Every TBA event endpoint now reads `null` as empty. No event returned it on the day, so that test serves `null` by hand.
+- **FIRST's event type was always empty.** FIRST sends `type`, and `rename_all` looked for `eventType`.
+
+**Found, not fixed:**
+
+- **FIRST and TBA name divisions differently.** FIRST calls Milstein `MILSTEIN`, TBA `2026mil`, so `FirstEvent::tba_key()` makes `2026milstein`, and TBA sync at a Championship would 404. The fix is a lookup on TBA's `first_event_code`, which needs one more request per season. It needs its own item.
+- **FIRST's `timezone` is a Windows zone name** (`"Central Standard Time"`), stored as is. Q5 needs it mapped to IANA.
 
 ---
 

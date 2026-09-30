@@ -83,29 +83,28 @@ impl Phase {
 impl ComponentOprs {
     /// Best-effort component OPR for one team in one phase.
     ///
-    /// Prefers a component whose name contains the phase word and also mentions
-    /// points (`totalAutoPoints`), then any component mentioning the phase, then
-    /// nothing. Never guesses across phases: a missing endgame component yields
-    /// `None`, not a teleop number.
+    /// Of the components whose name contains the phase word, prefers one that
+    /// mentions points, then one that says total, then the first by name.
+    /// Never guesses across phases: a missing endgame component yields `None`,
+    /// not a teleop number.
+    ///
+    /// The total matters. 2026 has both `autoTowerPoints` and `totalAutoPoints`,
+    /// and taking the first points component found in a `HashMap` gave one or
+    /// the other from run to run.
     pub fn phase_opr(&self, team_key: &str, phase: Phase) -> Option<f64> {
         let needle = phase.needle();
-
-        let mut fallback = None;
-        for (name, values) in &self.components {
-            let lower = name.to_ascii_lowercase();
-            if !lower.contains(needle) {
-                continue;
-            }
-            let Some(value) = values.get(team_key).copied() else {
-                continue;
-            };
-            if lower.contains("point") {
-                // Strongest signal: a points component for this phase.
-                return Some(value);
-            }
-            fallback.get_or_insert(value);
-        }
-        fallback
+        self.components
+            .iter()
+            .filter_map(|(name, values)| {
+                let lower = name.to_ascii_lowercase();
+                let value = values.get(team_key).copied()?;
+                lower.contains(needle).then(|| {
+                    let rank = (lower.contains("point"), lower.contains("total"));
+                    (rank, std::cmp::Reverse(name), value)
+                })
+            })
+            .max_by(|a, b| (a.0, &a.1).cmp(&(b.0, &b.1)))
+            .map(|(_, _, value)| value)
     }
 
     /// All three phases at once.
@@ -172,8 +171,11 @@ impl Ranking {
             .or_else(|| self.sort_orders.first().copied())
     }
 
-    /// Average match points. Only ever `sort_orders[1]`; there is no legacy
-    /// primitive for it, which is why the retired app displayed nothing.
+    /// Average match points by position alone: `sort_orders[1]`. There is no
+    /// legacy primitive for it, which is why the retired app displayed
+    /// nothing. Position is right for 2026 and wrong for 2019, where `[1]` is
+    /// cargo; [`Rankings::avg_match_points`] reads the column's name and only
+    /// falls back to this when TBA sent none.
     pub fn effective_avg_match_points(&self) -> Option<f64> {
         self.sort_orders.get(1).copied()
     }
@@ -190,6 +192,44 @@ impl Ranking {
     pub fn effective_qual_points(&self) -> Option<i64> {
         self.qual_points
             .or_else(|| self.sort_orders.first().map(|v| v.round() as i64))
+    }
+}
+
+/// `/event/{key}/rankings`: the rows, and what each `sort_orders` column is.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct Rankings {
+    #[serde(default, deserialize_with = "or_default")]
+    pub rankings: Vec<Ranking>,
+    /// One per `sort_orders` column, in order. The columns are the season's
+    /// tiebreakers, so they differ every year.
+    #[serde(default, deserialize_with = "or_default")]
+    pub sort_order_info: Vec<SortOrderInfo>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct SortOrderInfo {
+    #[serde(default, deserialize_with = "or_default")]
+    pub name: String,
+}
+
+impl Rankings {
+    /// The row for `team_key`, if it is ranked.
+    pub fn for_team(&self, team_key: &str) -> Option<&Ranking> {
+        self.rankings.iter().find(|r| r.team_key == team_key)
+    }
+
+    /// Average match points: the column TBA names "Avg Match". A season
+    /// without one has none -- 2019 ranked on cargo and hatch panels -- rather
+    /// than whatever sits in its place. With no names at all, position.
+    pub fn avg_match_points(&self, ranking: &Ranking) -> Option<f64> {
+        if self.sort_order_info.is_empty() {
+            return ranking.effective_avg_match_points();
+        }
+        let column = self.sort_order_info.iter().position(|info| {
+            let name = info.name.to_ascii_lowercase();
+            name.contains("avg") && name.contains("match")
+        })?;
+        ranking.sort_orders.get(column).copied()
     }
 }
 
@@ -404,7 +444,9 @@ pub struct FirstEvent {
     pub date_start: String,
     #[serde(default, deserialize_with = "or_default")]
     pub date_end: String,
-    #[serde(default)]
+    /// `"Regional"`, `"ChampionshipDivision"`. FIRST calls it `type`, which
+    /// `rename_all` would have looked for as `eventType`.
+    #[serde(default, rename = "type")]
     pub event_type: Option<String>,
     #[serde(default)]
     pub district_code: Option<String>,
@@ -666,6 +708,53 @@ mod tests {
             serde_json::from_str(r#"{"team_key": "frc1", "sort_orders": [5.0]}"#).expect("parse");
         assert_eq!(r.effective_qual_average(), Some(5.0));
         assert_eq!(r.effective_avg_match_points(), None);
+    }
+
+    #[test]
+    fn average_match_points_come_from_the_column_named_for_them() {
+        let body = |names: &str| {
+            format!(
+                r#"{{"rankings": [{{"team_key": "frc1", "sort_orders": [2.5, 219.0, 81.3]}}],
+                    "sort_order_info": {names}}}"#
+            )
+        };
+        let moved: Rankings = serde_json::from_str(&body(
+            r#"[{"name": "Ranking Score"}, {"name": "Cargo"}, {"name": "Avg Match"}]"#,
+        ))
+        .expect("parse");
+        assert_eq!(moved.avg_match_points(&moved.rankings[0]), Some(81.3));
+
+        let none: Rankings =
+            serde_json::from_str(&body(r#"[{"name": "Ranking Score"}, {"name": "Cargo"}]"#))
+                .expect("parse");
+        assert_eq!(none.avg_match_points(&none.rankings[0]), None, "not cargo");
+
+        let unnamed: Rankings = serde_json::from_str(&body("null")).expect("parse");
+        assert_eq!(
+            unnamed.avg_match_points(&unnamed.rankings[0]),
+            Some(219.0),
+            "no names: position, as before"
+        );
+        assert!(unnamed.for_team("frc1").is_some() && unnamed.for_team("frc2").is_none());
+    }
+
+    #[test]
+    fn a_total_points_component_wins_and_the_choice_never_varies() {
+        // 2026's auto components. Each new `HashMap` iterates in its own
+        // random order, so building it many times tries many orders.
+        for _ in 0..32 {
+            let c = ComponentOprs {
+                components: [
+                    ("Hub Auto Fuel Count", 9.0),
+                    ("autoTowerPoints", 0.0),
+                    ("totalAutoPoints", 2.5),
+                ]
+                .into_iter()
+                .map(|(name, v)| (name.to_string(), HashMap::from([("frc1".to_string(), v)])))
+                .collect(),
+            };
+            assert_eq!(c.phase_opr("frc1", Phase::Auto), Some(2.5));
+        }
     }
 
     #[test]

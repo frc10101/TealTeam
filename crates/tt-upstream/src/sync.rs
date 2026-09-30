@@ -263,7 +263,7 @@ pub async fn sync_stats<R: Repo + Sync>(
 
     for team in &roster {
         let key = upstream::team_key(team.number);
-        let ranking = rankings.iter().find(|r| r.team_key == key);
+        let ranking = rankings.for_team(&key);
 
         let (auto, teleop, endgame) = match &components {
             Some(c) => (
@@ -286,7 +286,7 @@ pub async fn sync_stats<R: Repo + Sync>(
             rank: ranking.map(|r| r.rank),
             matches_played: ranking.map(|r| r.matches_played),
             qual_average: ranking.and_then(|r| r.effective_qual_average()),
-            avg_match_points: ranking.and_then(|r| r.effective_avg_match_points()),
+            avg_match_points: ranking.and_then(|r| rankings.avg_match_points(r)),
             wins: ranking.map(|r| r.record.wins),
             losses: ranking.map(|r| r.record.losses),
             ties: ranking.map(|r| r.record.ties),
