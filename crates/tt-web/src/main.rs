@@ -7,6 +7,7 @@
 //!
 //! Startup (F5) is deliberately fault-tolerant. See [`startup::run`].
 
+mod assets;
 mod assignments;
 mod auth;
 mod coach;

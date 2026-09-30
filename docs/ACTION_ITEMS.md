@@ -240,7 +240,7 @@ This is the highest-leverage cluster in either source document. It removes the 5
 | --- | --- | --- | --- | --- |
 | P3 | SQLite WAL, single writer, on **NVMe/USB SSD — not the SD card** | RI-N2 · RS §10 | M |  |
 | P4 | Avahi → `http://tealteam.local`. Removes the most common event-day support question | RI-N3 · RS §10 | S |  |
-| P5 | Asset resolution: walk up from both the exe and cwd, or embed assets in the binary | RS §10 | S |  |
+| P5 | Asset resolution: walk up from both the exe and cwd, or embed assets in the binary | RS §10 | S | **Done** — embedded: `tt-web/build.rs`, `src/assets.rs` |
 | P6 | Wired Ethernet to clients + USB tethering as the uplink (`usb0`, route metric). **Build no Wi-Fi AP** — it violates E143 | RI-N4, RI-N5 · RS §10 | M |  |
 | P7 | Buy per-client 25 ft flat Ethernet, gaff tape, and USB-C Ethernet adapters (~$15 each) | RI §1 | S |  |
 | P8 | One-page laminated event-day setup runbook with a photo of the correct cabling | RI-N7 | S |  |
@@ -395,7 +395,13 @@ Checked in headless Chromium at 390px and 1280px, with `/health` dropping the co
 
 Checked by a script in headless Chromium that measures every link, button, input, and summary, and the page width. Across all fourteen pages, signed in as an admin with a seeded event, at 360px, 390px, and 1280px: nothing under 44px outside a sentence, and nothing wider than the screen. Screenshots at 390px, 700px, and 1280px show the bar, the lit tab, the cards, and a header that no longer wraps the account onto a line of its own.
 
-**Still open in Phase 2:** U17, and P3-P9.
+**The binary carries its own assets (P5).** Of the two options, embedding. The walk-up from the exe and the working directory was already there, and it worked under `cargo run` and from `target/`. But a binary copied to the Pi without `static/` beside it served every page with no stylesheet and no scripts, and logged nothing. Migrations, the season, the templates, and the timezone database were already compiled in, so the assets now are too, and the one file is the whole deploy. `build.rs` lists every file under `crates/tt-web/static/` and includes its bytes, and `src/assets.rs` serves them at `/static/…`. Editing a file there rebuilds the binary, so `cargo run` still serves the current CSS. No new dependency; `tower-http`'s `fs` feature is dropped.
+
+**Browsers revalidate rather than guess.** Each file has an ETag of its bytes and `Cache-Control: no-cache`, so a browser keeps its copy and asks each time. The answer is a bodiless 304 until a new binary changes the file, and then every tablet picks up the new CSS on its next page load, with no hard refresh at the event. A missing file is still a bare 404, and only the embedded paths exist, so `../` leads nowhere.
+
+Checked by copying the debug binary alone into a directory outside the repo and running it from there. `site.css`, `link.js`, and `tabs.js` came back 200 with their types, the CSS byte-for-byte the source's; a request with its ETag got a 304 with no body; `js/gone.js` got a 404.
+
+**Still open in Phase 2:** U17, P3, P4, and P6-P9.
 
 ---
 

@@ -228,7 +228,8 @@ pub fn router(state: AppState) -> Router {
         // Operational
         .route("/health", get(health_json))
         .route("/status", get(health_page))
-        .nest_service("/static", tower_http::services::ServeDir::new(static_dir()))
+        // Compiled in (P5): the binary is the whole deploy.
+        .route("/static/{*path}", get(crate::assets::serve))
         // Every error a browser would otherwise get as a blank or plain-text
         // screen becomes a page with the nav on it (U10).
         .layer(axum::middleware::from_fn_with_state(
@@ -237,39 +238,6 @@ pub fn router(state: AppState) -> Router {
         ))
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(state)
-}
-
-/// Locate `static/`, looking next to the executable first and then up from the
-/// working directory.
-///
-/// Carried over from the retired implementation because it solved a real
-/// deployment problem: the binary must find its assets whether it was launched
-/// by `cargo run` (cwd = repo root) or straight out of `target/release/` on the
-/// Pi (REBUILD_SPEC.md 10).
-fn static_dir() -> std::path::PathBuf {
-    let mut roots = Vec::new();
-    if let Ok(exe) = std::env::current_exe()
-        && let Some(dir) = exe.parent()
-    {
-        roots.push(dir.to_path_buf());
-    }
-    if let Ok(cwd) = std::env::current_dir() {
-        roots.push(cwd);
-    }
-
-    for root in roots {
-        for ancestor in root.ancestors() {
-            let candidate = ancestor.join("crates/tt-web/static");
-            if candidate.is_dir() {
-                return candidate;
-            }
-            let bare = ancestor.join("static");
-            if bare.is_dir() {
-                return bare;
-            }
-        }
-    }
-    "static".into()
 }
 
 /// Human-readable status. Renders whether or not storage is reachable -- that is
@@ -543,6 +511,51 @@ mod flow_tests {
 
         let script = get(&state, "/static/js/tabs.js", None).await;
         assert_eq!(script.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn assets_come_from_inside_the_binary_and_are_revalidated() {
+        let state = migrated_state().await;
+
+        let response = get(&state, "/static/css/site.css", None).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let headers = response.headers().clone();
+        assert_eq!(headers[header::CONTENT_TYPE], "text/css; charset=utf-8");
+        assert_eq!(headers[header::CACHE_CONTROL], "no-cache");
+        let etag = headers[header::ETAG].to_str().unwrap().to_owned();
+        assert!(text(response).await.contains(".nav-links"));
+
+        // The browser's copy is still good: no body.
+        let again = router(state.clone())
+            .oneshot(
+                Request::get("/static/css/site.css")
+                    .header(header::IF_NONE_MATCH, &etag)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(again.status(), StatusCode::NOT_MODIFIED);
+        assert!(text(again).await.is_empty());
+
+        let script = get(&state, "/static/js/live.js", None).await;
+        assert_eq!(
+            script.headers()[header::CONTENT_TYPE],
+            "text/javascript; charset=utf-8"
+        );
+
+        // Only what was compiled in, never a path out of it.
+        for path in [
+            "/static/../Cargo.toml",
+            "/static/%2e%2e/src/main.rs",
+            "/static/",
+        ] {
+            assert_eq!(
+                get(&state, path, None).await.status(),
+                StatusCode::NOT_FOUND,
+                "{path}"
+            );
+        }
     }
 
     #[test]
