@@ -1,0 +1,31 @@
+# The scouting server, started at boot (P10). Installed to
+# /etc/systemd/system/tealteam.service by install.sh. See docs/PI_STORAGE.md
+# for the SSD and docs/PI_NETWORK.md for the network.
+[Unit]
+Description=TealTeam scouting server
+# The database lives on the SSD: never start against the empty folder the SD
+# card shows when the SSD is missing.
+RequiresMountsFor=/srv/tealteam
+After=network.target
+# Restart forever, however often it fails: at an event there is no one to
+# reset a rate limit.
+StartLimitIntervalSec=0
+
+[Service]
+User=tealteam
+Group=tealteam
+# .env beside the binary sets DATABASE_URL, BACKUP_DIR, and the API keys.
+WorkingDirectory=/opt/tealteam
+ExecStart=/opt/tealteam/tt-web
+Restart=on-failure
+RestartSec=5
+
+# It writes only its data and backups.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/srv/tealteam
+
+[Install]
+WantedBy=multi-user.target

@@ -246,6 +246,7 @@ This is the highest-leverage cluster in either source document. It removes the 5
 | P7 | Buy per-client 25 ft flat Ethernet, gaff tape, and USB-C Ethernet adapters (~$15 each) | RI §1 | S |  |
 | P8 | One-page laminated event-day setup runbook with a photo of the correct cabling | RI-N7 | S | **Done** — `docs/EVENT_DAY_RUNBOOK.md`; photo and server folder are fill-ins |
 | P9 | Practice the full network setup and teardown twice at the shop, timed, by a student who did not design it | RI §1 | S |  |
+| P10 | **Start the server at boot**: a systemd unit as a dedicated `tealteam` user, after the SSD is mounted (`RequiresMountsFor=/srv/tealteam`), restarting on failure | P8 | S | **Done, untested on a Pi** — `deploy/pi/service/`; `sudo ./install.sh path/to/tt-web` |
 
 ### Phase 2 notes
 
