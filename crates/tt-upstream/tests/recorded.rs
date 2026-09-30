@@ -167,6 +167,11 @@ async fn this_seasons_event_syncs_whole_from_both_apis() {
     assert_eq!(event.name, "Magnolia Regional");
     assert_eq!(event.event_type.as_deref(), Some("Regional"));
     assert_eq!(event.week, Some(3));
+    assert_eq!(
+        event.timezone.as_deref(),
+        Some("America/Chicago"),
+        "FIRST sent \"Central Standard Time\""
+    );
     assert_eq!(repo.event_teams("2026mslr").await.unwrap().len(), 46);
 
     let matches = sync::sync_matches(&repo, &tba(&base), "2026mslr")

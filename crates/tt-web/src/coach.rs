@@ -79,13 +79,13 @@ pub async fn page(
         return page;
     }
     let now = Utc::now();
-    page.schedule(&event.key, &matches, team, &stats, now);
+    page.schedule(event, &matches, team, &stats, now);
     let synced = stats
         .iter()
         .filter(|s| s.opr.is_some() || s.dpr.is_some())
         .filter_map(|s| s.synced_at)
         .max()
-        .map(|at| Freshness::of(at, now, event.is_active_on(now.date_naive())));
+        .map(|at| Freshness::of(at, now, event.is_running(now)));
     page.stats_synced = synced.as_ref().map(|f| f.age.clone()).unwrap_or_default();
     page.stats_stale = synced.is_some_and(|f| f.stale);
     if page.next.is_none() && page.later.is_empty() && page.played.is_empty() {

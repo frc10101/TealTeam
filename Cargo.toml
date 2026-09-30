@@ -35,6 +35,9 @@ rand = "0.9"
 # on a Raspberry Pi.
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 chrono = { version = "0.4", default-features = false, features = ["serde"] }
+# The IANA database, compiled in: an event's zone must resolve on a Pi with
+# no /usr/share/zoneinfo, and in a browser (Q5).
+chrono-tz = { version = "0.9", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "sqlite", "chrono", "macros", "migrate"] }

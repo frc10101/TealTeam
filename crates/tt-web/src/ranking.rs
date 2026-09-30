@@ -115,7 +115,7 @@ pub async fn page(
         .filter(|s| s.rank.is_some())
         .filter_map(|s| s.synced_at)
         .max()
-        .map(|at| Freshness::of(at, now, event.is_active_on(now.date_naive())));
+        .map(|at| Freshness::of(at, now, event.is_running(now)));
     page.ranks_updated = ranks.as_ref().map(|f| f.age.clone()).unwrap_or_default();
     page.ranks_stale = ranks.is_some_and(|f| f.stale);
 

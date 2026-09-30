@@ -18,6 +18,7 @@ use chrono::{NaiveDate, TimeDelta, Utc};
 use tokio::sync::Notify;
 use tracing::{info, warn};
 use tt_core::records::{Event, MatchRecord, Team, TeamEventStats};
+use tt_core::timezone;
 use tt_core::upstream::{self, Phase};
 use tt_repo::Repo;
 
@@ -105,7 +106,7 @@ pub async fn sync_events<R: Repo + Sync>(
             key: key.clone(),
             name: raw.name.clone(),
             location: Some(raw.location()).filter(|l| !l.is_empty()),
-            timezone: raw.timezone.clone(),
+            timezone: upstream_zone(raw, &mut report),
             start_date: upstream::parse_date(&raw.date_start).and_then(to_naive),
             end_date: upstream::parse_date(&raw.date_end).and_then(to_naive),
             event_code: Some(raw.code.trim().to_lowercase()),
@@ -131,6 +132,19 @@ pub async fn sync_events<R: Repo + Sync>(
     }
 
     Ok(report)
+}
+
+/// The event's IANA zone, from FIRST's Windows name and its place (Q5).
+fn upstream_zone(raw: &upstream::FirstEvent, report: &mut SyncReport) -> Option<String> {
+    let given = raw.timezone.as_deref().unwrap_or_default();
+    let zone = timezone::event_zone(given, &raw.country, &raw.stateprov);
+    if zone.is_none() && !given.trim().is_empty() {
+        report.problem(format!(
+            "event {:?} has a timezone this server cannot place: {given:?}",
+            raw.name
+        ));
+    }
+    zone.map(|tz| tz.name().to_string())
 }
 
 async fn store_roster<R: Repo + Sync>(
@@ -509,7 +523,11 @@ pub async fn run_loop<R: Repo + Sync>(
     wake: Arc<Notify>,
 ) {
     loop {
-        let today = Utc::now().date_naive();
+        // The earliest date anywhere on earth right now, twelve hours behind
+        // UTC. Taking UTC's dropped a US event's last evening -- its finals --
+        // to the slow cadence once midnight passed in Greenwich (Q5). Zones
+        // ahead of UTC are inside the lookahead already.
+        let today = (Utc::now() - TimeDelta::hours(12)).date_naive();
         let pass = sync_active(&*repo, &tba, &uplink, today, PASS_TIMEOUT).await;
         let next = pass.next_interval();
         info!(

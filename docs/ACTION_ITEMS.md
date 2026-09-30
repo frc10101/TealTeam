@@ -463,7 +463,7 @@ The architectural payoff. Phase 2 must be shipping before this starts.
 | Q2 | Deserialization tests against **recorded** FIRST/TBA payloads, including at least one from a prior season | RS §11 | M | **Done** — `tt-upstream/tests/recorded.rs` over `tests/fixtures/`; six fixes, see notes |
 | Q3 | Load test before the season: 30 simulated clients, two hours, p95 latency and SSE stability — with the cable pulled, the power killed, and a client's storage filled, deliberately | RI §Load Testing · RS §11 | M |  |
 | Q4 | Backups: timed dump to the SSD (10-minute interval, 24-hour retention), USB copy between match blocks, and **one deliberate restore test** before you need it | RI §Backups | M |  |
-| Q5 | Store everything in UTC; render in the event's IANA zone per `TIMEZONE_HANDLING.md` | RI §Time Sync | S |  |
+| Q5 | Store everything in UTC; render in the event's IANA zone per `TIMEZONE_HANDLING.md` | RI §Time Sync | S | **Done** — `tt_core::timezone`; see notes |
 
 ### Cross-cutting notes
 
@@ -486,7 +486,13 @@ The architectural payoff. Phase 2 must be shipping before this starts.
 **Found, not fixed:**
 
 - **FIRST and TBA name divisions differently.** FIRST calls Milstein `MILSTEIN`, TBA `2026mil`, so `FirstEvent::tba_key()` makes `2026milstein`, and TBA sync at a Championship would 404. The fix is a lookup on TBA's `first_event_code`, which needs one more request per season. It needs its own item.
-- **FIRST's `timezone` is a Windows zone name** (`"Central Standard Time"`), stored as is. Q5 needs it mapped to IANA.
+- **FIRST's `timezone` is a Windows zone name** (`"Central Standard Time"`), stored as is. Mapped to IANA in Q5.
+
+**Q5: the event's clock.** Timestamps were already stored as UTC `DateTime<Utc>`, and every page but one showed times relative to now ("in 12 min", "5 minutes ago"), which need no zone. What Q5 changed:
+
+- **Zones are IANA.** `tt_core::timezone::event_zone` maps FIRST's Windows names at sync, reading the country and state first. FIRST's 2026 list gave Perth, Sanya, and Trabzon "Eastern Standard Time", Arizona plain "Mountain" (it keeps no daylight time), and Torreón "Mountain" (it is on central time). The tests hold every pairing FIRST sent for 2026. A name it cannot place is stored as none and reported as a sync problem. An event stored earlier with a Windows name reads as having no zone until its next sync replaces it; no migration. The zone data is compiled in (`chrono-tz`), so it works on a Pi without `/usr/share/zoneinfo` and in wasm.
+- **"Today" is the event's.** The event picker's default, the amber stale badge (U14), and the drive coach's badge use `Event::is_running(now)` on the event's own calendar. A US event's last evening, past midnight UTC, is still its last day, and the picker no longer switches to the next event during the finals. The sync loop's live check uses the earliest date anywhere (UTC minus 12 hours), so a US event's finals are still fetched every two minutes. An event ahead of UTC is covered by the one-day lookahead.
+- **The drive coach shows the time on the event's clock**: "8:20 AM EDT · in 20 min". It is the one page where a clock time helps, since the coach compares it to the field's schedule. Without a zone it reads "12:20 UTC", never the Pi's local time.
 
 ---
 

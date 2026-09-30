@@ -4,7 +4,7 @@
 use askama::Template;
 use chrono::{DateTime, Utc};
 use tt_core::coach::{self, Standing};
-use tt_core::records::{MatchRecord, TeamEventStats};
+use tt_core::records::{Event, MatchRecord, TeamEventStats};
 
 use crate::{Nav, TeamMatchLine, team_href};
 
@@ -70,17 +70,17 @@ pub struct CoachTeam {
 
 impl DriveCoachPage {
     /// Split `matches` (the event's, in playing order) into next, later, and
-    /// played, from `team`'s side.
+    /// played, from `team`'s side. Match times read on `event`'s clock.
     pub fn schedule(
         &mut self,
-        event_key: &str,
+        event: &Event,
         matches: &[MatchRecord],
         team: i32,
         stats: &[TeamEventStats],
         now: DateTime<Utc>,
     ) {
         for (record, standing) in coach::schedule(matches, team) {
-            let card = CoachCard::new(event_key, record, team, stats, standing, now);
+            let card = CoachCard::new(event, record, team, stats, standing, now);
             match standing {
                 Standing::Next => self.next = Some(card),
                 Standing::Later => self.later.push(card),
@@ -93,7 +93,7 @@ impl DriveCoachPage {
 
 impl CoachCard {
     fn new(
-        event_key: &str,
+        event: &Event,
         record: &MatchRecord,
         team: i32,
         stats: &[TeamEventStats],
@@ -115,7 +115,7 @@ impl CoachCard {
                         |v: Option<f64>| v.map(|v| format!("{v:.1}")).unwrap_or_else(|| "—".into());
                     CoachTeam {
                         number,
-                        href: team_href(event_key, number),
+                        href: team_href(&event.key, number),
                         opr: one(s.and_then(|s| s.opr)),
                         dpr: one(s.and_then(|s| s.dpr)),
                         us: number == team,
@@ -141,10 +141,16 @@ impl CoachCard {
         Self {
             id: record.key.clone(),
             label: record.label(),
-            timing: if standing == Standing::Played {
-                String::new()
-            } else {
-                coach::timing(record.scheduled_at, now)
+            // "1:30 PM CDT · in 12 min": the clock on the field's wall, then
+            // how long that is from now.
+            timing: match (standing, record.scheduled_at) {
+                (Standing::Played, _) => String::new(),
+                (_, Some(at)) => format!(
+                    "{} · {}",
+                    event.clock_time(at),
+                    coach::timing(Some(at), now)
+                ),
+                (_, None) => coach::timing(None, now),
             },
             result: line.map(|l| l.result).unwrap_or_default(),
             ours: side(ours),
@@ -213,12 +219,25 @@ mod tests {
         let matches = [scheduled(1, true), scheduled(2, false), scheduled(3, false)];
         let all = [stats(10101, 30.0), stats(254, 45.5), stats(2, 20.0)];
         let mut p = page();
-        p.schedule("2026mabil", &matches, 10101, &all, at(12, 0));
+        let boston = Event {
+            key: "2026mabil".into(),
+            name: "Boston".into(),
+            location: None,
+            timezone: Some("America/New_York".into()),
+            start_date: None,
+            end_date: None,
+            event_code: None,
+            event_type: None,
+            district_key: None,
+            week: None,
+        };
+        p.schedule(&boston, &matches, 10101, &all, at(12, 0));
 
         let next = p.next.as_ref().expect("Q2 is next");
         assert_eq!(
             (next.label.as_str(), next.timing.as_str()),
-            ("Q2", "in 20 min")
+            ("Q2", "8:20 AM EDT · in 20 min"),
+            "Boston's clock, not the server's"
         );
         assert_eq!(next.ours.color, "blue", "our side first, whatever colour");
         assert_eq!(next.ours.opr_total, "75.5");

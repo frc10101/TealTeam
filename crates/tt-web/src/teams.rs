@@ -175,7 +175,7 @@ pub async fn page(
     let synced = stats
         .as_ref()
         .and_then(|s| s.synced_at)
-        .map(|at| Freshness::of(at, now, event.is_active_on(now.date_naive())));
+        .map(|at| Freshness::of(at, now, event.is_running(now)));
     page.at_event = Some(TeamAtEvent {
         event_name: event.name.clone(),
         stats: stat_lines(stats.as_ref()),

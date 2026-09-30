@@ -30,6 +30,28 @@ pub struct Event {
 }
 
 impl Event {
+    /// The event's zone. `None` without one, or for a name stored before Q5
+    /// mapped FIRST's Windows names; the next sync replaces those.
+    pub fn zone(&self) -> Option<chrono_tz::Tz> {
+        self.timezone.as_deref()?.parse().ok()
+    }
+
+    /// The date at the event at `now`: its own, not UTC's, so a Saturday
+    /// evening in Chicago is still Saturday.
+    pub fn today(&self, now: DateTime<Utc>) -> NaiveDate {
+        crate::timezone::local_date(self.zone(), now)
+    }
+
+    /// Whether the event is on at `now`, by its own calendar.
+    pub fn is_running(&self, now: DateTime<Utc>) -> bool {
+        self.is_active_on(self.today(now))
+    }
+
+    /// `"1:30 PM CDT"`: `at` on the event's clock.
+    pub fn clock_time(&self, at: DateTime<Utc>) -> String {
+        crate::timezone::clock_time(self.zone(), at)
+    }
+
     /// Whether `date` falls within the event, inclusive of both ends.
     pub fn is_active_on(&self, date: NaiveDate) -> bool {
         match (self.start_date, self.end_date) {
@@ -77,25 +99,26 @@ impl Event {
 
 /// The event a page shows when its URL names none (U2).
 ///
-/// The one running on `today`; else the next to start; else the most recent to
-/// finish; else the first listed. So a lead scout opening the app at an event
+/// The one running at `now`; else the next to start; else the most recent to
+/// finish; else the first listed. Each by its own calendar, so the finals on a
+/// US event's last evening do not lose to the next event on UTC's date. So a lead scout opening the app at an event
 /// lands on that event, and in the off-season on the one coming up -- with no
 /// stored preference, which is what keeps the choice bookmarkable, per-tab, and
 /// available offline.
-pub fn default_event(events: &[Event], today: NaiveDate) -> Option<&Event> {
+pub fn default_event(events: &[Event], now: DateTime<Utc>) -> Option<&Event> {
     events
         .iter()
-        .find(|e| e.is_active_on(today))
+        .find(|e| e.is_running(now))
         .or_else(|| {
             events
                 .iter()
-                .filter(|e| e.start_date.is_some_and(|start| start > today))
+                .filter(|e| e.start_date.is_some_and(|start| start > e.today(now)))
                 .min_by_key(|e| e.start_date)
         })
         .or_else(|| {
             events
                 .iter()
-                .filter(|e| e.end_date.is_some_and(|end| end < today))
+                .filter(|e| e.end_date.is_some_and(|end| end < e.today(now)))
                 .max_by_key(|e| e.end_date)
         })
         .or_else(|| events.first())
@@ -273,6 +296,11 @@ mod tests {
         NaiveDate::from_ymd_opt(y, m, d).unwrap()
     }
 
+    /// Midday UTC: the same date in every zone the test events use.
+    fn noon(y: i32, m: u32, d: u32) -> DateTime<Utc> {
+        date(y, m, d).and_hms_opt(12, 0, 0).unwrap().and_utc()
+    }
+
     fn event() -> Event {
         Event {
             key: "2026mabil".into(),
@@ -342,7 +370,7 @@ mod tests {
             dated("now", Some(date(2026, 3, 12)), Some(date(2026, 3, 15))),
             dated("next", Some(date(2026, 3, 26)), Some(date(2026, 3, 29))),
         ];
-        let pick = |day| default_event(&events, date(2026, 3, day)).map(|e| e.key.as_str());
+        let pick = |day| default_event(&events, noon(2026, 3, day)).map(|e| e.key.as_str());
 
         assert_eq!(pick(12), Some("now"), "its first day");
         assert_eq!(pick(15), Some("now"), "its last day");
@@ -355,16 +383,35 @@ mod tests {
             dated("early", Some(date(2026, 3, 1)), Some(date(2026, 3, 3))),
             dated("late", Some(date(2026, 4, 1)), Some(date(2026, 4, 3))),
         ];
-        let chosen = default_event(&events, date(2026, 6, 1)).map(|e| e.key.as_str());
+        let chosen = default_event(&events, noon(2026, 6, 1)).map(|e| e.key.as_str());
         assert_eq!(chosen, Some("late"));
+    }
+
+    #[test]
+    fn a_us_events_last_evening_is_still_running_on_its_own_calendar() {
+        // Magnolia ends Saturday 21 March. 8 PM in Laurel is 1 AM Sunday UTC.
+        let magnolia = Event {
+            timezone: Some("America/Chicago".into()),
+            ..dated("2026mslr", Some(date(2026, 3, 18)), Some(date(2026, 3, 21)))
+        };
+        let next = dated("next", Some(date(2026, 3, 22)), Some(date(2026, 3, 22)));
+        let saturday_evening = date(2026, 3, 22).and_hms_opt(1, 0, 0).unwrap().and_utc();
+        assert!(magnolia.is_running(saturday_evening));
+        assert_eq!(magnolia.clock_time(saturday_evening), "8:00 PM CDT");
+        let events = [magnolia, next];
+        assert_eq!(
+            default_event(&events, saturday_evening).map(|e| e.key.as_str()),
+            Some("2026mslr"),
+            "not the event starting on UTC's Sunday"
+        );
     }
 
     #[test]
     fn undated_events_are_a_last_resort_and_nothing_is_nothing() {
         let events = [dated("undated", None, None)];
-        let chosen = default_event(&events, date(2026, 3, 1)).map(|e| e.key.as_str());
+        let chosen = default_event(&events, noon(2026, 3, 1)).map(|e| e.key.as_str());
         assert_eq!(chosen, Some("undated"));
-        assert!(default_event(&[], date(2026, 3, 1)).is_none());
+        assert!(default_event(&[], noon(2026, 3, 1)).is_none());
     }
 
     #[test]

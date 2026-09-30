@@ -6,6 +6,7 @@ description = "Pure TealTeam domain logic. Compiles to wasm32; no I/O, no databa
 
 [dependencies]
 chrono = { workspace = true }
+chrono-tz = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

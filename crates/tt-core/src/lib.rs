@@ -25,6 +25,7 @@ pub mod records;
 pub mod review;
 pub mod season;
 pub mod standings;
+pub mod timezone;
 pub mod upstream;
 pub mod user;
 

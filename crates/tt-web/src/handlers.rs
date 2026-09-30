@@ -70,11 +70,8 @@ async fn event_page(
     user: Option<&tt_core::user::User>,
     requested: Option<&str>,
 ) -> (Nav, EventContext) {
-    // UTC's date, not the event's: within a few hours of midnight at a US event
-    // the default can pick a neighbouring event. Harmless, since the switcher
-    // is one tap away; correcting it needs the event's zone (Q5).
-    let today = Utc::now().date_naive();
-    let context = events::resolve(&*state.repo, user, requested, today).await;
+    // Each event judged by its own calendar (Q5).
+    let context = events::resolve(&*state.repo, user, requested, Utc::now()).await;
     let mut nav = nav_for(state, user).await;
     nav.event = context.switcher();
     (nav, context)

@@ -14,7 +14,7 @@ use std::convert::Infallible;
 
 use axum::extract::{FromRequestParts, Query};
 use axum::http::request::Parts;
-use chrono::NaiveDate;
+use chrono::{DateTime, Utc};
 use tracing::warn;
 use tt_core::records::{Event, default_event};
 use tt_core::user::User;
@@ -72,7 +72,7 @@ pub async fn resolve<R: Repo + Sync>(
     repo: &R,
     viewer: Option<&User>,
     requested: Option<&str>,
-    today: NaiveDate,
+    now: DateTime<Utc>,
 ) -> EventContext {
     let mut options = match viewer.and_then(|u| u.team_number) {
         Some(team) => match repo.events_for_team(team).await {
@@ -111,7 +111,7 @@ pub async fn resolve<R: Repo + Sync>(
         }
     }
 
-    let selected = selected.or_else(|| default_event(&options, today).cloned());
+    let selected = selected.or_else(|| default_event(&options, now).cloned());
     EventContext {
         options,
         selected,
@@ -183,12 +183,17 @@ pub async fn stored<R: Repo + Sync>(repo: &R, context: &EventContext) -> Option<
 mod tests {
     use super::*;
     use axum::http::Request;
-    use chrono::Utc;
+    use chrono::{NaiveDate, Utc};
     use tt_core::user::Roles;
     use tt_repo_sqlite::SqliteRepo;
 
     fn day(month: u32, day: u32) -> NaiveDate {
         NaiveDate::from_ymd_opt(2026, month, day).unwrap()
+    }
+
+    /// Midday UTC on that day: the same date everywhere these events are.
+    fn noon(month: u32, d: u32) -> DateTime<Utc> {
+        day(month, d).and_hms_opt(12, 0, 0).unwrap().and_utc()
     }
 
     fn event(key: &str, start: NaiveDate, end: NaiveDate) -> Event {
@@ -281,7 +286,7 @@ mod tests {
     #[tokio::test]
     async fn a_viewer_with_a_team_is_offered_that_teams_events() {
         let repo = repo().await;
-        let context = resolve(&repo, Some(&viewer(Some(10101))), None, day(3, 13)).await;
+        let context = resolve(&repo, Some(&viewer(Some(10101))), None, noon(3, 13)).await;
 
         assert_eq!(keys(&context.options), ["2026late"]);
         // Not the event running today: this team is not at it.
@@ -292,7 +297,7 @@ mod tests {
     async fn anyone_else_is_offered_everything_and_lands_on_todays_event() {
         let repo = repo().await;
         for who in [None, Some(viewer(None)), Some(viewer(Some(254)))] {
-            let context = resolve(&repo, who.as_ref(), None, day(3, 13)).await;
+            let context = resolve(&repo, who.as_ref(), None, noon(3, 13)).await;
             assert_eq!(keys(&context.options), ["2026early", "2026mid", "2026late"]);
             assert_eq!(context.selected.unwrap().key, "2026mid", "{who:?}");
         }
@@ -305,7 +310,7 @@ mod tests {
             &repo,
             Some(&viewer(Some(10101))),
             Some("2026early"),
-            day(3, 13),
+            noon(3, 13),
         )
         .await;
 
@@ -321,7 +326,7 @@ mod tests {
     #[tokio::test]
     async fn an_unknown_event_falls_back_and_says_so() {
         let repo = repo().await;
-        let context = resolve(&repo, None, Some("2026nope"), day(3, 13)).await;
+        let context = resolve(&repo, None, Some("2026nope"), noon(3, 13)).await;
 
         assert_eq!(context.unknown.as_deref(), Some("2026nope"));
         assert_eq!(context.selected.unwrap().key, "2026mid");
@@ -334,7 +339,7 @@ mod tests {
             .await
             .expect("migrate");
 
-        let context = resolve(&repo, None, None, day(3, 13)).await;
+        let context = resolve(&repo, None, None, noon(3, 13)).await;
         let panel = panel(&repo, &context, None).await;
 
         assert!(panel.none_loaded);
