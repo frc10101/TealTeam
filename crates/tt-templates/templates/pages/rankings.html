@@ -29,14 +29,14 @@
         <a href="/lead-scout/rankings/enter{{ nav.event.query() }}">type the rankings in</a>.
       </p>
     {% endif %}
-    <p><a href="/lead-scout{{ nav.event.query() }}">Back to Lead Scout</a></p>
+    <p><a class="back" href="/lead-scout{{ nav.event.query() }}">Back to Lead Scout</a></p>
   </div>
 </section>
 
 {% if !rows.is_empty() %}
   <section class="card">
     <div class="card-body table-scroll">
-      <table class="data-table rankings">
+      <table class="data-table rankings cards" role="table">
         <caption class="visually-hidden">Teams, sorted by the underlined column</caption>
         <thead>
           <tr>
@@ -45,17 +45,17 @@
                 <a href="{{ column.href }}"{% if column.current %} class="current"{% endif %}>{{ column.label }}</a>
               </th>
             {% endfor %}
-            <th scope="col" class="num">n</th>
+            <th scope="col" class="num count">n</th>
           </tr>
         </thead>
         <tbody>
           {% for row in rows %}
             <tr>
-              <td class="num">{{ row.rank }}</td>
+              <td class="num" data-label="Rank">{{ row.rank }}</td>
               <th scope="row">{{ row.team }}</th>
               <td class="name">{{ row.name }}</td>
-              <td class="num">{% if row.score.is_empty() %}—{% else %}{{ row.score }}{% endif %}</td>
-              <td class="num{% if row.thin %} thin{% endif %}">{{ row.n }}{% if row.thin && row.n > 0 %} <span class="badge badge-gray">thin</span>{% endif %}</td>
+              <td class="num" data-label="Score">{% if row.score.is_empty() %}—{% else %}{{ row.score }}{% endif %}</td>
+              <td class="num{% if row.thin %} thin{% endif %}" data-label="n">{{ row.n }}{% if row.thin && row.n > 0 %} <span class="badge badge-gray">thin</span>{% endif %}</td>
             </tr>
           {% endfor %}
         </tbody>

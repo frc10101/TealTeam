@@ -84,7 +84,7 @@
           <p class="muted">Nobody has been assigned anything yet.</p>
         {% else %}
           <div class="table-scroll">
-            <table class="data-table coverage">
+            <table class="data-table coverage cards" role="table">
               <caption class="visually-hidden">How each scout and tablet is doing</caption>
               <thead>
                 <tr><th scope="col">Assigned to</th><th scope="col">Recorded</th><th scope="col">Missed</th><th scope="col">To come</th></tr>
@@ -93,9 +93,9 @@
                 {% for t in coverage %}
                   <tr>
                     <th scope="row">{{ t.name }}{% if t.by_device %} <span class="slot-kind">tablet</span>{% endif %}{% if t.online %} <span class="badge badge-teal">online</span>{% endif %}</th>
-                    <td>{{ t.recorded }}</td>
-                    {% if t.missed > 0 %}<td class="missed">{{ t.missed }}</td>{% else %}<td>0</td>{% endif %}
-                    <td>{{ t.to_come }}</td>
+                    <td data-label="Recorded">{{ t.recorded }}</td>
+                    {% if t.missed > 0 %}<td class="missed" data-label="Missed">{{ t.missed }}</td>{% else %}<td data-label="Missed">0</td>{% endif %}
+                    <td data-label="To come">{{ t.to_come }}</td>
                   </tr>
                 {% endfor %}
               </tbody>
@@ -105,7 +105,7 @@
       </div>
       <p class="hint">Tap a match to choose who watches each of its robots.</p>
     {% endif %}
-    <p><a href="/lead-scout{{ nav.event.query() }}">Back to Lead Scout</a></p>
+    <p><a class="back" href="/lead-scout{{ nav.event.query() }}">Back to Lead Scout</a></p>
   </div>
 </section>
 

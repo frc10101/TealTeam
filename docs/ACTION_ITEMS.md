@@ -204,7 +204,7 @@ This is the highest-leverage cluster in either source document. It removes the 5
 | U13 | Notes filtered to the viewer's own `submitting_team_id`; no-team viewers see none | RS §5.4 | S | **Done** — `tt_core::notes::Notes`, on the review page and the team profile |
 | U14 | **Provenance badges** (`n=`, `scouted_at`, `synced ago`) on every aggregate | RI-U7 | S | **Done** — rankings, the team profile, and the drive coach panel |
 | U15 | **Remove synchronous upstream calls from page renders.** `/teams` and the team-select fallback both blocked a render on the network | RS §12.7 | M | **Done** — no render calls upstream; `no_page_asks_upstream_even_when_storage_has_nothing` holds it |
-| U16 | Mobile pass: bottom nav, 44px touch targets, card layouts under 600px | RI-U10 · RS §7 | M |  |
+| U16 | Mobile pass: bottom nav, 44px touch targets, card layouts under 600px | RI-U10 · RS §7 | M | **Done** — tab bar under 40rem, `.cards` tables, no target under 44px |
 | U17 | DB viewer — **guard with `is_admin` and exclude `sessions`**, or do not rebuild it. The old one was completely unguarded and exposed every user's email and all session rows | RS §12.4 | S |  |
 
 ### Upstream data
@@ -387,7 +387,15 @@ Checked against the binary at phone width: ranks synced 35 minutes ago read "las
 
 Checked in headless Chromium at 390px and 1280px, with `/health` dropping the connection: the chip switches from Synced to "Offline · nothing unsent" on the next check and fits beside the brand at both widths.
 
-**Still open in Phase 2:** U16, U17, and P3-P9.
+**The mobile pass (U16).** Under 40rem (640px) the sections are a **tab bar fixed along the bottom of the screen**, where a thumb reaches. Each tab is 56px, since it is tapped mid-match, and the section you are in is lit (`static/js/tabs.js`, by the first part of the path). Wider, the same links are a row of tabs under the header's first row, which holds the brand, the connection chip, the event, and the account. Signed out there is no bar: the sign-in page is the only place to be. The breakpoint is 40rem, not 600px, to match every other breakpoint in the stylesheet. It covers everything under 600px.
+
+**No tap target under 44px.** `.btn-sm` keeps its smaller text but not a smaller height. Sign out, Sign in, and the no-script Go are full-size buttons. The brand, standalone "Back to …" links (`a.back`), rankings sort links, and the team-number links on the coach panel, the team profile, and the pick list all get a 44px box. Links inside a sentence stay text, as WCAG allows.
+
+**Tables become cards under 40rem.** A `.data-table.cards` turns each row into a card. The row's header cell is the card's title, and every other cell labels itself from its `data-label`. Rankings keep their sort links as a row of buttons above the cards, and each card shows the rank down the left, then the team and its name, then score and n. The coverage table's cards read "Kim · Recorded 1 · Missed 1 · To come 1". Both tables carry `role="table"`, as the assignment grid does, so screen readers still treat them as tables once they are drawn as blocks. Those two are the only tables left; the assignment grid already had its own card layout (L1).
+
+Checked by a script in headless Chromium that measures every link, button, input, and summary, and the page width. Across all fourteen pages, signed in as an admin with a seeded event, at 360px, 390px, and 1280px: nothing under 44px outside a sentence, and nothing wider than the screen. Screenshots at 390px, 700px, and 1280px show the bar, the lit tab, the cards, and a header that no longer wraps the account onto a line of its own.
+
+**Still open in Phase 2:** U17, and P3-P9.
 
 ---
 

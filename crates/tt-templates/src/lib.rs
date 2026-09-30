@@ -2081,7 +2081,7 @@ mod tests {
             ),
             "{html}"
         );
-        assert!(html.contains("<td class=\"missed\">1</td>"));
+        assert!(html.contains("<td class=\"missed\" data-label=\"Missed\">1</td>"));
 
         page.coverage.clear();
         let html = page.render_html().expect("render");

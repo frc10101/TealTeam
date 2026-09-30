@@ -522,6 +522,29 @@ mod flow_tests {
         assert!(text(script).await.contains(r#"fetch("/health""#));
     }
 
+    #[tokio::test]
+    async fn the_sections_are_a_tab_bar_for_the_signed_in_only() {
+        let state = migrated_state().await;
+        let cookie = signed_up(&state).await;
+
+        // U16: signed in, the sections are there, and the body keeps room for
+        // them as a bar along the bottom of a phone's screen.
+        let page = text(get(&state, "/", Some(&cookie)).await).await;
+        assert!(page.contains(r#"<body class="has-tabs">"#));
+        assert!(page.contains(r#"<nav class="nav-links" aria-label="Main">"#));
+        assert!(page.contains(r#"src="/static/js/tabs.js""#));
+        // Every button in the header is full size.
+        assert!(!page.contains("btn-sm"), "{page}");
+
+        // Signed out there is only the sign-in page to be on: no bar at all.
+        let page = text(get(&state, "/sign-in", None).await).await;
+        assert!(page.contains("<body>"));
+        assert!(!page.contains("nav-links"));
+
+        let script = get(&state, "/static/js/tabs.js", None).await;
+        assert_eq!(script.status(), StatusCode::OK);
+    }
+
     #[test]
     fn offline_is_never_called_a_mode() {
         // It is a state the app observes (I11), not a toggle. The retired
@@ -2053,7 +2076,9 @@ mod flow_tests {
 
         let rankings =
             text(get(&state, "/lead-scout/rankings?event=2026now", Some(&admin)).await).await;
-        assert!(ranking_row(&rankings, 254).contains("<td class=\"num\">1</td>"));
+        assert!(
+            ranking_row(&rankings, 254).contains("<td class=\"num\" data-label=\"Rank\">1</td>")
+        );
     }
 
     #[tokio::test]
@@ -2268,10 +2293,10 @@ mod flow_tests {
         assert!(cell("10101").contains("slot red missed") && cell("10101").contains(">Missed<"));
         assert!(cell("1").contains(">Not scouted<"));
 
-        let table = &body[body.find(r#"class="data-table coverage""#).unwrap()..];
-        assert!(table.contains("<th scope=\"row\">Sam <span class=\"badge badge-teal\">online</span></th>\n                    <td>1</td>"), "{table}");
+        let table = &body[body.find(r#"class="data-table coverage cards""#).unwrap()..];
+        assert!(table.contains("<th scope=\"row\">Sam <span class=\"badge badge-teal\">online</span></th>\n                    <td data-label=\"Recorded\">1</td>"), "{table}");
         assert!(table.contains("<th scope=\"row\">Kim</th>"));
-        assert!(table.contains(r#"<td class="missed">1</td>"#));
+        assert!(table.contains(r#"<td class="missed" data-label="Missed">1</td>"#));
     }
 
     #[tokio::test]
@@ -2631,7 +2656,9 @@ mod flow_tests {
         let body = text(get(&state, "/lead-scout/rankings", Some(&admin)).await).await;
         let row = ranking_row(&body, 254);
         assert!(
-            row.contains(&format!("<td class=\"num\">{average:.1}</td>")),
+            row.contains(&format!(
+                "<td class=\"num\" data-label=\"Score\">{average:.1}</td>"
+            )),
             "{row}"
         );
         assert!(row.contains("2 <span class=\"badge badge-gray\">thin</span>"));
@@ -2639,7 +2666,7 @@ mod flow_tests {
         // 10101's only observation is pending: listed, unscored, and counted
         // as waiting.
         let row = ranking_row(&body, 10101);
-        assert!(row.contains("<td class=\"num\">—</td>"));
+        assert!(row.contains("<td class=\"num\" data-label=\"Score\">—</td>"));
         assert!(body.contains("1 more is waiting for review and not counted yet."));
     }
 

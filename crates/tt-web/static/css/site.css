@@ -76,15 +76,52 @@ h1, h2 { margin: 0; font-size: 1.25rem; line-height: 1.3; }
   max-width: 70rem; margin: 0 auto; padding: 0.5rem 1rem;
   display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem;
 }
-.brand { font-weight: 600; font-size: 1.125rem; color: var(--gray-100); text-decoration: none; }
-.nav-links { display: flex; gap: 0.25rem; flex: 1 1 auto; flex-wrap: wrap; }
-.nav-links a, .nav-account a {
+.brand {
+  display: inline-flex; align-items: center; min-height: var(--tap);
+  font-weight: 600; font-size: 1.125rem; color: var(--gray-100); text-decoration: none;
+}
+.nav-account { display: flex; align-items: center; gap: 0.5rem; margin-left: auto; }
+.nav-account a {
   display: inline-flex; align-items: center; min-height: var(--tap);
   padding: 0 0.75rem; border-radius: var(--radius);
   color: var(--gray-300); text-decoration: none; font-weight: 500;
 }
-.nav-links a:hover, .nav-account a:hover { background: var(--gray-800); color: var(--teal-300); }
-.nav-account { display: flex; align-items: center; gap: 0.5rem; }
+
+/* The sections (U16). On a phone, a tab bar fixed along the bottom of the
+   screen, where the thumb of the hand holding it reaches; each tab is match
+   size, since it is tapped mid-match. The body keeps the bar's height free so
+   it never covers the end of a page. The lit tab is set by static/js/tabs.js. */
+.nav-links {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+  display: flex; background: var(--gray-900); border-top: 1px solid var(--gray-700);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.nav-links a {
+  flex: 1 1 0; min-width: 0; min-height: var(--tap-match); padding: 0.25rem;
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  font-size: 0.8125rem; line-height: 1.2; font-weight: 500;
+  color: var(--gray-300); text-decoration: none;
+}
+.nav-links a[aria-current="page"] {
+  color: var(--teal-300); background: var(--gray-800); box-shadow: inset 0 3px 0 var(--teal-500);
+}
+body.has-tabs { padding-bottom: calc(var(--tap-match) + env(safe-area-inset-bottom)); }
+
+/* Wider: the sections are a row of tabs across the header, under the brand,
+   the event, and the account, so the account never wraps on its own. */
+@media (min-width: 40rem) {
+  .nav-links {
+    position: static; order: 2; flex: 1 1 100%; flex-wrap: wrap; gap: 0.25rem;
+    background: none; border: 0; padding: 0;
+  }
+  .nav-links a {
+    flex: none; min-height: var(--tap); padding: 0 0.75rem;
+    font-size: 1rem; border-radius: var(--radius);
+  }
+  .nav-links a[aria-current="page"] { box-shadow: inset 0 -3px 0 var(--teal-500); }
+  .nav-links a:hover, .nav-account a:hover { background: var(--gray-800); color: var(--teal-300); }
+  body.has-tabs { padding-bottom: 0; }
+}
 .inline { display: inline; }
 
 /* The event switcher (U2). On a phone it takes a full-width row at the bottom
@@ -93,7 +130,7 @@ h1, h2 { margin: 0; font-size: 1.25rem; line-height: 1.3; }
 .event-switcher { display: flex; gap: 0.5rem; flex: 1 1 100%; order: 1; }
 .event-switcher .form-select { flex: 1; min-width: 0; text-overflow: ellipsis; }
 @media (min-width: 40rem) {
-  .event-switcher { flex: 0 1 22rem; order: 0; }
+  .event-switcher { flex: 1 1 12rem; max-width: 22rem; order: 0; }
 }
 
 /* Screen-reader text: present for assistive technology, invisible otherwise. */
@@ -157,7 +194,8 @@ h1, h2 { margin: 0; font-size: 1.25rem; line-height: 1.3; }
 .btn-secondary:hover { background: var(--gray-800); }
 .btn-danger { background: var(--red-900); color: #fecaca; border-color: var(--red-500); }
 .btn-danger:hover { background: color-mix(in srgb, var(--red-900) 70%, black); }
-.btn-sm { min-height: 2rem; padding: 0 0.625rem; font-size: 0.875rem; }
+/* Smaller text and padding, never a smaller target. */
+.btn-sm { min-height: var(--tap); padding: 0 0.625rem; font-size: 0.875rem; }
 .btn-lg { min-height: var(--tap-match); padding: 0 1.5rem; font-size: 1.125rem; }
 
 /* ── Feedback ───────────────────────────────────────────────────────────── */
@@ -182,6 +220,10 @@ h1, h2 { margin: 0; font-size: 1.25rem; line-height: 1.3; }
 .link-chip { display: inline-flex; }
 
 .muted { color: var(--gray-500); font-size: 0.9375rem; }
+
+/* A link standing on its own ("Back to Lead Scout") is a target, so it gets a
+   target's height. Links inside a sentence stay text. */
+a.back { display: inline-flex; align-items: center; min-height: var(--tap); }
 
 /* ── Rosters ────────────────────────────────────────────────────────────── */
 
@@ -320,16 +362,10 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
 /* ── Rankings (L11) and weights (L12) ───────────────────────────────────── */
 
 .data-table th.num, .data-table td.num { text-align: right; }
-.rankings thead a { color: var(--gray-300); text-decoration: none; display: inline-flex; min-height: var(--tap); align-items: center; }
+.rankings thead a { color: var(--gray-300); text-decoration: none; display: inline-flex; min-height: var(--tap); min-width: var(--tap); align-items: center; }
 .rankings thead a.current { color: var(--teal-300); text-decoration: underline; }
 .data-table.rankings thead th:not(.num) { text-align: left; }
 .rankings td.name { text-align: left; }
-/* Five columns on a phone: tighter cells, and names wrap rather than push the
-   score off the right edge. */
-@media (max-width: 40rem) {
-  .rankings th, .rankings td { padding: 0.375rem; }
-  .rankings td.name { font-size: 0.875rem; overflow-wrap: break-word; }
-}
 .rankings td.thin { color: var(--gray-500); }
 .weights { grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); }
 .weights .field > p { margin: 0; }
@@ -344,7 +380,7 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
 }
 .team-matches li.red  { background: color-mix(in srgb, var(--red-900) 45%, transparent); }
 .team-matches li.blue { background: color-mix(in srgb, var(--blue-900) 45%, transparent); }
-.team-matches a { margin-left: auto; }
+.team-matches a { margin-left: auto; display: inline-flex; align-items: center; min-height: var(--tap); min-width: var(--tap); }
 .team-notes { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem; }
 .team-notes p { margin: 0; }
 .team-notes .text-answer { white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -367,6 +403,7 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
 .coach-side ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.125rem; }
 .coach-side li { display: flex; flex-wrap: wrap; gap: 0 0.75rem; align-items: center; min-height: var(--tap); }
 .coach-side li.us strong { color: var(--teal-300); }
+.coach-side a { display: inline-flex; align-items: center; min-height: var(--tap); min-width: var(--tap); }
 #coach-schedule { gap: 0.75rem; }
 
 /* ── Assignment grid (L1) ───────────────────────────────────────────────── */
@@ -407,6 +444,49 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
 .data-table td { text-align: right; }
 .data-table thead th:not(:first-child) { text-align: right; }
 .data-table td.missed { color: #fecaca; font-weight: 600; }
+
+/* No sideways scrolling on a phone (U16): below 40rem a .cards table turns
+   each row into a card. The row's header cell is the card's title, and every
+   other cell names itself from its data-label, since the column headers are
+   hidden. role="table" on the table keeps it a table to screen readers. */
+@media (max-width: 39.99rem) {
+  .data-table.cards, .data-table.cards tbody, .data-table.cards tr,
+  .data-table.cards th, .data-table.cards td { display: block; }
+  .data-table.cards thead {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);
+  }
+  .data-table.cards tbody { display: grid; gap: 0.5rem; }
+  .data-table.cards tbody tr {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 1rem;
+    padding: 0.5rem 0.75rem; background: var(--gray-800);
+    border: 1px solid var(--gray-700); border-radius: var(--radius);
+  }
+  .data-table.cards th, .data-table.cards td { padding: 0; border: 0; text-align: left; }
+  .data-table.cards tbody th[scope="row"] { flex: 1 1 100%; font-size: 1.125rem; }
+  .data-table.cards td[data-label]::before {
+    content: attr(data-label) " "; color: var(--gray-500); font-size: 0.8125rem; font-weight: 400;
+  }
+
+  /* Rankings keep their sort links, as a row of buttons above the cards. Each
+     card is the rank down the left, the team and its name, then score and n. */
+  .rankings.cards thead { position: static; width: auto; height: auto; overflow: visible; clip: auto; display: block; margin-bottom: 0.75rem; }
+  .rankings.cards thead tr { display: flex; flex-wrap: wrap; align-items: center; gap: 0.375rem; }
+  .rankings.cards thead tr::before { content: "Sort by"; color: var(--gray-500); font-size: 0.8125rem; }
+  .rankings.cards thead th { padding: 0; border: 0; }
+  .rankings.cards thead th.count { display: none; }
+  .rankings.cards thead a { padding: 0 0.75rem; border-radius: 999px; background: var(--gray-800); justify-content: center; }
+  .rankings.cards thead a.current { background: var(--teal-700); color: #fff; text-decoration: none; }
+  .rankings.cards tbody tr {
+    display: grid; grid-template-columns: 2.75rem auto auto 1fr; gap: 0.125rem 0.75rem;
+    grid-template-areas: "rank team name name" "rank score count .";
+  }
+  .rankings.cards td[data-label="Rank"] { grid-area: rank; display: flex; flex-direction: column; font-size: 1.25rem; line-height: 1.2; }
+  .rankings.cards td[data-label="Rank"]::before { font-size: 0.75rem; }
+  .rankings.cards tbody th[scope="row"] { grid-area: team; }
+  .rankings.cards td.name { grid-area: name; min-width: 0; overflow-wrap: anywhere; }
+  .rankings.cards td[data-label="Score"] { grid-area: score; }
+  .rankings.cards td[data-label="n"] { grid-area: count; }
+}
 
 .slot-station { font-size: 0.75rem; color: var(--gray-300); }
 .slot-team { font-size: 1.125rem; }
@@ -463,7 +543,7 @@ details.card:not([open]) > summary { border-bottom: 0; }
 .pick:target { border-color: var(--teal-300); }
 .pick-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 0.75rem; }
 .pick-place { min-width: 1.75rem; color: var(--gray-500); font-variant-numeric: tabular-nums; }
-.pick-team { font-size: 1.25rem; font-weight: 600; color: var(--gray-100); }
+.pick-team { display: inline-flex; align-items: center; min-height: var(--tap); min-width: var(--tap); font-size: 1.25rem; font-weight: 600; color: var(--gray-100); }
 .pick-name { min-width: 0; overflow-wrap: anywhere; }
 .pick.crossed .pick-team, .pick.crossed .pick-name { text-decoration: line-through; color: var(--gray-500); }
 .pick-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
