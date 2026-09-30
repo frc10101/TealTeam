@@ -27,6 +27,14 @@ use tt_repo::{RepoError, Result};
 /// diverging between machines.
 pub static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 
+/// The newest migration this build carries: the schema it expects (S11).
+///
+/// This, not `PRAGMA user_version` (which no migration sets), is the number a
+/// client's sync must agree with: rows in the change log are shaped by it.
+pub fn latest() -> i64 {
+    MIGRATOR.iter().map(|m| m.version).max().unwrap_or(0)
+}
+
 /// Apply any migrations the database has not seen. Forward only.
 ///
 /// Safe to call on every boot, including when nothing has changed.

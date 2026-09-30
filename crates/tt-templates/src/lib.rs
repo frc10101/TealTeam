@@ -77,6 +77,20 @@ pub struct Nav {
     /// The offline shell (C1), which cannot know who is looking: no account
     /// links at all, rather than a "Sign in" to someone who is signed in.
     pub offline_shell: bool,
+    /// What this page was built by (S11), for `static/js/link.js` to compare
+    /// with `/health`. Empty build: not stamped, nothing compared.
+    pub version: PageVersion,
+}
+
+/// The versions a page was rendered under (S11).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PageVersion {
+    /// `BUILD_VERSION`: the binary's static files, templates, and worker.
+    pub build: String,
+    /// The newest migration: the database schema.
+    pub schema: i64,
+    /// The season's form version: what the scouting form asks.
+    pub form: i64,
 }
 
 impl Nav {
@@ -100,6 +114,7 @@ impl Nav {
                 event: EventSwitcher::default(),
                 link: LinkChips::default(),
                 offline_shell: false,
+                version: PageVersion::default(),
             },
             None => Self::anonymous(storage_ready),
         }

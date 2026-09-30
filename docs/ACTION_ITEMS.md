@@ -451,7 +451,7 @@ The architectural payoff. Phase 2 must be shipping before this starts.
 | S8 | **SSE fan-out endpoint** with `Last-Event-ID` resume and a polling fallback | RI-S9 | M | **Done** — `GET /api/sync/stream`; see Phase 3 notes |
 | S9 | **Push assignment changes over SSE** instead of re-rendering the whole grid on every click | RI-A2 · RS §12.8 | M |  |
 | S10 | SQLite snapshot bootstrap (`/api/sync/snapshot`, OPFS import) — ship a file, not a million rows | RI-O17 | M |  |
-| S11 | Schema version handshake + blocking update banner. The mid-event deploy footgun | RI-O18 | S |  |
+| S11 | Schema version handshake + blocking update banner. The mid-event deploy footgun | RI-O18 | S | **Done** — page `<meta>` vs `/health`, `?schema=` on `/api/sync/pull`; see Phase 3 notes |
 | S12 | Clients compute and record their clock offset against the server on each sync, so device skew is measurable rather than mysterious | RI §Time Sync | S |  |
 
 ### Phase 3 notes
@@ -510,13 +510,38 @@ A new worker is already fetched by the next navigation. S11 decides when the pag
 
 Not checked: Safari, Firefox, or a real tablet.
 
-
 **The live stream (S8).** `GET /api/sync/stream` pushes S2's two streams as server-sent events, with the same cursors and the same `sync::visible`. So a stream can no more leak another team's notes or pick list than a pull can. Every event's id is both cursors, `"<changes>-<upstream>"`.
 - **Resuming.** A browser reconnects on its own with that id as `Last-Event-ID` and carries on from there. A client with saved cursors passes `?changes=&upstream=` instead.
 - **Event types.** `change`, `upstream`, and `cursor`: rows went by that this viewer may not see, so the id moves on without them. Later types join on the same channel: assignment pushes (S9), chat (X2). `EventSource` ignores types a client has not registered for.
 - **Keeping it open.** A comment line every 15 s keeps phones and proxies from dropping an idle stream.
 - **The cap.** At most 64 streams are open at once. Past that the answer is a 503 with `Retry-After`, naming `/api/sync/pull` as the polling fallback.
 - **Cost.** Each open stream checks the logs once a second, which is nothing to SQLite at that count. Changes wait out the two-second lag anyway, so push latency is 2-3 s. A shared notifier would cut the queries if the cap ever needs to rise. Nothing in the browser listens yet; C7's sync client is the first.
+
+**A deploy mid-event blocks old pages instead of letting them post (S11).** Every page carries `<meta name="tt-build">`, `tt-schema`, and `tt-form`, which are the versions it was rendered under (`Nav.version`, `shell::page_version`). `/health` reports the same three. `static/js/link.js` already checks `/health` every 30 seconds, and at once when the network comes back, so it compares them.
+
+- **Any difference** is a deploy: the build, the schema, or the season form. The page shows a **blocking banner**, "TealTeam has been updated", over an `inert` page, with one button, **Reload now**. It adds that the scouting form changed too only when the form version differs. A rollback is also a difference, and reloading is right for it too.
+- **Before reloading,** the page fires `tt:before-update`. Listeners may add promises to `detail.waitFor`, and the reload waits for them, for up to 5 seconds. `draft.js` (C3) saves the form there at once, without the debounce, so the last words typed before the deploy are kept. They come back after the reload when the form is unchanged. When the form changed, the draft's key names the old form version, so it stays on the device but does not fill the new form, which the banner says.
+- **The schema number is the newest embedded migration** (`migrate::latest()`). `PRAGMA user_version` is never set by a migration, so `Repo::schema_version` does not give it. The build alone would be the wrong number for sync, since it changes with any template.
+
+**Sync refuses a client on another schema.** `/api/sync/pull?schema=<n>` and S8's `/api/sync/stream?schema=<n>` answer **409** when `n` is not the server's; the stream checks before it takes one of its 64 slots. The answer carries `"action": "reload"` for an older client, or `"server-behind"` for a client newer than the Pi, which is the lead scout's problem. Every pull also reports the server's `schema`, `build`, and `form`, so a client that did not send `schema` is told anyway. An older client that sends no schema is still served, because nothing sends one yet.
+
+**What the outbox (C7) must do with this:**
+- Send `?schema=` on every pull, and on its push, which should refuse the same way.
+- Listen for `tt:before-update` and put its flush in `detail.waitFor`, so queued submissions are pushed before the reload. A push refused for schema must **not** drop the queue: keep it, and offer it as a file to hand to the lead scout. The 5-second cap is for drafts; C7 may need a longer one while the push is making progress.
+- Treat a 409 with `server-behind` as "stop syncing and tell someone", never "reload".
+- Open its `EventSource` with `?schema=` too. After a deploy the stream drops, and the browser reconnects to the same URL on its own. The new server's 409 then stops the `EventSource` for good, where a stream that simply ended would have it reconnect over and over. An `EventSource` cannot read the 409's body, so on an error that leaves it `CLOSED`, the client pulls once with the same `?schema=` to learn which way it is.
+
+Observations already carry their form version, so one saved from an old form lands flagged on the review page, not lost.
+
+**Checked in Chromium over the DevTools protocol** with three builds (`crates/tt-web/tests/browser/update-banner.mjs`, 12 checks, all pass). The builds were as is, with one CSS comment added, and with the season's `version` bumped.
+- A scout had the Q5 form open. Words were typed but not yet saved by the debounce when the server was swapped for the second build.
+- The page blocked, with the button focused and the page behind it inert. **Reload now** landed on the new build with those words back in the notes box.
+- Swapped again for the third build, the banner also said the form had changed. After the reload the new form version was on the page, and the old form's draft was still on the device.
+- With the same build again, there was no banner.
+- The 409s, and the stamps matching `/health`, are Rust tests.
+
+Not checked: a real tablet, or an iPad's `pagehide`.
+
 ---
 
 ## Phase 4 — Analysis and communication

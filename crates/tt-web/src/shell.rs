@@ -12,11 +12,20 @@
 
 use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
 use axum::response::{Html, IntoResponse, Response};
-use tt_templates::{OfflinePage, Page};
+use tt_templates::{OfflinePage, Page, PageVersion};
 
 use crate::assets::{ASSETS, BUILD_VERSION};
 
 const SOURCE: &str = include_str!("sw.js");
+
+/// What a page is stamped with, and `/health` reports (S11).
+pub fn page_version(state: &crate::startup::AppState) -> PageVersion {
+    PageVersion {
+        build: BUILD_VERSION.to_string(),
+        schema: tt_repo_sqlite::migrate::latest(),
+        form: state.season.version,
+    }
+}
 
 /// Everything the worker caches at install: the shell page and every static
 /// file. Never a page with anyone's data in it.

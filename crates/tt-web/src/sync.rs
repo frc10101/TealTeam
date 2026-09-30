@@ -14,6 +14,15 @@
 //!
 //! `GET /api/sync/stream` (S8) is the same two streams pushed as server-sent
 //! events, for as long as the connection lasts: see [`stream`].
+//!
+//! **Schema handshake (S11).** A client says which schema it was built for
+//! with `?schema=<n>`, the newest migration it knows. The change log's rows
+//! are shaped by the schema, so a client on another one is refused with 409
+//! and told which side is behind, rather than fed rows it will misread: an
+//! older client must reload into the new version, and a newer one has met a
+//! Pi running an old build, which the lead scout needs to hear about. Every
+//! answer also says the server's schema, build, and form version, so a
+//! client that did not send one is still told.
 
 use std::collections::{HashMap, VecDeque};
 use std::convert::Infallible;
@@ -44,6 +53,27 @@ pub const CHANGES_PER_PULL: i64 = 500;
 /// Most upstream responses per pull. These are whole API bodies.
 pub const UPSTREAM_PER_PULL: i64 = 20;
 
+/// The 409 for a client that said it was built for another schema (S11), or
+/// nothing when it matches or did not say. The same for `pull` and `stream`.
+fn schema_mismatch(state: &AppState, query: &HashMap<String, String>) -> Option<Response> {
+    let client = query.get("schema")?.parse::<i64>().ok()?;
+    let server = crate::shell::page_version(state);
+    (client != server.schema).then(|| {
+        (
+            StatusCode::CONFLICT,
+            Json(json!({
+                "error": "schema mismatch",
+                "client_schema": client,
+                "server_schema": server.schema,
+                "server_build": server.build,
+                // What the client should do about it.
+                "action": if client < server.schema { "reload" } else { "server-behind" },
+            })),
+        )
+            .into_response()
+    })
+}
+
 /// `GET /api/sync/pull?changes=<cursor>&upstream=<cursor>`. Cursors default to
 /// 0, which is everything.
 pub async fn pull(
@@ -59,6 +89,11 @@ pub async fn pull(
             .max(0)
     };
     let (after_change, after_upstream) = (cursor("changes"), cursor("upstream"));
+
+    if let Some(refused) = schema_mismatch(&state, &query) {
+        return refused;
+    }
+    let server = crate::shell::page_version(&state);
 
     let changes = state
         .repo
@@ -106,6 +141,9 @@ pub async fn pull(
         .collect();
 
     Json(json!({
+        "schema": server.schema,
+        "build": server.build,
+        "form": server.form,
         "changes": shown,
         "changes_cursor": changes_cursor,
         "changes_more": changes_more,
@@ -231,13 +269,20 @@ pub fn parse_event_id(raw: &str) -> Option<(i64, i64)> {
 /// Later types join these on the same channel: assignment pushes (S9) and
 /// chat (X2). A client listens for the types it knows, and `EventSource`
 /// ignores the rest. Over [`MAX_STREAMS`] the answer is a 503 naming the
-/// polling fallback.
+/// polling fallback. With `?schema=` not the server's, a 409 as for [`pull`]
+/// (S11).
 pub async fn stream(
     State(state): State<AppState>,
     Auth(viewer): Auth,
     headers: HeaderMap,
     Query(query): Query<HashMap<String, String>>,
 ) -> Response {
+    // Before a slot is taken. A 409 also stops an EventSource for good,
+    // where a stream that ended would have it reconnect over and over; the
+    // client learns why from a pull with the same ?schema=.
+    if let Some(refused) = schema_mismatch(&state, &query) {
+        return refused;
+    }
     let Some(slot) = Slot::acquire(&OPEN_STREAMS, MAX_STREAMS) else {
         return (
             StatusCode::SERVICE_UNAVAILABLE,

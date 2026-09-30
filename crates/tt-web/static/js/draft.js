@@ -158,6 +158,9 @@
   form.addEventListener("change", soon);
   // Leaving, or the screen going off: write now, not in 400 ms.
   window.addEventListener("pagehide", save);
+  // S11: the page is about to reload into a new version. Keep what is typed
+  // now, without waiting for the debounce.
+  document.addEventListener("tt:before-update", save);
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "hidden") save();
   });

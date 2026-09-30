@@ -331,10 +331,14 @@ async fn health_json(State(state): State<AppState>) -> impl IntoResponse {
     let ready = state.repo.health().await.is_ready();
     // The build (C1) is the service worker's cache version, and what S11's
     // version handshake compares against.
+    // S11: what a page compares its own stamp with.
+    let version = crate::shell::page_version(&state);
     let body = format!(
-        r#"{{"storage":"{}","build":"{}"}}"#,
+        r#"{{"storage":"{}","build":"{}","schema":{},"form":{}}}"#,
         if ready { "ready" } else { "down" },
-        crate::assets::BUILD_VERSION
+        version.build,
+        version.schema,
+        version.form
     );
     (
         [(axum::http::header::CONTENT_TYPE, "application/json")],
@@ -433,13 +437,13 @@ mod tests {
             .expect("request");
 
         assert_eq!(response.status(), StatusCode::OK);
-        assert_eq!(
-            body_string(response).await,
-            format!(
-                r#"{{"storage":"down","build":"{}"}}"#,
-                crate::assets::BUILD_VERSION
-            )
-        );
+        let body: serde_json::Value =
+            serde_json::from_str(&body_string(response).await).expect("JSON");
+        assert_eq!(body["storage"], "down");
+        // S11: the versions a page compares its own with.
+        assert_eq!(body["build"], crate::assets::BUILD_VERSION);
+        assert_eq!(body["schema"], tt_repo_sqlite::migrate::latest());
+        assert!(body["form"].as_i64().is_some());
     }
 
     #[tokio::test]
@@ -692,6 +696,93 @@ mod flow_tests {
         // Every page offers the worker; the script decides whether it may.
         let page = text(get(&state, "/", Some(&cookie)).await).await;
         assert!(page.contains(r#"src="/static/js/shell.js""#));
+    }
+
+    #[tokio::test]
+    async fn pages_carry_the_versions_health_reports_and_a_hidden_banner() {
+        // S11.
+        let state = migrated_state().await;
+        let cookie = signed_up(&state).await;
+        let health: serde_json::Value =
+            serde_json::from_str(&text(get(&state, "/health", None).await).await).unwrap();
+
+        for (uri, cookie) in [("/", Some(cookie.as_str())), ("/sign-in", None)] {
+            let page = text(get(&state, uri, cookie).await).await;
+            for (meta, value) in [
+                ("tt-build", health["build"].as_str().unwrap().to_string()),
+                ("tt-schema", health["schema"].to_string()),
+                ("tt-form", health["form"].to_string()),
+            ] {
+                assert!(
+                    page.contains(&format!(r#"<meta name="{meta}" content="{value}">"#)),
+                    "{uri}: {meta}"
+                );
+            }
+            assert!(page.contains(r#"id="update-banner""#), "{uri}");
+            assert!(
+                page.contains(r#"aria-describedby="update-body" hidden>"#),
+                "{uri}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn a_sync_client_on_another_schema_is_refused_and_told_which_way() {
+        // S11.
+        let state = migrated_state().await;
+        let cookie = signed_up(&state).await;
+        let ours = tt_repo_sqlite::migrate::latest();
+        let pull = |schema: Option<i64>| {
+            let state = state.clone();
+            let cookie = cookie.clone();
+            async move {
+                let uri = match schema {
+                    Some(n) => format!("/api/sync/pull?schema={n}"),
+                    None => "/api/sync/pull".to_string(),
+                };
+                let response = get(&state, &uri, Some(&cookie)).await;
+                let status = response.status();
+                let body: serde_json::Value = serde_json::from_str(&text(response).await).unwrap();
+                (status, body)
+            }
+        };
+
+        let (status, body) = pull(Some(ours - 1)).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(body["action"], "reload", "an older client updates");
+        assert_eq!(body["server_schema"], ours);
+
+        let (status, body) = pull(Some(ours + 1)).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(body["action"], "server-behind", "a newer client warns");
+
+        // The same schema, or none said: served, and told the server's.
+        for schema in [Some(ours), None] {
+            let (status, body) = pull(schema).await;
+            assert_eq!(status, StatusCode::OK, "{schema:?}");
+            assert_eq!(body["schema"], ours);
+            assert!(body["changes"].is_array());
+        }
+
+        // The live stream (S8) asks the same question before it starts.
+        let refused = get(
+            &state,
+            &format!("/api/sync/stream?schema={}", ours - 1),
+            Some(&cookie),
+        )
+        .await;
+        assert_eq!(refused.status(), StatusCode::CONFLICT);
+        let body: serde_json::Value = serde_json::from_str(&text(refused).await).unwrap();
+        assert_eq!(body["action"], "reload");
+        // A matching one opens; the body is endless, so only its head is read.
+        let open = get(
+            &state,
+            &format!("/api/sync/stream?schema={ours}"),
+            Some(&cookie),
+        )
+        .await;
+        assert_eq!(open.status(), StatusCode::OK);
+        assert_eq!(open.headers()[header::CONTENT_TYPE], "text/event-stream");
     }
 
     #[test]

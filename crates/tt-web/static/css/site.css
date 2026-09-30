@@ -216,6 +216,19 @@ body.has-tabs { padding-bottom: calc(var(--tap-match) + env(safe-area-inset-bott
 .badge-gray  { background: var(--gray-700);  color: var(--gray-100); }
 .badge-blue  { background: var(--blue-900);  color: #bfdbfe; }
 
+/* The update banner (S11): over everything, since the page under it is out
+   of date and must not be used. */
+.update-banner {
+  position: fixed; inset: 0; z-index: 20;
+  display: grid; place-items: center; padding: 1rem;
+  background: color-mix(in srgb, var(--gray-950) 85%, transparent);
+}
+.update-card {
+  max-width: 28rem; display: grid; gap: 0.75rem; padding: 1.25rem;
+  background: var(--gray-900); border: 2px solid var(--teal-500); border-radius: var(--radius);
+}
+.update-card p { margin: 0; }
+
 /* The connection chip (I11), beside the brand so it is in sight on a phone. */
 .link-chip { display: inline-flex; }
 

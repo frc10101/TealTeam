@@ -61,7 +61,9 @@ fn html(page: impl Page) -> Response {
 }
 
 pub(crate) async fn nav_for(state: &AppState, user: Option<&tt_core::user::User>) -> Nav {
-    Nav::for_user(user, state.repo.health().await.is_ready())
+    let mut nav = Nav::for_user(user, state.repo.health().await.is_ready());
+    nav.version = crate::shell::page_version(state);
+    nav
 }
 
 /// Nav with the event switcher, plus the event the page is about (U2).

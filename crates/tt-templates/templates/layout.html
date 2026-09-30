@@ -24,6 +24,13 @@
     <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
     <meta name="theme-color" content="#111827">
     <meta name="apple-mobile-web-app-title" content="TealTeam">
+    {# S11: what built this page. static/js/link.js compares these with
+       /health's, and a difference means a new version is running. #}
+    {% if !nav.version.build.is_empty() %}
+    <meta name="tt-build" content="{{ nav.version.build }}">
+    <meta name="tt-schema" content="{{ nav.version.schema }}">
+    <meta name="tt-form" content="{{ nav.version.form }}">
+    {% endif %}
   </head>
   <body{% if nav.signed_in %} class="has-tabs"{% endif %}>
     <a class="skip-link" href="#main">Skip to content</a>
@@ -81,6 +88,25 @@
         </div>
       </div>
     </header>
+
+    {# S11: shown by static/js/link.js when the server is running another
+       version than the one this page came from. Blocking on purpose: an old
+       page posting to a new server is the mid-event deploy footgun. #}
+    <div class="update-banner" id="update-banner" role="alertdialog" aria-modal="true"
+         aria-labelledby="update-title" aria-describedby="update-body" hidden>
+      <div class="update-card">
+        <h2 id="update-title">TealTeam has been updated</h2>
+        <p id="update-body">
+          The server is running a new version. Reload to carry on. Anything you
+          have typed is kept on this device.
+        </p>
+        <p data-update-form hidden>
+          The scouting form changed too, so answers typed into the old one will
+          need entering again.
+        </p>
+        <button class="btn btn-primary btn-lg" type="button" data-update-reload>Reload now</button>
+      </div>
+    </div>
 
     <main id="main" class="page">
       {% block content %}{% endblock %}

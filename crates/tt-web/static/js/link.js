@@ -53,9 +53,10 @@
 
     // Any answer at all means the server is there; only no answer is offline.
     fetch("/health", { cache: "no-store", credentials: "same-origin", signal: abort && abort.signal })
-      .then(function () {
+      .then(function (response) {
         reachable = true;
-        if (shell) location.reload();
+        if (shell) return location.reload();
+        return response.json().then(compare, function () {});
       })
       .catch(function () { reachable = false; })
       .then(function () {
@@ -64,6 +65,51 @@
         show();
         schedule();
       });
+  }
+
+  // S11: the page's own versions, from the layout's <meta> tags.
+  function stamp(name) {
+    var meta = document.querySelector('meta[name="' + name + '"]');
+    return meta ? meta.content : "";
+  }
+  var built = { build: stamp("tt-build"), schema: stamp("tt-schema"), form: stamp("tt-form") };
+
+  // A server running another build than the one this page came from: a
+  // deploy happened. Block the page, and reload into the new version once
+  // everything unsaved is kept. Listeners of tt:before-update may add
+  // promises to detail.waitFor -- the outbox (C7) will, to push first.
+  var updating = false;
+  function compare(health) {
+    if (updating || !built.build || !health || !health.build) return;
+    // The form is compared too: a new season file changes what the scouting
+    // form asks without changing a template.
+    if (
+      health.build === built.build &&
+      String(health.schema) === built.schema &&
+      String(health.form) === built.form
+    ) return;
+    updating = true;
+
+    var banner = document.getElementById("update-banner");
+    if (!banner) return location.reload();
+    var formChanged = String(health.form) !== built.form;
+    banner.querySelector("[data-update-form]").hidden = !formChanged;
+    // Nothing under the banner can be reached, by pointer or by keyboard.
+    Array.prototype.forEach.call(document.body.children, function (el) {
+      if (el !== banner) el.inert = true;
+    });
+    banner.hidden = false;
+    var button = banner.querySelector("[data-update-reload]");
+    button.focus();
+    button.addEventListener("click", function () {
+      button.disabled = true;
+      var before = new CustomEvent("tt:before-update", { detail: { waitFor: [] } });
+      document.dispatchEvent(before);
+      var patience = new Promise(function (done) { setTimeout(done, 5000); });
+      Promise.race([Promise.allSettled(before.detail.waitFor), patience]).then(function () {
+        location.reload();
+      });
+    });
   }
 
   // navigator.onLine is only trustworthy when it says false: true means "some
