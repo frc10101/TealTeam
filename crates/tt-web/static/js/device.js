@@ -38,10 +38,25 @@
     COOKIE + "=" + encodeURIComponent(deviceId) +
     ";path=/;max-age=" + TEN_YEARS + ";samesite=lax";
 
+  // This tablet's clock against the server's (S12), NTP-style: the server's
+  // time is taken to be halfway through the round trip. Sent with the next
+  // heartbeat, so the lead scout sees tablets whose clocks are off.
+  var measured = "";
+
   function heartbeat() {
+    var sent = Date.now();
     // Failure is expected and uninteresting: the network drops constantly at an
     // event. Swallow it rather than filling a scout's console with red.
-    fetch("/api/device/heartbeat", { method: "POST", credentials: "same-origin" })
+    fetch("/api/device/heartbeat" + measured, { method: "POST", credentials: "same-origin" })
+      .then(function (response) {
+        return response.json();
+      })
+      .then(function (reply) {
+        var back = Date.now();
+        if (typeof reply.server_ms !== "number") return;
+        var offset = Math.round(reply.server_ms - (sent + back) / 2);
+        measured = "?offset_ms=" + offset + "&rtt_ms=" + (back - sent);
+      })
       .catch(function () {});
   }
 

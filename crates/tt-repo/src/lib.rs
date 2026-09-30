@@ -111,6 +111,8 @@ pub struct Device {
     pub last_seen_at: Option<DateTime<Utc>>,
     /// Who was signed in at its latest heartbeat, if anyone.
     pub last_user_id: Option<i64>,
+    /// Server time minus the tablet's, as it last measured (S12).
+    pub clock_offset_ms: Option<i64>,
 }
 
 impl Device {
@@ -352,6 +354,14 @@ pub trait LocalRepo {
     ) -> Result<Device>;
 
     async fn device_by_uuid(&self, device_uuid: &str) -> Result<Option<Device>>;
+
+    /// Keep a tablet's latest clock measurement (S12).
+    async fn record_clock_offset(
+        &self,
+        device_uuid: &str,
+        offset_ms: i64,
+        now: DateTime<Utc>,
+    ) -> Result<()>;
 
     async fn list_devices(&self) -> Result<Vec<Device>>;
 
@@ -595,6 +605,7 @@ mod tests {
             team_number: None,
             last_seen_at: seen,
             last_user_id: None,
+            clock_offset_ms: None,
         }
     }
 

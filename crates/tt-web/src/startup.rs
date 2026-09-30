@@ -1771,6 +1771,74 @@ mod flow_tests {
         assert!(scout.contains("/static/js/assignment-watch.js"));
     }
 
+    #[tokio::test]
+    async fn a_tablets_clock_is_measured_by_heartbeat_and_flagged_when_a_minute_out() {
+        // S12. The scouting helper's tablet has checked in once already.
+        let (state, cookies) = scouting().await;
+        let reply = text(post(&state, "/api/device/heartbeat", "", Some(&cookies)).await).await;
+        let reply: serde_json::Value = serde_json::from_str(&reply).unwrap();
+        let server_ms = reply["server_ms"].as_i64().expect("the server's time");
+        assert!((chrono::Utc::now().timestamp_millis() - server_ms).abs() < 5_000);
+
+        // A slow round trip is not trusted.
+        post(
+            &state,
+            "/api/device/heartbeat?offset_ms=-240000&rtt_ms=30000",
+            "",
+            Some(&cookies),
+        )
+        .await;
+        let grid = text(
+            get(
+                &state,
+                "/lead-scout/assignments?event=2026now",
+                Some(&cookies),
+            )
+            .await,
+        )
+        .await;
+        assert!(!grid.contains("clock "), "{grid}");
+
+        post(
+            &state,
+            "/api/device/heartbeat?offset_ms=-240000&rtt_ms=80",
+            "",
+            Some(&cookies),
+        )
+        .await;
+        let grid = text(
+            get(
+                &state,
+                "/lead-scout/assignments?event=2026now",
+                Some(&cookies),
+            )
+            .await,
+        )
+        .await;
+        assert!(
+            grid.contains(r#"<span class="badge badge-amber" title="Timestamps from this tablet will be wrong. Set its clock to automatic.">clock 4 min ahead</span>"#),
+            "{grid}"
+        );
+
+        post(
+            &state,
+            "/api/device/heartbeat?offset_ms=1500&rtt_ms=80",
+            "",
+            Some(&cookies),
+        )
+        .await;
+        let grid = text(
+            get(
+                &state,
+                "/lead-scout/assignments?event=2026now",
+                Some(&cookies),
+            )
+            .await,
+        )
+        .await;
+        assert!(grid.contains(r#"<span class="muted">· clock 1 s behind</span>"#));
+    }
+
     async fn observations(state: &AppState) -> i64 {
         sqlx::query_scalar("SELECT COUNT(*) FROM observations")
             .fetch_one(state.repo.pool())

@@ -166,6 +166,30 @@ pub fn describe_age(age: TimeDelta) -> String {
     format!("{n} {unit}{plural} ago")
 }
 
+/// A tablet's clock more than this far from the server's is flagged (S12).
+pub const CLOCK_TOLERANCE: TimeDelta = TimeDelta::minutes(1);
+
+/// A tablet's clock against the server's, from `offset_ms` = server time minus
+/// tablet time: `"clock in step"`, `"clock 3 s ahead"`, `"clock 4 min behind"`.
+/// And whether it is past [`CLOCK_TOLERANCE`]. Within a second is in step:
+/// the measurement is only good to half a round trip.
+pub fn describe_offset(offset_ms: i64) -> (String, bool) {
+    let off = TimeDelta::milliseconds(offset_ms).abs();
+    if off < TimeDelta::seconds(1) {
+        return ("clock in step".into(), false);
+    }
+    // The server ahead means the tablet is behind.
+    let way = if offset_ms > 0 { "behind" } else { "ahead" };
+    let amount = if off < TimeDelta::minutes(1) {
+        format!("{} s", off.num_seconds())
+    } else if off < TimeDelta::hours(1) {
+        format!("{} min", off.num_minutes())
+    } else {
+        format!("{} h", off.num_hours())
+    };
+    (format!("clock {amount} {way}"), off > CLOCK_TOLERANCE)
+}
+
 /// How old a synced value is, and whether to warn about it (I12). One
 /// struct, so every page that shows an upstream number says its age the same
 /// way.
@@ -353,5 +377,26 @@ mod tests {
             assert!(!state.label().is_empty());
             assert!(state.css_class().starts_with("badge-"));
         }
+    }
+
+    #[test]
+    fn a_clock_offset_reads_as_ahead_or_behind_and_past_a_minute_is_flagged() {
+        assert_eq!(describe_offset(400), ("clock in step".into(), false));
+        assert_eq!(describe_offset(3_200), ("clock 3 s behind".into(), false));
+        assert_eq!(describe_offset(-45_000), ("clock 45 s ahead".into(), false));
+        assert_eq!(
+            describe_offset(60_000),
+            ("clock 1 min behind".into(), false),
+            "a minute is the edge"
+        );
+        assert_eq!(
+            describe_offset(-240_000),
+            ("clock 4 min ahead".into(), true)
+        );
+        assert_eq!(
+            describe_offset(3 * 3_600_000),
+            ("clock 3 h behind".into(), true),
+            "a wrong zone"
+        );
     }
 }

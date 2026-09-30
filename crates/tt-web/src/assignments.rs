@@ -17,7 +17,7 @@ use axum::http::request::Parts;
 use chrono::{DateTime, Utc};
 use tracing::{info, warn};
 use tt_core::assignments::{self, AssigneeKey};
-use tt_core::connectivity::describe_age;
+use tt_core::connectivity::{describe_age, describe_offset};
 use tt_core::records::MatchRecord;
 use tt_core::user::User;
 use tt_repo::{DEVICE_ONLINE_WINDOW, Device, NewAssignment, Repo, Scout};
@@ -261,6 +261,11 @@ impl People {
                     .and_then(|id| self.scouts.iter().find(|s| s.id == id))
                     .map(|s| s.name.clone())
                     .unwrap_or_default(),
+                clock: d
+                    .clock_offset_ms
+                    .map(|ms| describe_offset(ms).0)
+                    .unwrap_or_default(),
+                clock_off: d.clock_offset_ms.is_some_and(|ms| describe_offset(ms).1),
             })
             .collect()
     }

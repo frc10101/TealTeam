@@ -714,6 +714,10 @@ pub struct DeviceRow {
     pub last_seen: String,
     /// Who was signed in on it last. Empty when nobody was.
     pub last_user: String,
+    /// `"clock 3 s behind"`; empty until the tablet has measured (S12).
+    pub clock: String,
+    /// More than a minute out.
+    pub clock_off: bool,
 }
 
 /// The six selects for one match (L2).

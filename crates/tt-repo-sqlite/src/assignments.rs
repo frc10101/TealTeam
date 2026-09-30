@@ -31,6 +31,7 @@ fn assignment_from_row(row: &sqlx::sqlite::SqliteRow) -> Option<Assignment> {
                 .as_deref()
                 .and_then(from_sql),
             last_user_id: None,
+            clock_offset_ms: None,
         };
         Some(Assignee::Device {
             id,

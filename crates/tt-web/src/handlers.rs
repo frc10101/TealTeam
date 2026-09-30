@@ -388,6 +388,10 @@ pub async fn change_password(
 
 // ── Device heartbeat (A5) ───────────────────────────────────────────────────
 
+/// A clock measurement over a slower round trip than this is not kept: half
+/// of it is the error bar (S12).
+const MAX_CLOCK_RTT_MS: i64 = 10_000;
+
 /// Record that a tablet is present.
 ///
 /// Called by `static/js/device.js` on load and every 60 seconds. The device id
@@ -406,16 +410,33 @@ pub async fn device_heartbeat(
         return axum::Json(serde_json::json!({ "status": "no-device-id" })).into_response();
     };
 
-    match state
-        .repo
-        .touch_device(&uuid, user.as_ref(), Utc::now())
-        .await
-    {
-        Ok(device) => axum::Json(serde_json::json!({
-            "status": "ok",
-            "device": device.display_name(),
-        }))
-        .into_response(),
+    let now = Utc::now();
+    match state.repo.touch_device(&uuid, user.as_ref(), now).await {
+        Ok(device) => {
+            // S12: the tablet's measurement from its previous heartbeat, kept
+            // only when the round trip was short enough to trust.
+            let param = |name: &str| {
+                parts.uri.query().and_then(|q| {
+                    q.split('&')
+                        .filter_map(|pair| pair.split_once('='))
+                        .find(|(k, _)| *k == name)
+                        .and_then(|(_, v)| v.parse::<i64>().ok())
+                })
+            };
+            if let (Some(offset), Some(rtt)) = (param("offset_ms"), param("rtt_ms"))
+                && (0..=MAX_CLOCK_RTT_MS).contains(&rtt)
+                && let Err(e) = state.repo.record_clock_offset(&uuid, offset, now).await
+            {
+                tracing::warn!("recording a tablet's clock: {e}");
+            }
+            axum::Json(serde_json::json!({
+                "status": "ok",
+                "device": device.display_name(),
+                // For the tablet to measure its clock against (S12).
+                "server_ms": now.timestamp_millis(),
+            }))
+            .into_response()
+        }
         Err(e) => {
             tracing::warn!("device heartbeat failed: {e}");
             axum::Json(serde_json::json!({ "status": "not-recorded" })).into_response()

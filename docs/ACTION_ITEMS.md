@@ -452,7 +452,7 @@ The architectural payoff. Phase 2 must be shipping before this starts.
 | S9 | **Push assignment changes over SSE** instead of re-rendering the whole grid on every click | RI-A2 · RS §12.8 | M | **Done** — `grid-live.js`, `assignment-watch.js`; see Phase 3 notes |
 | S10 | SQLite snapshot bootstrap (`/api/sync/snapshot`, OPFS import) — ship a file, not a million rows | RI-O17 | M |  |
 | S11 | Schema version handshake + blocking update banner. The mid-event deploy footgun | RI-O18 | S | **Done** — page `<meta>` vs `/health`, `?schema=` on `/api/sync/pull`; see Phase 3 notes |
-| S12 | Clients compute and record their clock offset against the server on each sync, so device skew is measurable rather than mysterious | RI §Time Sync | S |  |
+| S12 | Clients compute and record their clock offset against the server on each sync, so device skew is measurable rather than mysterious | RI §Time Sync | S | **Done** — heartbeat measures it; shown in the Tablets list; see Phase 3 notes |
 
 ### Phase 3 notes
 
@@ -547,6 +547,8 @@ Not checked: a real tablet, or an iPad's `pagehide`.
 - **The scout's page.** It carries who the scout is (user and tablet), the robot on screen if it came from an assignment, and the event's match labels. `assignment-watch.js` says so in words when the lead takes that robot away ("took Q2 · Team 254 off your list; if you are already watching it, finish and save") or gives them one. The two together read as a move. It links to their next assignment and never touches the form.
 - **Checked:** a router test that both pages carry the hooks and start from the log heads. Both scripts ran in headless Chromium with a fake `EventSource` and `fetch`: a move, an unrelated change staying quiet, the one-cell swap, the in-place save, and a refused save falling back to a real post. Not checked: against the live server in a browser.
 
+
+**Tablet clocks (S12).** `device.js` measures its clock against the server's on every heartbeat, NTP-style. The reply carries `server_ms`, the server's time taken to be halfway through the round trip. The next heartbeat reports `offset_ms` (server minus tablet) and `rtt_ms`. The server keeps the latest per device, in `devices.clock_offset_ms` (migration 0005), and ignores a measurement taken over a round trip longer than 10 s. The Tablets list on the assignments page reads it as "clock 3 s behind" or "clock 4 min ahead". Past a minute (`connectivity::CLOCK_TOLERANCE`) it becomes an amber badge saying the tablet's timestamps will be wrong, and to set its clock to automatic. Within a second reads as "in step", since the measurement is only good to half a round trip. Everything is UTC milliseconds, so a tablet set to the wrong zone shows as hours out only if its clock itself is wrong, not merely its display. Nothing corrects timestamps by the offset yet; C7's outbox can, when it stamps offline records.
 ---
 
 ## Phase 4 — Analysis and communication

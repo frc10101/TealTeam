@@ -193,6 +193,16 @@ impl Repo for SqliteRepo {
         self.device_by_uuid_impl(device_uuid).await
     }
 
+    async fn record_clock_offset(
+        &self,
+        device_uuid: &str,
+        offset_ms: i64,
+        now: DateTime<Utc>,
+    ) -> Result<()> {
+        self.record_clock_offset_impl(device_uuid, offset_ms, now)
+            .await
+    }
+
     async fn list_devices(&self) -> Result<Vec<Device>> {
         self.list_devices_impl().await
     }

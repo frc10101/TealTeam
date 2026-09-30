@@ -234,6 +234,7 @@
               <label class="form-label" for="device-{{ device.id }}">
                 <strong>{{ device.display }}</strong>
                 {% if device.online %}<span class="badge badge-teal">online</span>{% else %}<span class="muted">seen {{ device.last_seen }}</span>{% endif %}
+                {% if !device.clock.is_empty() %}{% if device.clock_off %}<span class="badge badge-amber" title="Timestamps from this tablet will be wrong. Set its clock to automatic.">{{ device.clock }}</span>{% else %}<span class="muted">· {{ device.clock }}</span>{% endif %}{% endif %}
                 {% if !device.last_user.is_empty() %}<span class="muted">· last used by {{ device.last_user }}</span>{% endif %}
               </label>
               <div class="inline-field">

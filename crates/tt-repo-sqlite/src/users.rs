@@ -63,6 +63,7 @@ fn device_from_row(row: &sqlx::sqlite::SqliteRow) -> Device {
             .as_deref()
             .and_then(from_sql),
         last_user_id: row.get("last_user_id"),
+        clock_offset_ms: row.get("clock_offset_ms"),
     }
 }
 
@@ -272,6 +273,24 @@ impl SqliteRepo {
 
     // ── Devices ─────────────────────────────────────────────────────────────
 
+    pub(crate) async fn record_clock_offset_impl(
+        &self,
+        device_uuid: &str,
+        offset_ms: i64,
+        now: DateTime<Utc>,
+    ) -> Result<()> {
+        sqlx::query(
+            "UPDATE devices SET clock_offset_ms = ?, clock_checked_at = ? WHERE device_uuid = ?",
+        )
+        .bind(offset_ms)
+        .bind(to_sql(now))
+        .bind(device_uuid)
+        .execute(self.pool())
+        .await
+        .map_err(|e| query_err("recording a device's clock", e))?;
+        Ok(())
+    }
+
     pub(crate) async fn touch_device_impl(
         &self,
         device_uuid: &str,
@@ -314,7 +333,7 @@ impl SqliteRepo {
                 last_user_id = excluded.last_user_id, \
                 team_number  = COALESCE(devices.team_number, excluded.team_number), \
                 updated_at   = excluded.updated_at \
-             RETURNING id, device_uuid, name, team_number, last_seen_at, last_user_id",
+             RETURNING id, device_uuid, name, team_number, last_seen_at, last_user_id, clock_offset_ms",
         )
         .bind(device_uuid)
         .bind(user.and_then(|u| u.team_number))
@@ -334,7 +353,7 @@ impl SqliteRepo {
 
     pub(crate) async fn device_by_uuid_impl(&self, device_uuid: &str) -> Result<Option<Device>> {
         let row = sqlx::query(
-            "SELECT id, device_uuid, name, team_number, last_seen_at, last_user_id FROM devices \
+            "SELECT id, device_uuid, name, team_number, last_seen_at, last_user_id, clock_offset_ms FROM devices \
              WHERE device_uuid = ?",
         )
         .bind(device_uuid)
@@ -346,7 +365,7 @@ impl SqliteRepo {
 
     pub(crate) async fn list_devices_impl(&self) -> Result<Vec<Device>> {
         let rows = sqlx::query(
-            "SELECT id, device_uuid, name, team_number, last_seen_at, last_user_id FROM devices \
+            "SELECT id, device_uuid, name, team_number, last_seen_at, last_user_id, clock_offset_ms FROM devices \
              ORDER BY last_seen_at DESC NULLS LAST, id",
         )
         .fetch_all(&self.pool)
