@@ -481,7 +481,7 @@ The architectural payoff. Phase 2 must be shipping before this starts.
 | Q1 | `tt-core` unit tests: scoring, mode aggregation, match-status, connectivity classification, match-number normalization, TBA fallback extraction. **Every one of these had a bug** | RS §11 | M | **Done** — gaps filled in `tt-core`; two bugs fixed, see notes |
 | Q2 | Deserialization tests against **recorded** FIRST/TBA payloads, including at least one from a prior season | RS §11 | M | **Done** — `tt-upstream/tests/recorded.rs` over `tests/fixtures/`; six fixes, see notes |
 | Q3 | Load test before the season: 30 simulated clients, two hours, p95 latency and SSE stability — with the cable pulled, the power killed, and a client's storage filled, deliberately | RI §Load Testing · RS §11 | M |  |
-| Q4 | Backups: timed dump to the SSD (10-minute interval, 24-hour retention), USB copy between match blocks, and **one deliberate restore test** before you need it | RI §Backups | M |  |
+| Q4 | Backups: timed dump to the SSD (10-minute interval, 24-hour retention), USB copy between match blocks, and **one deliberate restore test** before you need it | RI §Backups | M | **Done** — `tt_repo_sqlite::backup`, `tt-web backup` / `check-backup`, [PI_STORAGE.md](PI_STORAGE.md#backups-q4); USB and Pi steps untested |
 | Q5 | Store everything in UTC; render in the event's IANA zone per `TIMEZONE_HANDLING.md` | RI §Time Sync | S | **Done** — `tt_core::timezone`; see notes |
 
 ### Cross-cutting notes
@@ -513,6 +513,24 @@ The architectural payoff. Phase 2 must be shipping before this starts.
 - **"Today" is the event's.** The event picker's default, the amber stale badge (U14), and the drive coach's badge use `Event::is_running(now)` on the event's own calendar. A US event's last evening, past midnight UTC, is still its last day, and the picker no longer switches to the next event during the finals. The sync loop's live check uses the earliest date anywhere (UTC minus 12 hours), so a US event's finals are still fetched every two minutes. An event ahead of UTC is covered by the one-day lookahead.
 - **The drive coach shows the time on the event's clock**: "8:20 AM EDT · in 20 min". It is the one page where a clock time helps, since the coach compares it to the field's schedule. Without a zone it reads "12:20 UTC", never the Pi's local time.
 
+
+**Q4: backups.** Three layers, all in [PI_STORAGE.md](PI_STORAGE.md#backups-q4).
+
+- **Every 10 minutes, onto the SSD.** While it serves, the server snapshots the database into `BACKUP_DIR`: `/srv/tealteam/backups` on the Pi, and a `backups` folder beside the database when unset. It keeps 24 hours. A folder named in `BACKUP_DIR` is never created, so with the SSD missing a snapshot fails with a warning rather than landing on the SD card. The startup line says where the backups go, and warns if that is the SD card.
+- **Between match blocks, one command:** `tt-web backup /media/…/STICK`. It works while the server runs.
+- **The restore test:** `tt-web check-backup [file]` restores a backup (by default the newest timed one) into a fresh database in a temporary folder. It checks integrity, applies this build's migrations, and prints row counts. `tt-web backup` runs that same check on the copy it just made, so every USB copy has been restored once before anyone relies on it.
+
+**Snapshots are `VACUUM INTO`, never a file copy.** A copy of `tealteam.db` misses whatever is still in `-wal`. Each snapshot uses a connection of its own that only reads, so the single writer carries on. Snapshots are written as `.partial` and renamed when complete. Pruning goes by the time in the file name, and never leaves fewer than six, so a Pi booted without its RTC (P1) and years out cannot prune away its last good copies.
+
+**Off site is open decision 6, left as a setting.** `BACKUP_COPY_TO` is where a bare `tt-web backup` copies to. Unset, the command asks for a folder and names the decision. Whose laptop, and who checks it ran, is still the team's call.
+
+Tested:
+
+- A unit test restores a snapshot into a fresh database and reads the users back through `Repo`. One of them had been written only to the `-wal` file; its address was checked not to be in `tealteam.db`. The snapshot was taken with the writer's transaction open, did not wait for it, and did not include its uncommitted row.
+- Pruning: a day kept, non-snapshots untouched, and six survive a clock set to 2030.
+- By hand, with the real binary running against a copy of a test database: `tt-web backup` into a folder printed the same counts as the database (7 observations, 5 picks, 12 assignments), `check-backup` agreed, and the first timed snapshot landed 10 minutes after start.
+
+Not tested: a real USB stick or anything on the Pi.
 ---
 
 ## Open decisions

@@ -16,7 +16,7 @@
 //! lines, the format is trivial, and it removes a dependency from the one binary
 //! that has to keep working on event day.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tracing::{debug, warn};
 
 /// Where the app looks for its database and how it listens.
@@ -30,6 +30,12 @@ pub struct Config {
     pub allow_schema_reset: bool,
     /// Whether to pull the FIRST event list when the server starts.
     pub first_sync_on_boot: bool,
+    /// Where the ten-minute snapshots go (Q4). Unset: a `backups` folder
+    /// beside the database file.
+    pub backup_dir: Option<PathBuf>,
+    /// Where `tt-web backup` copies to when no folder is named: a USB stick,
+    /// or whoever's laptop open decision 6 settles on.
+    pub backup_copy_to: Option<PathBuf>,
 }
 
 /// Runtime mode.
@@ -109,8 +115,17 @@ impl Config {
             port,
             allow_schema_reset: mode.allows_schema_reset(),
             first_sync_on_boot: flag("FIRST_SYNC_ON_BOOT", get("FIRST_SYNC_ON_BOOT"), true)?,
+            backup_dir: path(get("BACKUP_DIR")),
+            backup_copy_to: path(get("BACKUP_COPY_TO")),
         })
     }
+}
+
+/// A folder setting: blank is unset.
+fn path(raw: Option<String>) -> Option<PathBuf> {
+    raw.map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
 }
 
 /// Parse an on/off setting. Blank means the default; anything unrecognised is
@@ -213,6 +228,22 @@ mod tests {
         assert_eq!(config.database_url, DEFAULT_DATABASE_URL);
         // The bug that erased an event's data: unset must never mean destructive.
         assert!(!config.allow_schema_reset);
+        assert_eq!(config.backup_dir, None);
+        assert_eq!(config.backup_copy_to, None);
+    }
+
+    #[test]
+    fn backup_folders_are_read_and_blank_is_unset() {
+        let config = Config::from_lookup(lookup(&[
+            ("BACKUP_DIR", " /srv/tealteam/backups "),
+            ("BACKUP_COPY_TO", ""),
+        ]))
+        .unwrap();
+        assert_eq!(
+            config.backup_dir,
+            Some(PathBuf::from("/srv/tealteam/backups"))
+        );
+        assert_eq!(config.backup_copy_to, None);
     }
 
     #[test]

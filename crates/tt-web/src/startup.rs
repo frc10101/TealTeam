@@ -131,6 +131,10 @@ pub async fn run() -> anyhow::Result<()> {
     } else {
         warn!("upstream sync not started: storage is down");
     }
+    // 6b. Backups (Q4), likewise only with storage up.
+    if storage_ready {
+        crate::backups::spawn(&config);
+    }
 
     // 7. Bind on 0.0.0.0 so LAN clients reach it. Nothing else is reachable from
     // a scout's phone.
@@ -179,6 +183,19 @@ fn log_storage(url: &str) {
         Some(at) => info!("database is at {}", at.describe()),
         None => {}
     }
+}
+
+/// `tt-web backup [folder]` (Q4).
+pub async fn backup(to: Option<std::path::PathBuf>) -> anyhow::Result<()> {
+    let config = prepare()?;
+    log_storage(&config.database_url);
+    crate::backups::copy(&config, to, &mut std::io::stdout()).await
+}
+
+/// `tt-web check-backup [file]` (Q4).
+pub async fn check_backup(file: Option<std::path::PathBuf>) -> anyhow::Result<()> {
+    let config = prepare()?;
+    crate::backups::check(&config, file, &mut std::io::stdout()).await
 }
 
 pub fn router(state: AppState) -> Router {

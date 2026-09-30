@@ -10,6 +10,7 @@
 mod assets;
 mod assignments;
 mod auth;
+mod backups;
 mod coach;
 mod config;
 mod errors;
@@ -24,6 +25,7 @@ mod startup;
 mod teams;
 mod upstream;
 
+use std::path::PathBuf;
 use std::process::ExitCode;
 use tracing::error;
 
@@ -34,6 +36,13 @@ commands:
   serve       run the server (the default)
   bulk-load   pull the full FIRST and TBA snapshot into the database, print
               per-event counts, and exit. Run it at the shop before an event.
+  backup [folder]
+              snapshot the database into folder (default BACKUP_COPY_TO), then
+              restore the copy to check it. Between match blocks, onto a USB
+              stick. Safe while the server is running.
+  check-backup [file]
+              restore file (default: the newest timed backup) into a fresh
+              database and say what is in it. The restore test.
   help        show this message
 
 Configuration comes from the environment and .env files; see .env.example.";
@@ -47,6 +56,8 @@ Configuration comes from the environment and .env files; see .env.example.";
 enum Command {
     Serve,
     BulkLoad,
+    Backup(Option<PathBuf>),
+    CheckBackup(Option<PathBuf>),
     Help,
 }
 
@@ -55,6 +66,8 @@ impl Command {
         let command = match args.next().as_deref() {
             None | Some("serve") => Self::Serve,
             Some("bulk-load") => Self::BulkLoad,
+            Some("backup") => Self::Backup(args.next().map(PathBuf::from)),
+            Some("check-backup") => Self::CheckBackup(args.next().map(PathBuf::from)),
             Some("help" | "-h" | "--help") => Self::Help,
             Some(other) => return Err(format!("unknown command {other:?}")),
         };
@@ -70,6 +83,8 @@ async fn main() -> ExitCode {
     let result = match Command::parse(std::env::args().skip(1)) {
         Ok(Command::Serve) => startup::run().await,
         Ok(Command::BulkLoad) => startup::bulk_load().await,
+        Ok(Command::Backup(to)) => startup::backup(to).await,
+        Ok(Command::CheckBackup(file)) => startup::check_backup(file).await,
         Ok(Command::Help) => {
             println!("{USAGE}");
             return ExitCode::SUCCESS;
@@ -121,5 +136,20 @@ mod tests {
         // load hung.
         assert!(parse(&["bulkload"]).unwrap_err().contains("bulkload"));
         assert!(parse(&["bulk-load", "now"]).unwrap_err().contains("now"));
+        assert!(
+            parse(&["backup", "/media/usb", "x"])
+                .unwrap_err()
+                .contains("x")
+        );
+    }
+
+    #[test]
+    fn backup_commands_take_one_optional_path() {
+        assert_eq!(parse(&["backup"]), Ok(Command::Backup(None)));
+        assert_eq!(
+            parse(&["backup", "/media/usb"]),
+            Ok(Command::Backup(Some("/media/usb".into())))
+        );
+        assert_eq!(parse(&["check-backup"]), Ok(Command::CheckBackup(None)));
     }
 }

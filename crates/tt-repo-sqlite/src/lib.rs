@@ -16,6 +16,7 @@
 //! The pool is capped at one connection deliberately -- see [`connect`].
 
 mod assignments;
+pub mod backup;
 mod competition;
 pub mod migrate;
 mod observations;
@@ -516,6 +517,100 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(rows, [1, 2]);
+    }
+
+    #[tokio::test]
+    async fn a_backup_restores_into_a_fresh_database_with_everything_in_it() {
+        // Q4: the deliberate restore test.
+        let db = TempDb::new("backup");
+        let repo = SqliteRepo::connect(&db.url()).expect("connect");
+        migrate::apply(repo.pool()).await.expect("migrate");
+        let user = NewUser {
+            email: "kim@example.com".into(),
+            name: "Kim".into(),
+            password_hash: "hash".into(),
+            team_number: Some(10101),
+            roles: tt_core::user::Roles::default(),
+        };
+        // No checkpoints: what follows stays in the -wal file, where a copy
+        // of tealteam.db alone would miss it. The snapshot must not.
+        sqlx::query("PRAGMA wal_autocheckpoint = 0")
+            .execute(repo.pool())
+            .await
+            .unwrap();
+        repo.create_user(user, Utc::now()).await.expect("user");
+        let late = NewUser {
+            email: "sam@example.com".into(),
+            name: "Sam".into(),
+            password_hash: "hash".into(),
+            team_number: Some(10101),
+            roles: tt_core::user::Roles::default(),
+        };
+        repo.create_user(late, Utc::now()).await.expect("late user");
+        let main_file = std::fs::read(db.0.join("tealteam.db")).unwrap();
+        assert!(
+            !main_file.windows(15).any(|w| w == b"sam@example.com"),
+            "Sam is only in the WAL"
+        );
+
+        // The server's writer is mid-transaction; the snapshot does not wait
+        // for it, and does not see its uncommitted row.
+        let mut open_tx = repo.pool().begin().await.unwrap();
+        sqlx::query(
+            "INSERT INTO events (tba_key, name, created_at, updated_at) VALUES ('x', 'x', '', '')",
+        )
+        .execute(&mut *open_tx)
+        .await
+        .unwrap();
+        let dir = db.0.join("backups");
+        std::fs::create_dir(&dir).unwrap();
+        let taken = tokio::time::timeout(
+            Duration::from_secs(3),
+            backup::snapshot(&db.url(), &dir, Utc::now()),
+        )
+        .await
+        .expect("did not wait for the writer")
+        .expect("snapshot");
+        open_tx.rollback().await.unwrap();
+        assert!(backup::taken_at(taken.file_name().unwrap().to_str().unwrap()).is_some());
+        assert!(!std::fs::read_dir(&dir).unwrap().any(|e| {
+            e.unwrap()
+                .path()
+                .extension()
+                .is_some_and(|x| x == "partial")
+        }));
+
+        // The check: a fresh database from the file, at this build's schema.
+        let restored = backup::check(&taken).await.expect("restores");
+        assert_eq!(restored.migrated, 0, "taken by this build");
+        assert_eq!(restored.counts[3], ("users", 2));
+        assert_eq!(
+            restored.counts[4],
+            ("events", 0),
+            "uncommitted is not in it"
+        );
+
+        // And put back the way PI_STORAGE.md says: copied into place, then
+        // opened as the server opens it.
+        let fresh = db.0.join("restored.db");
+        std::fs::copy(&taken, &fresh).unwrap();
+        let back = SqliteRepo::connect(&format!("sqlite://{}", fresh.display())).unwrap();
+        migrate::apply(back.pool()).await.unwrap();
+        let sam = back
+            .credentials_by_email("sam@example.com")
+            .await
+            .unwrap()
+            .expect("the row that was only in the WAL came back");
+        assert_eq!(sam.user.name, "Sam");
+    }
+
+    #[tokio::test]
+    async fn a_file_that_is_not_a_database_fails_the_check() {
+        let db = TempDb::new("notdb");
+        let junk = db.0.join("tealteam-20260314T094000Z.db");
+        std::fs::write(&junk, b"half a file").unwrap();
+        let err = backup::check(&junk).await.unwrap_err();
+        assert!(err.to_string().contains("not a database"), "{err}");
     }
 
     #[test]

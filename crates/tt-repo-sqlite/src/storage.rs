@@ -87,6 +87,11 @@ pub fn locate(url: &str) -> Option<Location> {
             .collect();
         std::env::current_dir().ok()?.join(relative)
     };
+    Some(on_disk(path))
+}
+
+/// Where an absolute path is stored: a database file, or a backup folder.
+pub fn on_disk(path: PathBuf) -> Location {
     // The file, or its directory, may not exist yet: the device is the one
     // under the nearest part of the path that does.
     let medium = path
@@ -95,10 +100,10 @@ pub fn locate(url: &str) -> Option<Location> {
         .and_then(block_device)
         .map(|device| Medium::of_device(&device))
         .unwrap_or(Medium::Unknown);
-    Some(Location {
+    Location {
         path: Some(path),
         medium,
-    })
+    }
 }
 
 /// Split a Linux `st_dev` into major and minor numbers, as glibc's
