@@ -265,6 +265,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/weights", post(handlers::save_weights))
         .route("/api/rankings/manual", post(handlers::save_rankings))
         .route("/api/pick-list", post(handlers::change_pick_list))
+        .route("/api/sync/pull", get(crate::sync::pull))
         .route("/api/weights/reset", post(handlers::reset_weights))
         .route(
             "/api/observations/{id}/approve",
@@ -1368,6 +1369,128 @@ mod flow_tests {
     /// 0), ticked boxes only, and the text.
     const GOOD_ANSWERS: &str = "f.starting_position=center&f.auto_scored=0&f.teleop_scored=9\
                                 &f.broke_down=on&f.penalties=0&f.notes=tippy+on+the+ramp";
+
+    #[tokio::test]
+    async fn a_pull_streams_changes_and_deletions_and_holds_back_other_teams_notes_and_lists() {
+        // S2. Sam is on 10101 and scouts 254 with a note; Kim is on 254.
+        let (state, sam) = scouting().await;
+        let response = post(
+            &state,
+            "/api/auth/signup",
+            "name=Kim&email=kim%40example.com&team_number=254&password=longenough1&confirm_password=longenough1",
+            None,
+        )
+        .await;
+        let kim = session_cookie_from(&response).expect("kim");
+        post(
+            &state,
+            "/api/submission?event=2026now",
+            &observation_form(254, RECORD_ID, GOOD_ANSWERS),
+            Some(&sam),
+        )
+        .await;
+        sqlx::query(
+            "INSERT INTO pick_list_entries (client_record_id, owning_team, event_key, picked_team, \
+             created_at, updated_at) VALUES ('pick-1', 10101, '2026now', 254, 'x', 'x')",
+        )
+        .execute(state.repo.pool())
+        .await
+        .unwrap();
+        let pull = |cookie: String, query: String| {
+            let state = state.clone();
+            async move {
+                let body =
+                    text(get(&state, &format!("/api/sync/pull?{query}"), Some(&cookie)).await)
+                        .await;
+                serde_json::from_str::<serde_json::Value>(&body).expect("json")
+            }
+        };
+        let of = |view: &serde_json::Value, entity: &str| -> Vec<serde_json::Value> {
+            view["changes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|c| c["entity"] == entity)
+                .cloned()
+                .collect()
+        };
+
+        let early = pull(sam.clone(), String::new()).await;
+        assert!(
+            of(&early, "observation").is_empty(),
+            "not yet two seconds old: {early}"
+        );
+
+        tokio::time::sleep(
+            (crate::sync::LAG + chrono::TimeDelta::milliseconds(200))
+                .to_std()
+                .unwrap(),
+        )
+        .await;
+        let sams = pull(sam.clone(), String::new()).await;
+        let kims = pull(kim.clone(), String::new()).await;
+
+        let seen = &of(&sams, "observation")[0];
+        assert_eq!(seen["op"], "upsert");
+        assert_eq!(seen["entity_pk"], RECORD_ID);
+        assert_eq!(
+            seen["row"]["payload"]["notes"], "tippy on the ramp",
+            "Sam's own team's note"
+        );
+        let theirs = &of(&kims, "observation")[0]["row"]["payload"];
+        assert!(
+            theirs.get("notes").is_none(),
+            "not Kim's team's note: {theirs}"
+        );
+        assert_eq!(theirs["teleop_scored"], 9, "the numbers are shared");
+        assert_eq!(theirs["starting_position"], "center");
+
+        assert_eq!(of(&sams, "pick_list_entry").len(), 1);
+        assert!(
+            of(&kims, "pick_list_entry").is_empty(),
+            "10101's list is 10101's"
+        );
+        assert_eq!(
+            sams["changes_cursor"], kims["changes_cursor"],
+            "the cursor moves past what Kim may not see"
+        );
+
+        // A deletion is a change like any other.
+        sqlx::query("DELETE FROM observations")
+            .execute(state.repo.pool())
+            .await
+            .unwrap();
+        tokio::time::sleep(
+            (crate::sync::LAG + chrono::TimeDelta::milliseconds(200))
+                .to_std()
+                .unwrap(),
+        )
+        .await;
+        let cursor = sams["changes_cursor"].as_i64().unwrap();
+        let after = pull(sam.clone(), format!("changes={cursor}")).await;
+        let changes = after["changes"].as_array().unwrap();
+        assert_eq!(changes.len(), 1, "{after}");
+        assert_eq!(changes[0]["op"], "delete");
+        assert_eq!(changes[0]["entity_pk"], RECORD_ID);
+        assert!(changes[0]["row"].is_null());
+
+        // The upstream stream, by its own cursor.
+        state
+            .repo
+            .append_upstream(&tt_repo::NewUpstream {
+                api: "tba".into(),
+                path: "/event/2026now/rankings".into(),
+                etag: None,
+                body: "{}".into(),
+                fetched_at: chrono::Utc::now(),
+                via: "pi".into(),
+            })
+            .await
+            .unwrap();
+        let both = pull(kim, format!("changes={cursor}&upstream=0")).await;
+        assert_eq!(both["upstream"][0]["path"], "/event/2026now/rankings");
+        assert!(both["upstream_cursor"].as_i64().unwrap() > 0);
+    }
 
     async fn observations(state: &AppState) -> i64 {
         sqlx::query_scalar("SELECT COUNT(*) FROM observations")

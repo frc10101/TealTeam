@@ -99,6 +99,7 @@ mod tests {
         assert_eq!(
             tables,
             vec![
+                "changes",
                 "devices",
                 "event_teams",
                 "events",

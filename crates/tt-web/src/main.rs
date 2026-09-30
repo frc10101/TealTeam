@@ -22,6 +22,7 @@ mod review;
 mod scouting;
 mod standings;
 mod startup;
+mod sync;
 mod teams;
 mod upstream;
 

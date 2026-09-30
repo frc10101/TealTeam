@@ -236,6 +236,26 @@ pub enum Recorded {
     Duplicate(i64),
 }
 
+/// A row of the `changes` log (S2): one insert, update, or delete of an
+/// observation, assignment, or pick list entry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Change {
+    /// Increases with every change and is never reused: a pull cursor.
+    pub seq: i64,
+    /// `"observation"`, `"assignment"`, or `"pick_list_entry"`.
+    pub entity: String,
+    /// Stable across devices: a `client_record_id`, or `match_key:team`.
+    pub entity_pk: String,
+    /// `"upsert"` or `"delete"`.
+    pub op: String,
+    /// The row as JSON; `None` for a delete.
+    pub payload: Option<String>,
+    pub event_key: Option<String>,
+    /// `None` is public; a team number, that team's only.
+    pub team_scope: Option<i32>,
+    pub created_at: DateTime<Utc>,
+}
+
 /// One upstream response for the `upstream` log (S1).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewUpstream {
@@ -540,6 +560,18 @@ pub trait LocalRepo {
 
     /// Up to `limit` entries after `after`, oldest first.
     async fn upstream_since(&self, after: i64, limit: i64) -> Result<Vec<UpstreamEntry>>;
+
+    // ── Change log (S2) ─────────────────────────────────────────────────────
+
+    /// Up to `limit` changes after `after`, oldest first, made before
+    /// `settled_before`. The caller passes a moment a little in the past, so a
+    /// change still being committed is never skipped (the lag window).
+    async fn changes_since(
+        &self,
+        after: i64,
+        limit: i64,
+        settled_before: DateTime<Utc>,
+    ) -> Result<Vec<Change>>;
 }
 
 #[cfg(test)]

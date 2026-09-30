@@ -5,8 +5,9 @@
 //! Both keep the log's size proportional to the number of distinct requests,
 //! not to how long the server has been polling them.
 
+use chrono::{DateTime, Utc};
 use sqlx::Row;
-use tt_repo::{NewUpstream, Result, UPSTREAM_KEEP_PER_PATH, UpstreamEntry};
+use tt_repo::{Change, NewUpstream, Result, UPSTREAM_KEEP_PER_PATH, UpstreamEntry};
 
 use crate::SqliteRepo;
 use crate::users::{from_sql, query_err, to_sql};
@@ -90,6 +91,41 @@ impl SqliteRepo {
                     fetched_at: from_sql(&row.get::<String, _>("fetched_at")).unwrap_or_default(),
                     via: row.get("via"),
                 },
+            })
+            .collect())
+    }
+}
+
+impl SqliteRepo {
+    /// The venue stream (S2). The log is written by triggers
+    /// (`migrations/0004_changes.sql`); this only reads it.
+    pub(crate) async fn changes_since_impl(
+        &self,
+        after: i64,
+        limit: i64,
+        settled_before: DateTime<Utc>,
+    ) -> Result<Vec<Change>> {
+        let rows = sqlx::query(
+            "SELECT seq, entity, entity_pk, op, payload, event_key, team_scope, created_at \
+             FROM changes WHERE seq > ? AND created_at < ? ORDER BY seq LIMIT ?",
+        )
+        .bind(after)
+        .bind(to_sql(settled_before))
+        .bind(limit)
+        .fetch_all(self.pool())
+        .await
+        .map_err(|e| query_err("reading the change log", e))?;
+        Ok(rows
+            .iter()
+            .map(|row| Change {
+                seq: row.get("seq"),
+                entity: row.get("entity"),
+                entity_pk: row.get("entity_pk"),
+                op: row.get("op"),
+                payload: row.get("payload"),
+                event_key: row.get("event_key"),
+                team_scope: row.get::<Option<i64>, _>("team_scope").map(|t| t as i32),
+                created_at: from_sql(&row.get::<String, _>("created_at")).unwrap_or_default(),
             })
             .collect())
     }

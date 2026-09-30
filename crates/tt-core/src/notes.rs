@@ -47,6 +47,19 @@ pub fn written(schema: &SeasonSchema, payload: &Payload) -> Vec<(String, String)
         .collect()
 }
 
+/// Take the notes out of `payload`, for a viewer [`Notes::for_viewer`] hides
+/// them from (S2). Removes `schema`'s text fields, and any text answer that is
+/// not one of its choice fields: a field dropped from the form cannot be told
+/// apart from notes, so it is treated as notes (U13).
+pub fn redact(schema: &SeasonSchema, payload: &mut Payload) {
+    payload.retain(|key, value| match value {
+        Value::Text(_) => schema
+            .fields()
+            .any(|f| f.key == *key && matches!(f.kind, FieldKind::Select { .. })),
+        Value::Count(_) | Value::Flag(_) => true,
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -87,5 +100,26 @@ mod tests {
                 "tippy on the ramp".to_string()
             )]
         );
+    }
+
+    #[test]
+    fn redacting_keeps_numbers_and_choices_and_drops_every_kind_of_prose() {
+        let schema = current_season().unwrap();
+        let mut payload: Payload = [
+            ("starting_position", Value::Text("left".into())),
+            ("teleop_scored", Value::Count(4)),
+            ("broke_down", Value::Flag(true)),
+            ("notes", Value::Text("tippy on the ramp".into())),
+            (
+                "old_comment_field",
+                Value::Text("from last year's form".into()),
+            ),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v))
+        .collect();
+        redact(&schema, &mut payload);
+        let kept: Vec<&str> = payload.keys().map(String::as_str).collect();
+        assert_eq!(kept, ["broke_down", "starting_position", "teleop_scored"]);
     }
 }

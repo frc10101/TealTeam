@@ -442,7 +442,7 @@ The architectural payoff. Phase 2 must be shipping before this starts.
 | # | Action | Source | Effort | Status |
 | --- | --- | --- | --- | --- |
 | S1 | `upstream` append-only log fed by the FIRST/TBA clients | RI-S2 | M | **Done** — `upstream` table, `tt_upstream::journal`; see Phase 3 notes |
-| S2 | `changes` append-only log + `/api/sync/pull` with a lag window. **Not** per-table watermarks — those cannot see deletions and have a commit-ordering race | RI-O15 | M |  |
+| S2 | `changes` append-only log + `/api/sync/pull` with a lag window. **Not** per-table watermarks — those cannot see deletions and have a commit-ordering race | RI-O15 | M | **Done** — `changes` table + triggers, `GET /api/sync/pull`; see Phase 3 notes |
 | S3 | Scoped subscription filtering + a never-replicate allowlist, so other teams' notes never leak | RI-O16 | M |  |
 | S4 | Compile the FIRST/TBA clients for `wasm32`; client-side conditional fetch with ETags. **Both APIs allow direct browser requests**, so no relay server is needed | RI-S3 | M |  |
 | S5 | Bundle import on the Pi: role-gate the push, `ATTACH`, upsert, advance cursor, audit-log | RI-S4 | M |  |
@@ -476,6 +476,12 @@ So on the event LAN today, C2 does what it can: an Android "Add to Home screen" 
 - **How the later items use it.** S2 and S8 serve `upstream_since(cursor)`. The stream is `sync_state`'s `'upstream'` source, separate from `changes`, as RI's "two logs" requires. S5 appends a pushed bundle's responses with `via = <device>`, then derives the tables with the same tt-core parsers. The one ingest path is then "append to the log, then project". Today the projection is inline in `sync.rs`; S5 is where it moves behind the log.
 - **Bounded by pruning.** Each append keeps only the newest `UPSTREAM_KEEP_PER_PATH` (5) bodies per path, in the same transaction. Upstream is last-write-wins, so the newest response per path is the whole current state, and a client whose cursor predates a pruned row loses nothing. `AUTOINCREMENT` means a pruned `seq` is never reused. The size is about five bodies per request the sync makes: a few MB per event, the largest being a playoff event's matches with score breakdowns.
 - **Not built:** a path-to-event column for S3's scope filtering. Upstream data is public, so S3 only needs it for bandwidth, and the TBA path already contains the event key.
+
+**The venue stream and the pull (S2).** A `changes` table logs every insert, update, and delete of observations, assignments, and pick list entries. That includes reviews and declines, which are observation updates. **SQLite triggers write it** in the same transaction as the change, so no code path can forget, and a deletion is an ordinary `delete` row with no body. Each row carries a key that is the same on every device: `client_record_id`, or `match_key:team`. Rows written before S2 were logged once by the migration, so the log alone rebuilds the current state.
+
+- **The pull.** `GET /api/sync/pull?changes=<cursor>&upstream=<cursor>` returns both streams, each with its next cursor and a `more` flag. At most 500 changes and 20 upstream bodies come per request. Changes are served only once they are two seconds old: the lag window for a change whose `seq` is taken but not yet committed. The changes cursor moves past rows the viewer may not see, so nobody is sent back for them.
+- **Visibility is decided in one place,** `tt_web::sync::visible`. A pick list goes only to its team, since `team_scope` is the owning team. Another team's observation arrives with its notes removed by `tt_core::notes::redact`. Unreadable answers are sent as none, never passed through. **S3's subscription scope is a marked hook there,** to be applied before these two rules and never instead of them. Only these three tables have triggers. users, sessions, and devices have none, and the migration says they must never get one.
+- **Not built:** compaction. An event writes a few thousand change rows, mostly pick-list reorders, a few MB at most. When it matters, superseded upserts can be pruned per `entity_pk` as S1 prunes per path, but tombstones must stay longer than any client stays offline. Nothing consumes the pull yet; C7's sync client is the first.
 ---
 
 ## Phase 4 — Analysis and communication

@@ -401,6 +401,15 @@ impl Repo for SqliteRepo {
     async fn upstream_since(&self, after: i64, limit: i64) -> Result<Vec<tt_repo::UpstreamEntry>> {
         self.upstream_since_impl(after, limit).await
     }
+
+    async fn changes_since(
+        &self,
+        after: i64,
+        limit: i64,
+        settled_before: DateTime<Utc>,
+    ) -> Result<Vec<tt_repo::Change>> {
+        self.changes_since_impl(after, limit, settled_before).await
+    }
 }
 
 #[cfg(test)]
