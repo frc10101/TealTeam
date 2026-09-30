@@ -24,6 +24,15 @@
       <div class="nav-inner">
         <a class="brand" href="/{{ nav.event.query() }}">TealTeam</a>
 
+        {# The connection chip (I11): whether THIS device can reach the server,
+           observed, never switched on. The server's own internet is a
+           different thing, on the lead scout page. #}
+        <span class="link-chip" id="link-chip" role="status" aria-live="polite">
+          {% for state in nav.link.states %}
+            <span class="badge {{ state.class }}" data-link="{{ state.key }}" title="{{ state.meaning }}"{% if !state.shown %} hidden{% endif %}>{{ state.label }}<span class="visually-hidden">: {{ state.meaning }}</span></span>
+          {% endfor %}
+        </span>
+
         {% if !nav.event.options.is_empty() %}
           {# A GET form with no action submits to the current page, so switching
              reloads whatever page you are on, for the new event. #}
@@ -77,6 +86,7 @@
     <script src="/static/js/device.js" defer></script>
     <script src="/static/js/autosubmit.js" defer></script>
     <script src="/static/js/live.js" defer></script>
+    <script src="/static/js/link.js" defer></script>
     {% block scripts %}{% endblock %}
   </body>
 </html>

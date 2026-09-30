@@ -499,6 +499,54 @@ mod flow_tests {
     }
 
     #[tokio::test]
+    async fn every_page_says_whether_this_device_reaches_the_server() {
+        let state = migrated_state().await;
+        let cookie = signed_up(&state).await;
+
+        for (uri, cookie) in [("/sign-in", None), ("/", Some(cookie.as_str()))] {
+            let page = text(get(&state, uri, cookie).await).await;
+            assert!(page.contains(r#"id="link-chip""#), "{uri}");
+            // A page that just came from the server is synced; the script
+            // switches to the others, which say what is safe.
+            assert!(
+                page.contains(r#"data-link="synced" title="Everything you&#39;ve entered is on the server.">Synced"#),
+                "{uri}: {page}"
+            );
+            assert!(page.contains(r#"data-link="offline""#), "{uri}");
+            assert!(page.contains("hidden>Offline · nothing unsent"), "{uri}");
+            assert!(page.contains(r#"src="/static/js/link.js""#), "{uri}");
+        }
+
+        let script = get(&state, "/static/js/link.js", None).await;
+        assert_eq!(script.status(), StatusCode::OK);
+        assert!(text(script).await.contains(r#"fetch("/health""#));
+    }
+
+    #[test]
+    fn offline_is_never_called_a_mode() {
+        // It is a state the app observes (I11), not a toggle. The retired
+        // app's "offline mode" is what left scouts unsure what still worked.
+        let crates = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let mut stack = vec![
+            crates.join("tt-templates/templates"),
+            crates.join("tt-web/static/js"),
+        ];
+        let mut read = 0;
+        while let Some(path) = stack.pop() {
+            if path.is_dir() {
+                stack.extend(std::fs::read_dir(&path).unwrap().map(|e| e.unwrap().path()));
+                continue;
+            }
+            let words = std::fs::read_to_string(&path).unwrap().to_lowercase();
+            read += 1;
+            for phrase in ["offline mode", "go offline", "work offline"] {
+                assert!(!words.contains(phrase), "{}: {phrase}", path.display());
+            }
+        }
+        assert!(read > 10, "found the templates and scripts");
+    }
+
+    #[tokio::test]
     async fn the_first_account_becomes_an_admin() {
         // Otherwise a fresh deployment has nobody who can grant anybody anything.
         let state = migrated_state().await;

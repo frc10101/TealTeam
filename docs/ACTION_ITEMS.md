@@ -221,7 +221,7 @@ This is the highest-leverage cluster in either source document. It removes the 5
 | I8 | **Pre-event bulk load** — full upstream snapshot, one command, verifiable row counts. An afternoon of work that covers most of the tedious data before you leave the shop | RI-S5 | S | **Done** — `tt-web bulk-load` |
 | I9 | ETag / conditional requests on the TBA poller | RI-S10 | S | **Done** — in-memory, inside `TbaClient` |
 | I10 | Connectivity tracker: TCP connect to `1.1.1.1:443`, 1500 ms, 3s cache, skip loopback/RFC1918/link-local | RS §6.4 | S | **Done** |
-| I11 | **Four-state connection chip describing the client's link to the server**, not the server's internet — and remove all "offline mode" toggle language | RI-O11 · RS §6.4, §12 | S |  |
+| I11 | **Four-state connection chip describing the client's link to the server**, not the server's internet — and remove all "offline mode" toggle language | RI-O11 · RS §6.4, §12 | S | **Done** — the header chip, `tt_core::link`, `static/js/link.js` |
 | I12 | **Upstream freshness badges**; amber past 20 minutes during quals. Stale rankings that look live cause bad picks | RI-S11 | S | **Done** — `connectivity::Freshness`, with U14 |
 | I13 | `POST /api/frc/sync` manual sync, admin/lead only | RS §6.1 | S | **Done** |
 | I14 | **Manual rankings entry screen** — the true last resort. A lead scout can type 40 rows off the audience display in five minutes, and it has never once failed to work | RI-S13 | S | **Done** — `/lead-scout/rankings/enter` |
@@ -381,7 +381,13 @@ Checked against the binary at phone width: ranks synced 35 minutes ago read "las
 
 **No page waits on the internet (U15).** Neither of §12.7's calls was ever ported: `/teams` has read storage only since U11, and the scouting page's roster is storage only, even when empty (the robots come from the match; the roster only adds names). U15 makes that a rule the tests hold. `no_page_asks_upstream_even_when_storage_has_nothing` points FIRST and TBA at a stub that counts requests and never answers, seeds an event with a schedule but no roster, and opens every page, including unknown teams and an event with nothing. It fails if any page waits on the stub or calls it. The one request that still waits on the network is `POST /api/frc/sync`, the sync button, where waiting is the point. A new page should be added to that test's list.
 
-**Still open in Phase 2:** I11, U16, U17, and P3-P9.
+**The connection chip (I11).** Every page's header says whether *this device* can reach the server: **Synced**, **Syncing…** while a save is on its way, or **Offline · nothing unsent**. Offline is a state the page observes, never a mode, and nowhere does the app call it one — a test fails if a template or script says "offline mode". The words and the order (unreachable, then sending, then review, then synced) are `tt_core::link::Link`. The layout renders every state with one shown, and `static/js/link.js` picks which: it checks `/health` every 30 seconds while connected and every 5 while not, and believes the browser's `offline` event at once. Without the script the chip says Synced, true of a page that has just loaded. The lead scout page's uplink row is now **"Server's internet"**, so the two are not confused: a Pi with no internet still takes every save.
+
+**Two of the four states are waiting on their data.** "Offline · 4 saved" needs the outbox (C5), so until then offline says *nothing unsent*, which is true: a save made offline fails in the browser and is not lost silently. "3 need review" needs a count on the client (L8, and conflicts from Phase 3). `Link` already has both, with tests, so they only need a number.
+
+Checked in headless Chromium at 390px and 1280px, with `/health` dropping the connection: the chip switches from Synced to "Offline · nothing unsent" on the next check and fits beside the brand at both widths.
+
+**Still open in Phase 2:** U16, U17, and P3-P9.
 
 ---
 

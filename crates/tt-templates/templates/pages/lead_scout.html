@@ -66,7 +66,7 @@
        re-reads itself from the lead-scout page every 30 seconds. The URL is
        this page's, not the address bar's, which after a press is the POST. #}
     <dl class="detail" id="upstream-status" data-live="/lead-scout{{ nav.event.query() }}" data-live-every="30">
-      <dt>Server uplink</dt>
+      <dt>Server's internet</dt>
       <dd><span class="badge {{ upstream.uplink_class }}">{{ upstream.uplink_label }}</span></dd>
       <dt>Last sync</dt>
       <dd>{{ upstream.last_sync }}{% if upstream.stale %} <span class="badge badge-amber">stale</span>{% endif %}</dd>

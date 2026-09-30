@@ -24,6 +24,7 @@ pub use team::{
 };
 use tt_core::assignments::{self, AssigneeKey, Assignment, Sighting, SlotState};
 use tt_core::form::{FormErrors, RawAnswers, input_name, is_on};
+use tt_core::link::Link;
 use tt_core::records::{Event, MatchRecord, Team};
 use tt_core::season::{FieldKind, SeasonSchema};
 use tt_core::user::User;
@@ -71,6 +72,8 @@ pub struct Nav {
     pub storage_ready: bool,
     /// The header's event switcher. Hidden on pages that set no options.
     pub event: EventSwitcher,
+    /// The connection chip in the header.
+    pub link: LinkChips,
 }
 
 impl Nav {
@@ -92,9 +95,48 @@ impl Nav {
                 can_admin: u.roles.can_admin(),
                 storage_ready,
                 event: EventSwitcher::default(),
+                link: LinkChips::default(),
             },
             None => Self::anonymous(storage_ready),
         }
+    }
+}
+
+/// The connection chip (I11): this device's link to the server.
+///
+/// Every state `static/js/link.js` may switch to is rendered, one shown and the
+/// rest hidden, so the words stay in `tt_core::link` and the script only picks
+/// one. Without the script the chip says Synced, which is true of a page that
+/// just came from the server.
+#[derive(Debug, Clone)]
+pub struct LinkChips {
+    pub states: Vec<LinkChip>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LinkChip {
+    pub key: &'static str,
+    pub label: String,
+    pub meaning: String,
+    pub class: &'static str,
+    pub shown: bool,
+}
+
+impl Default for LinkChips {
+    fn default() -> Self {
+        // No outbox (C5) and no review count on the client yet, so offline
+        // has nothing unsent and "needs review" is never reached.
+        let states = [Link::Synced, Link::Syncing, Link::Offline { unsent: 0 }]
+            .into_iter()
+            .map(|link| LinkChip {
+                key: link.key(),
+                label: link.label(),
+                meaning: link.meaning(),
+                class: link.css_class(),
+                shown: link == Link::Synced,
+            })
+            .collect();
+        LinkChips { states }
     }
 }
 

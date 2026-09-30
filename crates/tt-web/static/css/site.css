@@ -176,6 +176,10 @@ h1, h2 { margin: 0; font-size: 1.25rem; line-height: 1.3; }
 .badge-red  { background: var(--red-900);  color: #fecaca; }
 .badge-amber { background: var(--amber-900); color: #fde68a; }
 .badge-gray  { background: var(--gray-700);  color: var(--gray-100); }
+.badge-blue  { background: var(--blue-900);  color: #bfdbfe; }
+
+/* The connection chip (I11), beside the brand so it is in sight on a phone. */
+.link-chip { display: inline-flex; }
 
 .muted { color: var(--gray-500); font-size: 0.9375rem; }
 
