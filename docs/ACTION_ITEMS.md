@@ -414,7 +414,7 @@ Checked on a development machine: a database on the encrypted btrfs root was rep
 
 **The Pi's network (P4, P6) is written but has never run on a Pi.** `deploy/pi/network/setup.sh` is idempotent and has `--dry-run`. It sets `eth0` to a static `10.101.0.1` with no default route, and runs dnsmasq DHCP on `eth0` only with **no gateway**, so tablets keep their own cellular. dnsmasq also answers `tealteam.local` over plain DNS for clients that do not do mDNS. Avahi advertises it, and a tethered phone (`usb0` Android, `eth1` iPhone) is the uplink at route metric 50. An nftables redirect lets the URL drop the port. It deletes any Wi-Fi AP profile it finds. `status.sh` is the read-only event-day check. What was verified here: ShellCheck, the nftables ruleset loading twice in a scratch namespace, and a dry run. `docs/PI_NETWORK.md` lists the nine shop checks still owed. The first is whether Android routes to a wired network with no internet; the doc explains why that matters. P2's E143 question is still open. This follows the plan: design for the compliant path, and unplug the phone if the FTA objects.
 
-**Still open in Phase 2:** U17, P7, P8, and P9.
+**Still open in Phase 2:** U17, P7, and P9.
 
 ---
 
