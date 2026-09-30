@@ -244,7 +244,7 @@ This is the highest-leverage cluster in either source document. It removes the 5
 | P5 | Asset resolution: walk up from both the exe and cwd, or embed assets in the binary | RS §10 | S | **Done** — embedded: `tt-web/build.rs`, `src/assets.rs` |
 | P6 | Wired Ethernet to clients + USB tethering as the uplink (`usb0`, route metric). **Build no Wi-Fi AP** — it violates E143 | RI-N4, RI-N5 · RS §10 | M | **Done, untested on a Pi** — with P4; the rules check is still P2 |
 | P7 | Buy per-client 25 ft flat Ethernet, gaff tape, and USB-C Ethernet adapters (~$15 each) | RI §1 | S |  |
-| P8 | One-page laminated event-day setup runbook with a photo of the correct cabling | RI-N7 | S |  |
+| P8 | One-page laminated event-day setup runbook with a photo of the correct cabling | RI-N7 | S | **Done** — `docs/EVENT_DAY_RUNBOOK.md`; photo and server folder are fill-ins |
 | P9 | Practice the full network setup and teardown twice at the shop, timed, by a student who did not design it | RI §1 | S |  |
 
 ### Phase 2 notes
