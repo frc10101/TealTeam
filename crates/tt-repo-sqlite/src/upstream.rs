@@ -97,6 +97,17 @@ impl SqliteRepo {
 }
 
 impl SqliteRepo {
+    pub(crate) async fn log_heads_impl(&self) -> Result<(i64, i64)> {
+        let heads: (i64, i64) = sqlx::query_as(
+            "SELECT (SELECT COALESCE(MAX(seq), 0) FROM changes), \
+                    (SELECT COALESCE(MAX(seq), 0) FROM upstream)",
+        )
+        .fetch_one(self.pool())
+        .await
+        .map_err(|e| query_err("reading the log heads", e))?;
+        Ok(heads)
+    }
+
     /// The venue stream (S2). The log is written by triggers
     /// (`migrations/0004_changes.sql`); this only reads it.
     pub(crate) async fn changes_since_impl(

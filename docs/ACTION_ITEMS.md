@@ -449,7 +449,7 @@ The architectural payoff. Phase 2 must be shipping before this starts.
 | S6 | USB tether as the Pi's automatic uplink; pull bundles whenever `usb0` is up | RI-S6 | M |  |
 | S7 | Opportunistic client fetch: detect signal, fetch upstream, queue bundle, push on reconnect | RI-S7 | M |  |
 | S8 | **SSE fan-out endpoint** with `Last-Event-ID` resume and a polling fallback | RI-S9 | M | **Done** — `GET /api/sync/stream`; see Phase 3 notes |
-| S9 | **Push assignment changes over SSE** instead of re-rendering the whole grid on every click | RI-A2 · RS §12.8 | M |  |
+| S9 | **Push assignment changes over SSE** instead of re-rendering the whole grid on every click | RI-A2 · RS §12.8 | M | **Done** — `grid-live.js`, `assignment-watch.js`; see Phase 3 notes |
 | S10 | SQLite snapshot bootstrap (`/api/sync/snapshot`, OPFS import) — ship a file, not a million rows | RI-O17 | M |  |
 | S11 | Schema version handshake + blocking update banner. The mid-event deploy footgun | RI-O18 | S | **Done** — page `<meta>` vs `/health`, `?schema=` on `/api/sync/pull`; see Phase 3 notes |
 | S12 | Clients compute and record their clock offset against the server on each sync, so device skew is measurable rather than mysterious | RI §Time Sync | S |  |
@@ -541,6 +541,11 @@ Observations already carry their form version, so one saved from an old form lan
 - The 409s, and the stamps matching `/health`, are Rust tests.
 
 Not checked: a real tablet, or an iPad's `pagehide`.
+
+**Assignments over the live stream (S9).** The grid no longer re-renders whole for a one-cell change (REBUILD_SPEC.md 12.8). Every cell's id is `match_key:team`, the same as S2's `entity_pk` for an assignment. The page opens the S8 stream from the current log heads (`Repo::log_heads`), so it gets what happens next, not the history.
+- **The lead's grid.** On the grid, `grid-live.js` marks the cell named in each `assignment` change. 300 ms after the last one, it fetches the grid once and swaps just those cells and the coverage table, outlining each briefly. The markup still lives only in the page template. A **Save in the match editor** is posted with `fetch`. From the page the 303 leads to, it takes the saved match's cells, the notice, and the next editor, then updates the URL. Anything other than a redirect, such as a refused save and its reasons, is posted again the ordinary way so the page shows it. Without JavaScript nothing changes: plain posts, 303s, and live.js's 30 s polling, which also stays as the fallback when the stream is refused.
+- **The scout's page.** It carries who the scout is (user and tablet), the robot on screen if it came from an assignment, and the event's match labels. `assignment-watch.js` says so in words when the lead takes that robot away ("took Q2 · Team 254 off your list; if you are already watching it, finish and save") or gives them one. The two together read as a move. It links to their next assignment and never touches the form.
+- **Checked:** a router test that both pages carry the hooks and start from the log heads. Both scripts ran in headless Chromium with a fake `EventSource` and `fetch`: a move, an unrelated change staying quiet, the one-cell swap, the in-place save, and a refused save falling back to a real post. Not checked: against the live server in a browser.
 
 ---
 

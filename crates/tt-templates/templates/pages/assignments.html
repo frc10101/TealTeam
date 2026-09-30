@@ -4,7 +4,9 @@
   red over blue, like the scouting page's robot picker.
 
   Every change (L2) is a plain form post answered with a 303 back here, so the
-  page works without JavaScript and a reload never posts twice. Tapping a
+  page works without JavaScript and a reload never posts twice. With it,
+  grid-live.js (S9) swaps only the cells a change touched: the lead's own
+  saves, and anyone else's, pushed over the live stream. Tapping a
   match opens its editor: ?edit=<match key>, in the URL like everything else.
 
   The explicit roles are there because changing a table's `display`, as the
@@ -31,7 +33,7 @@
         <tr role="row" id="{{ row.id }}">
           <th scope="row" role="rowheader"><a href="{{ row.edit_href }}" aria-label="Assign {{ row.label }}">{{ row.label }}</a></th>
           {% for cell in row.cells %}
-            <td role="cell" class="slot {{ cell.color }} {{ cell.state }}">
+            <td role="cell" class="slot {{ cell.color }} {{ cell.state }}"{% if !cell.team.is_empty() %} id="{{ row.id }}:{{ cell.team }}"{% endif %}>
               <span class="slot-station" aria-hidden="true">{{ cell.station }}</span>
               {% if cell.team.is_empty() %}
                 <strong class="slot-team">TBD</strong>
@@ -59,7 +61,7 @@
 
 {% block content %}
 {% for error in errors %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endfor %}
-{% if !notice.is_empty() %}<p class="alert alert-success" role="status">{{ notice }}</p>{% endif %}
+<div id="grid-notice">{% if !notice.is_empty() %}<p class="alert alert-success" role="status">{{ notice }}</p>{% endif %}</div>
 
 <section class="card">
   <div class="card-header">
@@ -115,7 +117,9 @@
       <h2>Assign {{ editor.label }}{% if editor.played %} <span class="badge badge-gray">played</span>{% endif %}</h2>
     </div>
     <div class="card-body">
-      <form method="post" action="/api/assignments/match{{ nav.event.query() }}" class="stack">
+      {# data-inplace: with JavaScript, saving updates the grid where it is
+         (S9); without, the usual 303 back to this page. #}
+      <form method="post" action="/api/assignments/match{{ nav.event.query() }}" class="stack" data-inplace>
         <input type="hidden" name="match" value="{{ editor.match_key }}">
         <div class="editor-slots">
           {% for slot in editor.slots %}
@@ -259,3 +263,8 @@
   </section>
 {% endif %}
 {% endblock %}
+
+{% block scripts %}{% if !stream_href.is_empty() %}
+<div id="grid-stream" data-stream="{{ stream_href }}" data-page="{{ live_href }}" hidden></div>
+<script src="/static/js/grid-live.js" defer></script>
+{% endif %}{% endblock %}

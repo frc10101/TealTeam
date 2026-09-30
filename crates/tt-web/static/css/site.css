@@ -507,6 +507,8 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
 .slot-name { font-size: 0.75rem; color: var(--gray-300); }
 .slot-name.unknown { font-style: italic; }
 .slot-assignee { font-size: 0.875rem; font-weight: 500; }
+/* A cell someone just changed (S9): a moment's outline, so a lead sees what moved. */
+.slot.slot-changed { outline: 3px solid #5eead4; outline-offset: -3px; }
 .slot-kind { font-size: 0.75rem; font-weight: 400; color: var(--gray-300); }
 
 /* Wide enough for seven columns: a real table, headers on top. */

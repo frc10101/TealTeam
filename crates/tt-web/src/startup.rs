@@ -1711,6 +1711,66 @@ mod flow_tests {
         assert!(own.contains("tippy on the ramp"), "{own}");
     }
 
+    #[tokio::test]
+    async fn the_grid_and_the_scouts_page_listen_for_assignment_changes_from_now_on() {
+        // S9. Sam (user 1) is assigned 254 in Q2.
+        let (state, sam) = scouting().await;
+        sqlx::query(
+            "INSERT INTO scout_assignments (match_key, team_number, event_key, scouter_id, \
+             created_at, updated_at) VALUES ('2026now_qm2', 254, '2026now', 1, 'x', 'x')",
+        )
+        .execute(state.repo.pool())
+        .await
+        .unwrap();
+        let (heads, _) = state.repo.log_heads().await.unwrap();
+        assert!(heads > 0, "the insert was logged");
+
+        let grid =
+            text(get(&state, "/lead-scout/assignments?event=2026now", Some(&sam)).await).await;
+        assert!(
+            grid.contains(r#"id="2026now_qm2:254""#),
+            "cells are addressable by entity_pk"
+        );
+        assert!(
+            grid.contains(&format!(r#"data-stream="/api/sync/stream?changes={heads}"#)),
+            "from now on, not the history"
+        );
+        assert!(grid.contains("/static/js/grid-live.js"));
+        let editing = text(
+            get(
+                &state,
+                "/lead-scout/assignments?event=2026now&edit=2026now_qm2",
+                Some(&sam),
+            )
+            .await,
+        )
+        .await;
+        assert!(
+            editing.contains("data-inplace"),
+            "the editor saves in place"
+        );
+
+        let scout = text(get(&state, "/submission?event=2026now", Some(&sam)).await).await;
+        assert!(
+            scout.contains("You are scouting"),
+            "following the assignment"
+        );
+        let watch = scout
+            .split(r#"data-watch=""#)
+            .nth(1)
+            .and_then(|rest| rest.split('"').next())
+            .expect("a watch")
+            .replace("&#34;", "\"")
+            .replace("&quot;", "\"")
+            .replace("&#38;", "&")
+            .replace("&amp;", "&");
+        let watch: serde_json::Value = serde_json::from_str(&watch).expect(&watch);
+        assert_eq!(watch["current"], "2026now_qm2:254");
+        assert_eq!(watch["user"], 1);
+        assert_eq!(watch["labels"]["2026now_qm2"], "Q2");
+        assert!(scout.contains("/static/js/assignment-watch.js"));
+    }
+
     async fn observations(state: &AppState) -> i64 {
         sqlx::query_scalar("SELECT COUNT(*) FROM observations")
             .fetch_one(state.repo.pool())

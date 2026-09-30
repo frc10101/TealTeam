@@ -123,6 +123,7 @@ pub async fn page(
         picker: None,
         saved: String::new(),
         saved_draft: String::new(),
+        watch: String::new(),
         errors: Vec::new(),
         notice: String::new(),
         form: None,
@@ -374,6 +375,23 @@ pub async fn page(
                 draft_key(user.id, &event.key, &record.key, team, state.season.version);
             page.form = Some(form);
         }
+    }
+
+    // S9: so the page can say when the lead moves one of this scout's robots.
+    if let Some(stream) = crate::sync::stream_href(state).await {
+        let labels: std::collections::BTreeMap<&str, String> = matches
+            .iter()
+            .map(|m| (m.key.as_str(), m.label()))
+            .collect();
+        page.watch = serde_json::json!({
+            "stream": stream,
+            "user": user.id,
+            "device": device_id,
+            "current": team.filter(|_| following).map(|t| format!("{}:{t}", record.key)),
+            "labels": labels,
+            "href": format!("/submission?event={}", event.key),
+        })
+        .to_string();
     }
 
     page.errors = errors;

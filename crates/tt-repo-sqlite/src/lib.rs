@@ -410,6 +410,10 @@ impl Repo for SqliteRepo {
     ) -> Result<Vec<tt_repo::Change>> {
         self.changes_since_impl(after, limit, settled_before).await
     }
+
+    async fn log_heads(&self) -> Result<(i64, i64)> {
+        self.log_heads_impl().await
+    }
 }
 
 #[cfg(test)]

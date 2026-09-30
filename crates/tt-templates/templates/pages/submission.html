@@ -18,6 +18,9 @@
 {% endmacro %}
 
 {% block content %}
+{# S9: assignment-watch.js fills this in when the lead changes one of this
+   scout's robots. #}
+{% if !watch.is_empty() %}<div id="assignment-watch" data-watch="{{ watch }}" hidden></div>{% endif %}
 {% if !saved.is_empty() %}
   <div class="alert alert-success" role="status"{% if !saved_draft.is_empty() %} data-draft-clear="{{ saved_draft }}"{% endif %}>
     <p>{{ saved }}</p>
@@ -216,4 +219,5 @@
 {% endblock %}
 
 {% block scripts %}<script src="/static/js/counter.js" defer></script>
-<script src="/static/js/draft.js" defer></script>{% endblock %}
+<script src="/static/js/draft.js" defer></script>
+<script src="/static/js/assignment-watch.js" defer></script>{% endblock %}

@@ -676,6 +676,9 @@ pub struct AssignmentsPage {
     pub coverage: Vec<TallyRow>,
     /// The grid's own address, which its live regions refresh from.
     pub live_href: String,
+    /// The live stream from now on (S9): `/api/sync/stream?changes=..`.
+    /// Empty without storage.
+    pub stream_href: String,
 }
 
 /// Someone who can be handed a robot, as a form offers them.
@@ -1015,6 +1018,9 @@ pub struct SubmissionPage {
     pub saved: String,
     /// The [`draft_key`] of that save, for `draft.js` to throw away (C3).
     pub saved_draft: String,
+    /// What `assignment-watch.js` needs to tell a scout their assignment
+    /// changed (S9), as JSON; empty when there is nothing to watch.
+    pub watch: String,
     pub errors: Vec<String>,
     /// Something to know that is not a failure.
     pub notice: String,
@@ -1689,6 +1695,7 @@ mod tests {
             picker,
             saved: String::new(),
             saved_draft: String::new(),
+            watch: String::new(),
             errors: Vec::new(),
             notice: String::new(),
             form,
@@ -1915,6 +1922,7 @@ mod tests {
             devices: Vec::new(),
             coverage: Vec::new(),
             live_href: "/lead-scout/assignments?event=2026mabil".into(),
+            stream_href: String::new(),
         }
         .render_html()
         .expect("render")
@@ -1969,7 +1977,10 @@ mod tests {
         );
 
         let html = assignments_page(Some(grid), "");
-        assert!(html.contains(r#"<td role="cell" class="slot red open">"#));
+        assert!(
+            html.contains(r#"<td role="cell" class="slot red open" id="2026mabil_qm2:254">"#),
+            "addressable by S2's entity_pk (S9)"
+        );
         assert!(html.contains("Sam"));
         assert!(html.contains(r#"Stands Left <span class="slot-kind">tablet</span>"#));
         assert!(html.contains(r#"<strong class="slot-team">TBD</strong>"#));
@@ -2133,6 +2144,7 @@ mod tests {
                 to_come: 4,
             }],
             live_href: "/lead-scout/assignments?event=2026mabil".into(),
+            stream_href: String::new(),
         };
         let html = page.render_html().expect("render");
         assert!(

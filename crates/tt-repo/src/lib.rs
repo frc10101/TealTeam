@@ -572,6 +572,10 @@ pub trait LocalRepo {
         limit: i64,
         settled_before: DateTime<Utc>,
     ) -> Result<Vec<Change>>;
+
+    /// The newest `seq` in `changes` and in `upstream`, 0 when empty: where a
+    /// page opening a live stream starts, so it is not sent history (S9).
+    async fn log_heads(&self) -> Result<(i64, i64)>;
 }
 
 #[cfg(test)]

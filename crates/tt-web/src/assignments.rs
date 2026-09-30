@@ -295,6 +295,7 @@ pub async fn page(
         devices: Vec::new(),
         coverage: Vec::new(),
         live_href: String::new(),
+        stream_href: String::new(),
     };
 
     let Some(event) = &context.selected else {
@@ -402,6 +403,7 @@ pub async fn page(
     page.pool = people.pool(now);
     page.devices = people.device_rows(now);
     page.live_href = assignments_href(&event.key, None);
+    page.stream_href = crate::sync::stream_href(state).await.unwrap_or_default();
     page.grid = Some(AssignmentGrid::new(
         &event.key,
         &matches,

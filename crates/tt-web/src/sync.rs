@@ -240,6 +240,15 @@ impl Drop for Slot {
     }
 }
 
+/// The live stream from this moment on, for a page to open (S9): it wants
+/// what happens next, not the history. `None` without storage.
+pub async fn stream_href(state: &AppState) -> Option<String> {
+    let (changes, upstream) = state.repo.log_heads().await.ok()?;
+    Some(format!(
+        "/api/sync/stream?changes={changes}&upstream={upstream}"
+    ))
+}
+
 /// Both cursors, as one event id: `"<changes>-<upstream>"`. What a browser
 /// sends back as `Last-Event-ID` when it reconnects.
 pub fn event_id(changes: i64, upstream: i64) -> String {
