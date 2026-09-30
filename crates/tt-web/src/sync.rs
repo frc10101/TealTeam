@@ -11,13 +11,22 @@
 //!
 //! What a viewer may see is decided per change in [`visible`], the one place
 //! S3's subscription scope will go.
+//!
+//! `GET /api/sync/stream` (S8) is the same two streams pushed as server-sent
+//! events, for as long as the connection lasts: see [`stream`].
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
+use std::convert::Infallible;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Duration;
 
 use axum::Json;
 use axum::extract::{Query, State};
+use axum::http::{HeaderMap, StatusCode, header};
+use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use chrono::{TimeDelta, Utc};
+use futures_util::stream;
 use serde_json::{Value as JsonValue, json};
 use tracing::warn;
 use tt_core::notes::{self, Notes};
@@ -158,4 +167,222 @@ pub fn visible(schema: &SeasonSchema, viewer: &User, change: Change) -> Option<J
         "event_key": change.event_key,
         "at": change.created_at,
     }))
+}
+
+// ── Fan-out (S8) ────────────────────────────────────────────────────────────
+
+/// How often an open stream looks for new rows. Changes wait [`LAG`] anyway,
+/// so a second more is not noticed, and a query a second per tablet is
+/// nothing to SQLite.
+pub const STREAM_POLL: Duration = Duration::from_secs(1);
+/// A comment line this often, so phones and proxies keep an idle stream open.
+pub const HEARTBEAT: Duration = Duration::from_secs(15);
+/// Most streams open at once. A team's tablets and laptops are a few dozen;
+/// past this a client polls [`pull`] instead.
+pub const MAX_STREAMS: usize = 64;
+
+static OPEN_STREAMS: AtomicUsize = AtomicUsize::new(0);
+
+/// One of the [`MAX_STREAMS`], held for as long as its stream lives.
+pub struct Slot(&'static AtomicUsize);
+
+impl Slot {
+    pub fn acquire(open: &'static AtomicUsize, max: usize) -> Option<Self> {
+        open.fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+            (n < max).then_some(n + 1)
+        })
+        .ok()
+        .map(|_| Self(open))
+    }
+}
+
+impl Drop for Slot {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
+/// Both cursors, as one event id: `"<changes>-<upstream>"`. What a browser
+/// sends back as `Last-Event-ID` when it reconnects.
+pub fn event_id(changes: i64, upstream: i64) -> String {
+    format!("{changes}-{upstream}")
+}
+
+/// The cursors from a `Last-Event-ID`; `None` for anything else.
+pub fn parse_event_id(raw: &str) -> Option<(i64, i64)> {
+    let (changes, upstream) = raw.trim().split_once('-')?;
+    Some((
+        changes.parse::<i64>().ok()?.max(0),
+        upstream.parse::<i64>().ok()?.max(0),
+    ))
+}
+
+/// `GET /api/sync/stream`: the two streams of [`pull`], pushed.
+///
+/// Resumes from `Last-Event-ID` (a browser's reconnect), else from
+/// `?changes=&upstream=` (a client's saved cursors), else from the start.
+/// Event types, each with the cursors as its id:
+///
+/// - `change`: one row of the venue stream, as [`visible`] shows it.
+/// - `upstream`: one FIRST or TBA response.
+/// - `cursor`: only an id. Rows went by that this viewer may not see; saves
+///   a reconnect reading them again.
+///
+/// Later types join these on the same channel: assignment pushes (S9) and
+/// chat (X2). A client listens for the types it knows, and `EventSource`
+/// ignores the rest. Over [`MAX_STREAMS`] the answer is a 503 naming the
+/// polling fallback.
+pub async fn stream(
+    State(state): State<AppState>,
+    Auth(viewer): Auth,
+    headers: HeaderMap,
+    Query(query): Query<HashMap<String, String>>,
+) -> Response {
+    let Some(slot) = Slot::acquire(&OPEN_STREAMS, MAX_STREAMS) else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            [(header::RETRY_AFTER, "30")],
+            Json(json!({
+                "error": "too many live connections; poll instead",
+                "poll": "/api/sync/pull",
+            })),
+        )
+            .into_response();
+    };
+
+    let from_query = |name: &str| {
+        query
+            .get(name)
+            .and_then(|v| v.parse::<i64>().ok())
+            .unwrap_or(0)
+            .max(0)
+    };
+    let (changes, upstream) = headers
+        .get("last-event-id")
+        .and_then(|v| v.to_str().ok())
+        .and_then(parse_event_id)
+        .unwrap_or_else(|| (from_query("changes"), from_query("upstream")));
+
+    let tail = Tail {
+        state,
+        viewer,
+        changes,
+        upstream,
+        pending: VecDeque::new(),
+        first: true,
+        _slot: slot,
+    };
+    let events = stream::unfold(tail, |mut tail| async move {
+        loop {
+            if let Some(event) = tail.pending.pop_front() {
+                return Some((Ok::<_, Infallible>(event), tail));
+            }
+            if !tail.first {
+                tokio::time::sleep(STREAM_POLL).await;
+            }
+            tail.first = false;
+            tail.fill().await;
+        }
+    });
+    Sse::new(events)
+        .keep_alive(KeepAlive::new().interval(HEARTBEAT))
+        .into_response()
+}
+
+/// One open stream: whose it is, how far it has got, and what is ready to send.
+struct Tail {
+    state: AppState,
+    viewer: User,
+    changes: i64,
+    upstream: i64,
+    pending: VecDeque<Event>,
+    first: bool,
+    _slot: Slot,
+}
+
+impl Tail {
+    /// Queue whatever is new since the cursors. A storage error sends nothing
+    /// and is tried again next time round.
+    async fn fill(&mut self) {
+        match self
+            .state
+            .repo
+            .changes_since(self.changes, CHANGES_PER_PULL, Utc::now() - LAG)
+            .await
+        {
+            Ok(rows) => {
+                let mut unsent = false;
+                for change in rows {
+                    self.changes = change.seq;
+                    match visible(&self.state.season, &self.viewer, change) {
+                        Some(row) => {
+                            unsent = false;
+                            self.push("change", &row);
+                        }
+                        None => unsent = true,
+                    }
+                }
+                if unsent {
+                    self.push("cursor", &json!({}));
+                }
+            }
+            Err(e) => warn!("sync stream: {e}"),
+        }
+        match self
+            .state
+            .repo
+            .upstream_since(self.upstream, UPSTREAM_PER_PULL)
+            .await
+        {
+            Ok(rows) => {
+                for u in rows {
+                    self.upstream = u.seq;
+                    self.push(
+                        "upstream",
+                        &json!({
+                            "seq": u.seq,
+                            "api": u.entry.api,
+                            "path": u.entry.path,
+                            "etag": u.entry.etag,
+                            "body": u.entry.body,
+                            "fetched_at": u.entry.fetched_at,
+                        }),
+                    );
+                }
+            }
+            Err(e) => warn!("sync stream: {e}"),
+        }
+    }
+
+    fn push(&mut self, kind: &str, data: &JsonValue) {
+        let event = Event::default()
+            .event(kind)
+            .id(event_id(self.changes, self.upstream))
+            .data(data.to_string());
+        self.pending.push_back(event);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_event_id_carries_both_cursors_and_junk_is_ignored() {
+        assert_eq!(event_id(42, 7), "42-7");
+        assert_eq!(parse_event_id(" 42-7 "), Some((42, 7)));
+        assert_eq!(parse_event_id("-5-3"), None);
+        assert_eq!(parse_event_id("42"), None);
+        assert_eq!(parse_event_id("a-b"), None);
+    }
+
+    #[test]
+    fn streams_past_the_cap_are_refused_and_a_closed_one_frees_its_slot() {
+        static OPEN: AtomicUsize = AtomicUsize::new(0);
+        let first = Slot::acquire(&OPEN, 2).expect("one");
+        let _second = Slot::acquire(&OPEN, 2).expect("two");
+        assert!(Slot::acquire(&OPEN, 2).is_none(), "full");
+        drop(first);
+        assert!(Slot::acquire(&OPEN, 2).is_some(), "freed on close");
+    }
 }

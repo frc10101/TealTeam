@@ -448,7 +448,7 @@ The architectural payoff. Phase 2 must be shipping before this starts.
 | S5 | Bundle import on the Pi: role-gate the push, `ATTACH`, upsert, advance cursor, audit-log | RI-S4 | M |  |
 | S6 | USB tether as the Pi's automatic uplink; pull bundles whenever `usb0` is up | RI-S6 | M |  |
 | S7 | Opportunistic client fetch: detect signal, fetch upstream, queue bundle, push on reconnect | RI-S7 | M |  |
-| S8 | **SSE fan-out endpoint** with `Last-Event-ID` resume and a polling fallback | RI-S9 | M |  |
+| S8 | **SSE fan-out endpoint** with `Last-Event-ID` resume and a polling fallback | RI-S9 | M | **Done** — `GET /api/sync/stream`; see Phase 3 notes |
 | S9 | **Push assignment changes over SSE** instead of re-rendering the whole grid on every click | RI-A2 · RS §12.8 | M |  |
 | S10 | SQLite snapshot bootstrap (`/api/sync/snapshot`, OPFS import) — ship a file, not a million rows | RI-O17 | M |  |
 | S11 | Schema version handshake + blocking update banner. The mid-event deploy footgun | RI-O18 | S |  |
@@ -510,6 +510,13 @@ A new worker is already fetched by the next navigation. S11 decides when the pag
 
 Not checked: Safari, Firefox, or a real tablet.
 
+
+**The live stream (S8).** `GET /api/sync/stream` pushes S2's two streams as server-sent events, with the same cursors and the same `sync::visible`. So a stream can no more leak another team's notes or pick list than a pull can. Every event's id is both cursors, `"<changes>-<upstream>"`.
+- **Resuming.** A browser reconnects on its own with that id as `Last-Event-ID` and carries on from there. A client with saved cursors passes `?changes=&upstream=` instead.
+- **Event types.** `change`, `upstream`, and `cursor`: rows went by that this viewer may not see, so the id moves on without them. Later types join on the same channel: assignment pushes (S9), chat (X2). `EventSource` ignores types a client has not registered for.
+- **Keeping it open.** A comment line every 15 s keeps phones and proxies from dropping an idle stream.
+- **The cap.** At most 64 streams are open at once. Past that the answer is a 503 with `Retry-After`, naming `/api/sync/pull` as the polling fallback.
+- **Cost.** Each open stream checks the logs once a second, which is nothing to SQLite at that count. Changes wait out the two-second lag anyway, so push latency is 2-3 s. A shared notifier would cut the queries if the cap ever needs to rise. Nothing in the browser listens yet; C7's sync client is the first.
 ---
 
 ## Phase 4 — Analysis and communication

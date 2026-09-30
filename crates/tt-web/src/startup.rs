@@ -266,6 +266,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/rankings/manual", post(handlers::save_rankings))
         .route("/api/pick-list", post(handlers::change_pick_list))
         .route("/api/sync/pull", get(crate::sync::pull))
+        .route("/api/sync/stream", get(crate::sync::stream))
         .route("/api/weights/reset", post(handlers::reset_weights))
         .route(
             "/api/observations/{id}/approve",
@@ -1532,6 +1533,91 @@ mod flow_tests {
         let both = pull(kim, format!("changes={cursor}&upstream=0")).await;
         assert_eq!(both["upstream"][0]["path"], "/event/2026now/rankings");
         assert!(both["upstream_cursor"].as_i64().unwrap() > 0);
+    }
+
+    /// Read an SSE body for up to `wait`, or until `until` appears.
+    async fn sse_for(response: Response, wait: std::time::Duration, until: &str) -> String {
+        use futures_util::StreamExt;
+        let mut frames = response.into_body().into_data_stream();
+        let mut seen = String::new();
+        let deadline = tokio::time::Instant::now() + wait;
+        while !seen.contains(until) {
+            match tokio::time::timeout_at(deadline, frames.next()).await {
+                Ok(Some(Ok(bytes))) => seen.push_str(&String::from_utf8_lossy(&bytes)),
+                _ => break,
+            }
+        }
+        seen
+    }
+
+    #[tokio::test]
+    async fn the_live_stream_pushes_changes_without_other_teams_notes_and_resumes() {
+        // S8. Sam (10101) scouts 254 with a note; Kim (254) is listening.
+        let (state, sam) = scouting().await;
+        let response = post(
+            &state,
+            "/api/auth/signup",
+            "name=Kim&email=kim%40example.com&team_number=254&password=longenough1&confirm_password=longenough1",
+            None,
+        )
+        .await;
+        let kim = session_cookie_from(&response).expect("kim");
+        post(
+            &state,
+            "/api/submission?event=2026now",
+            &observation_form(254, RECORD_ID, GOOD_ANSWERS),
+            Some(&sam),
+        )
+        .await;
+        tokio::time::sleep(
+            (crate::sync::LAG + chrono::TimeDelta::milliseconds(200))
+                .to_std()
+                .unwrap(),
+        )
+        .await;
+
+        let wait = std::time::Duration::from_secs(5);
+        let live = get(&state, "/api/sync/stream", Some(&kim)).await;
+        assert_eq!(live.headers()[header::CONTENT_TYPE], "text/event-stream");
+        let seen = sse_for(live, wait, "event: change").await;
+        assert!(seen.contains("event: change"), "{seen}");
+        assert!(seen.contains(RECORD_ID));
+        assert!(
+            seen.contains(r#""teleop_scored":9"#),
+            "the numbers are shared"
+        );
+        assert!(!seen.contains("tippy"), "not Kim's team's note: {seen}");
+
+        // A reconnect names the last id it saw, and is not sent it again.
+        let id = seen
+            .lines()
+            .find_map(|l| l.strip_prefix("id: "))
+            .expect("an id")
+            .to_string();
+        let mut request = Request::builder().uri("/api/sync/stream");
+        request = request
+            .header(header::COOKIE, kim.as_str())
+            .header("last-event-id", id.as_str());
+        let resumed = router(state.clone())
+            .oneshot(request.body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let again = sse_for(
+            resumed,
+            std::time::Duration::from_millis(1500),
+            "event: change",
+        )
+        .await;
+        assert!(!again.contains("event: change"), "{again}");
+
+        // Sam's own stream carries the note.
+        let own = sse_for(
+            get(&state, "/api/sync/stream", Some(&sam)).await,
+            wait,
+            "tippy",
+        )
+        .await;
+        assert!(own.contains("tippy on the ramp"), "{own}");
     }
 
     async fn observations(state: &AppState) -> i64 {

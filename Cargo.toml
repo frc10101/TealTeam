@@ -29,6 +29,7 @@ async-trait = "0.1"
 argon2 = "0.5"
 axum = "0.8"
 axum-extra = { version = "0.10", features = ["cookie"] }
+futures-util = { version = "0.3", default-features = false }
 base64 = "0.22"
 rand = "0.9"
 # rustls, never OpenSSL: the release binary must have no system TLS dependency
