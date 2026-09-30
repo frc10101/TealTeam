@@ -2152,12 +2152,79 @@ mod flow_tests {
         .await;
         assert!(body.contains("<h1>Q2 · Team 254 · Red 2</h1>"), "{body}");
         assert!(body.contains("Recorded by Sam, just now."));
-        assert!(body.contains("<dt>Starting position</dt>\n          <dd>Center</dd>"));
-        assert!(body.contains("tippy on the ramp"));
+        let position = body.find("<dt>Starting position</dt>").expect("listed");
+        assert!(
+            body[position..]
+                .trim_start_matches(|c: char| c != '<')
+                .contains("<dd>Center</dd>")
+        );
         assert!(body.contains("Approve and see the next"));
 
         let missing = get(&state, "/lead-scout/submissions/99", Some(&kim)).await;
         assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+    }
+
+    // ── Notes privacy (U13) ─────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn notes_are_read_only_by_the_team_that_wrote_them() {
+        // Sam, on 10101, saved observation 1 with notes.
+        let (state, sam, kim) = two_pending().await;
+        let page = "/lead-scout/submissions/1?event=2026now";
+
+        let own = text(get(&state, page, Some(&sam)).await).await;
+        assert!(
+            own.contains("tippy on the ramp"),
+            "the writing team reads them"
+        );
+
+        // Kim is a lead with no team: sees the numbers, not the prose.
+        let teamless = text(get(&state, page, Some(&kim)).await).await;
+        assert!(!teamless.contains("tippy"), "{teamless}");
+        assert!(teamless.contains("Only scouts on team 10101 can read these notes."));
+        assert!(
+            teamless.contains("<dd>Center</dd>"),
+            "numbers and choices still show"
+        );
+
+        // Lee leads team 254: another team's notes are not theirs either.
+        let lee = session_cookie_from(
+            &post(
+                &state,
+                "/api/auth/signup",
+                "name=Lee&email=lee%40example.com&team_number=254&password=longenough1&confirm_password=longenough1",
+                None,
+            )
+            .await,
+        )
+        .expect("session");
+        sqlx::query("UPDATE users SET is_lead_scout = 1 WHERE email = 'lee@example.com'")
+            .execute(state.repo.pool())
+            .await
+            .expect("promote");
+        let other = text(get(&state, page, Some(&lee)).await).await;
+        assert!(other.contains("<h1>Q2 · Team 254 · Red 2</h1>"), "{other}");
+        assert!(!other.contains("tippy"));
+    }
+
+    #[tokio::test]
+    async fn notes_saved_without_a_team_are_read_by_nobody() {
+        let (state, sam, _) = two_pending().await;
+        sqlx::query("UPDATE observations SET submitting_team = NULL WHERE id = 1")
+            .execute(state.repo.pool())
+            .await
+            .expect("teamless");
+        let body = text(
+            get(
+                &state,
+                "/lead-scout/submissions/1?event=2026now",
+                Some(&sam),
+            )
+            .await,
+        )
+        .await;
+        assert!(!body.contains("tippy"));
+        assert!(body.contains("Saved without a team, so nobody can read these notes."));
     }
 
     #[tokio::test]
@@ -2514,14 +2581,57 @@ mod flow_tests {
         assert!(body.contains("<dt>Starting position</dt><dd>Left 1 · Center 1</dd>"));
         assert!(body.contains("<dt>Pieces scored in teleop</dt><dd>avg 5.0 · best 9</dd>"));
         assert!(
-            !body.contains("tippy on the ramp"),
-            "notes are U13's to show"
+            body.contains(r#"<p class="text-answer">tippy on the ramp</p>"#),
+            "Sam's own team's notes"
         );
 
         assert!(body.contains("<strong>Q1</strong>") && body.contains("<strong>Q2</strong>"));
         assert!(body.contains(
             r#"<a href="/submission?event=2026now&#38;match=2026now_qm2&#38;team=254">Scout</a>"#
         ));
+    }
+
+    #[tokio::test]
+    async fn a_team_page_shows_only_the_viewers_own_teams_notes() {
+        // Sam (10101) wrote notes on 254 in Q2; Kim (no team) wrote none.
+        let (state, sam) = ranked().await;
+        let own = text(get(&state, "/teams?team=254", Some(&sam)).await).await;
+        assert!(own.contains("Only notes by scouts on team 10101 are shown."));
+        assert!(own.contains("<p class=\"muted\">Q2 · Sam</p>"), "{own}");
+        assert!(own.contains("tippy on the ramp"));
+
+        // Lee, on 254, reads about their own robot, but not 10101's notes.
+        let lee = session_cookie_from(
+            &post(
+                &state,
+                "/api/auth/signup",
+                "name=Lee&email=lee%40example.com&team_number=254&password=longenough1&confirm_password=longenough1",
+                None,
+            )
+            .await,
+        )
+        .expect("session");
+        let other = text(get(&state, "/teams?team=254", Some(&lee)).await).await;
+        assert!(
+            other.contains("From 2 approved observations."),
+            "the numbers are shared"
+        );
+        assert!(other.contains("No notes from team 254 in these observations yet."));
+        assert!(!other.contains("tippy"));
+
+        let ada = session_cookie_from(
+            &post(
+                &state,
+                "/api/auth/signup",
+                "name=Ada&email=ada%40example.com&password=longenough1&confirm_password=longenough1",
+                None,
+            )
+            .await,
+        )
+        .expect("session");
+        let teamless = text(get(&state, "/teams?team=254", Some(&ada)).await).await;
+        assert!(teamless.contains("Your account has no team, so none are shown."));
+        assert!(!teamless.contains("tippy"));
     }
 
     #[tokio::test]

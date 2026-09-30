@@ -96,7 +96,23 @@ pub struct TeamAtEvent {
     /// Observations still waiting for review, not counted.
     pub waiting: usize,
     pub sections: Vec<SummarySection>,
+    /// The notes the viewer's team wrote on these observations, and only
+    /// those (U13).
+    pub notes: Vec<NoteLine>,
+    /// Whose notes are shown: the viewer's team. `None` when the viewer has
+    /// no team, and so reads none.
+    pub notes_team: Option<i32>,
     pub matches: Vec<TeamMatchLine>,
+}
+
+/// One note, from one approved observation.
+#[derive(Debug, Clone)]
+pub struct NoteLine {
+    /// `"Q14 · Priya"`.
+    pub heading: String,
+    /// The field it was written in; empty when the form has only one.
+    pub label: String,
+    pub text: String,
 }
 
 #[derive(Debug, Clone)]

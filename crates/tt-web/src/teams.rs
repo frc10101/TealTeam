@@ -13,12 +13,15 @@ use axum::http::request::Parts;
 use chrono::Utc;
 use tracing::warn;
 use tt_core::connectivity::{describe_age, is_stale};
+use tt_core::notes::{self, Notes};
 use tt_core::profile;
-use tt_core::season::Payload;
-use tt_repo::Repo;
+use tt_core::records::MatchRecord;
+use tt_core::season::{FieldKind, Payload};
+use tt_core::user::User;
+use tt_repo::{Repo, StoredObservation};
 use tt_templates::{
-    EventLink, Nav, RosterEntry, TeamAtEvent, TeamCard, TeamMatchLine, TeamPage, stat_lines,
-    summary_sections,
+    EventLink, Nav, NoteLine, RosterEntry, TeamAtEvent, TeamCard, TeamMatchLine, TeamPage,
+    stat_lines, summary_sections,
 };
 
 use crate::events::EventContext;
@@ -45,6 +48,7 @@ impl<S: Send + Sync> FromRequestParts<S> for TeamParam {
 pub async fn page(
     state: &AppState,
     nav: Nav,
+    viewer: &User,
     context: &EventContext,
     requested: &TeamParam,
 ) -> TeamPage {
@@ -149,11 +153,11 @@ pub async fn page(
         }
     };
 
-    let payloads: Vec<&Payload> = approved
+    let observed: Vec<&StoredObservation> = approved
         .iter()
         .filter(|o| o.team_number == number && o.schema_version == state.season.version)
-        .map(|o| &o.payload)
         .collect();
+    let payloads: Vec<&Payload> = observed.iter().map(|o| &o.payload).collect();
     let on_roster = roster.iter().any(|t| t.number == number);
     if !on_roster && matches.is_empty() && stats.is_none() && payloads.is_empty() {
         page.not_at_event = if page.other_events.is_empty() {
@@ -179,10 +183,58 @@ pub async fn page(
         observed: payloads.len(),
         waiting: pending.iter().filter(|o| o.team_number == number).count(),
         sections: summary_sections(&profile::summarize(&state.season, &payloads)),
+        notes: note_lines(state, viewer, &observed, &matches),
+        notes_team: viewer.team_number,
         matches: matches
             .iter()
             .filter_map(|m| TeamMatchLine::new(m, number))
             .collect(),
     });
     page
+}
+
+/// The notes `viewer` may read on `observed`, in match order: their own
+/// team's and no one else's (U13).
+fn note_lines(
+    state: &AppState,
+    viewer: &User,
+    observed: &[&StoredObservation],
+    matches: &[MatchRecord],
+) -> Vec<NoteLine> {
+    let mut readable: Vec<&StoredObservation> = observed
+        .iter()
+        .copied()
+        .filter(|o| Notes::for_viewer(viewer.team_number, o.submitting_team).shown())
+        .collect();
+    // Stable, and `None` sorts first: a match gone from the schedule leads.
+    readable.sort_by_key(|o| matches.iter().position(|m| m.key == o.match_key));
+    // With one text field on the form, its label says nothing the heading
+    // does not.
+    let one_field = state
+        .season
+        .fields()
+        .filter(|f| matches!(f.kind, FieldKind::Text { .. }))
+        .count()
+        <= 1;
+    readable
+        .iter()
+        .flat_map(|o| {
+            let label = matches
+                .iter()
+                .find(|m| m.key == o.match_key)
+                .map(MatchRecord::label)
+                .unwrap_or_else(|| o.match_key.clone());
+            let scout = o
+                .scouter_name
+                .clone()
+                .unwrap_or_else(|| "a scout whose account is gone".into());
+            notes::written(&state.season, &o.payload)
+                .into_iter()
+                .map(move |(field, text)| NoteLine {
+                    heading: format!("{label} · {scout}"),
+                    label: if one_field { String::new() } else { field },
+                    text,
+                })
+        })
+        .collect()
 }

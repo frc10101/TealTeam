@@ -201,7 +201,7 @@ This is the highest-leverage cluster in either source document. It removes the 5
 | --- | --- | --- | --- | --- |
 | U11 | **Consolidate team stats into one `TeamProfile` view model** — synced stats plus scouting aggregates, empty strings for absent values rather than zeros | RI-U8 · RS §5.4 | M || **Done** — `/teams?team=N` |
 | U12 | **Pick one aggregation rule.** Mode for some fields and latest-row for others was an accident, not a design | RS §5.4, §12 | S || **Done** — `tt_core::profile` |
-| U13 | Notes filtered to the viewer's own `submitting_team_id`; no-team viewers see none | RS §5.4 | S |  |
+| U13 | Notes filtered to the viewer's own `submitting_team_id`; no-team viewers see none | RS §5.4 | S | **Done** — `tt_core::notes::Notes`, on the review page and the team profile |
 | U14 | **Provenance badges** (`n=`, `scouted_at`, `synced ago`) on every aggregate | RI-U7 | S |  |
 | U15 | **Remove synchronous upstream calls from page renders.** `/teams` and the team-select fallback both blocked a render on the network | RS §12.7 | M |  |
 | U16 | Mobile pass: bottom nav, 44px touch targets, card layouts under 600px | RI-U10 · RS §7 | M |  |
@@ -351,9 +351,19 @@ Checked against the binary at 390 and 1280px on a seeded 40-team event: the pref
 
 **U19 was already done.** `tt_core::matches::classify` implements the ±15-minute rule, with boundary tests, and has been there since the ingestion commit. **For U18:** it reads only the clock, so when an event runs 20 minutes behind, a match that has not been played reads "Completed". The coach panel should trust `matches.played` first and use the window only to pick out the current match.
 
-**The team profile (U11, U12).** `/teams?team=N` (signed in; a **Teams** nav link, a team-number box with roster type-ahead) brings together who a team is, the statistics FIRST and TBA have published for it at the selected event — only those published, never a zero for "not yet", with when they were synced and a stale badge — what scouts saw, its matches with results and a Scout link each, and its other events. It never waits on the internet: a team this server does not know is said so (REBUILD_SPEC.md 12.7). **One aggregation rule (U12):** every field over all approved observations on the current form version — a choice is a tally, most common first, ties in form order; a counter its average and best; a yes/no how often. No field is "latest row" any more. Notes are not on the page yet: who may read them is U13's rule, in progress in another session. Switching event in the header drops the team; the page's "Other events" links cover that for now.
+**The team profile (U11, U12).** `/teams?team=N` (signed in; a **Teams** nav link, a team-number box with roster type-ahead) brings together who a team is, the statistics FIRST and TBA have published for it at the selected event — only those published, never a zero for "not yet", with when they were synced and a stale badge — what scouts saw, its matches with results and a Scout link each, and its other events. It never waits on the internet: a team this server does not know is said so (REBUILD_SPEC.md 12.7). **One aggregation rule (U12):** every field over all approved observations on the current form version — a choice is a tally, most common first, ties in form order; a counter its average and best; a yes/no how often. No field is "latest row" any more. Its **Notes** card is U13's: see below. Switching event in the header drops the team; the page's "Other events" links cover that for now.
 
-**Still open in Phase 2:** I11, U11-U18, U20, and P3-P9.
+**Notes are read only by the team that wrote them (U13).** One rule, in `tt_core::notes::Notes::for_viewer(viewer_team, submitting_team)`: notes show when both are set and equal, and never otherwise. A viewer with no team reads none, and notes saved with no team are read by nobody, since two teamless people are not a team. The numbers are shared; only the prose is held back.
+
+**The one leak was the review page.** Any lead, of any team or none, could open `/lead-scout/submissions/{id}` and read every answer, notes included. It now shows the numbers and choices as before, and in place of held-back notes: "Only scouts on team 254 can read these notes." `review::answers` takes the viewer's `Notes` and marks those answers `hidden`, with no text in them. **Free text from an older form is held back too.** The page lists answers the current schema no longer declares, and a dropped field's text cannot be told apart from notes, so any undeclared text answer is treated as notes. Numbers and yes/no answers from old forms still show.
+
+**What U13 did not change: who reviews what.** The queue still lists every team's pending observations, and any lead can approve or decline them. That is now a question of workflow, not of privacy. A lead can review another team's scouts without reading their notes. Whether a lead *should* is an open decision.
+
+**The team profile's Notes card.** `/teams?team=N` lists the notes the viewer's own team wrote on that team's approved observations, in match order, each headed with its match and scout ("Q14 · Priya"). Other teams' notes are left out, not counted. A viewer with no team is told that notes belong to the team that wrote them, and sees none. The notes come from the same observations as "What scouts saw", and `tt_core::notes::written` picks out the filled-in text fields.
+
+Checked against the binary at phone width: a lead on 10101 opening a 254 scout's observation sees the counts and choices, and the notes card says whose they are. The page's HTML carries none of the text. On team 254's profile, Sam (10101) reads their own note, and Kim (on 254) is told team 254 has written none there. Kim's HTML carries none of Sam's text.
+
+**Still open in Phase 2:** I11, U14-U18, U20, and P3-P9.
 
 ---
 

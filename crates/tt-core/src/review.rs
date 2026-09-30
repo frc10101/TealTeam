@@ -9,6 +9,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::error::{DomainError, Result};
+use crate::notes::Notes;
 use crate::season::{FieldKind, Payload, SeasonSchema, Value};
 
 /// Longest decline reason kept. A sentence or two for a teenager on a phone.
@@ -97,6 +98,9 @@ pub struct Answer {
     pub value: String,
     /// A free-text field, so the page can give it room.
     pub is_text: bool,
+    /// Held back from this viewer (U13): `value` is empty, and the page says
+    /// whose notes these are instead.
+    pub hidden: bool,
 }
 
 /// A section's worth of answers, in form order.
@@ -108,8 +112,13 @@ pub struct AnswerGroup {
 
 /// A payload as the lead scout reads it: every field of `schema` in form order,
 /// then anything the payload holds that the schema does not declare -- from an
-/// older form version -- so nothing a scout recorded is hidden.
-pub fn answers(schema: &SeasonSchema, payload: &Payload) -> Vec<AnswerGroup> {
+/// older form version -- so nothing a scout recorded is lost.
+///
+/// With [`Notes::Hidden`], free text is held back (U13). That includes any
+/// undeclared text answer: a field an older form had cannot be told apart from
+/// a notes field, so it is treated as one. Numbers and choices always show.
+pub fn answers(schema: &SeasonSchema, payload: &Payload, notes: Notes) -> Vec<AnswerGroup> {
+    let hide = |value: &Value| !notes.shown() && matches!(value, Value::Text(_));
     let mut groups: Vec<AnswerGroup> = schema
         .sections
         .iter()
@@ -128,10 +137,13 @@ pub fn answers(schema: &SeasonSchema, payload: &Payload) -> Vec<AnswerGroup> {
                             .unwrap_or_else(|| key.clone()),
                         (_, Some(value)) => show(value),
                     };
+                    let is_text = matches!(field.kind, FieldKind::Text { .. });
+                    let hidden = is_text && payload.get(&field.key).is_some_and(hide);
                     Answer {
                         label: field.label.clone(),
-                        value,
-                        is_text: matches!(field.kind, FieldKind::Text { .. }),
+                        value: if hidden { String::new() } else { value },
+                        is_text,
+                        hidden,
                     }
                 })
                 .collect(),
@@ -143,8 +155,13 @@ pub fn answers(schema: &SeasonSchema, payload: &Payload) -> Vec<AnswerGroup> {
         .filter(|(key, _)| schema.field(key).is_none())
         .map(|(key, value)| Answer {
             label: key.clone(),
-            value: show(value),
+            value: if hide(value) {
+                String::new()
+            } else {
+                show(value)
+            },
             is_text: false,
+            hidden: hide(value),
         })
         .collect();
     if !extra.is_empty() {
@@ -233,6 +250,7 @@ mod tests {
                 ("no_show", Value::Flag(false)),
                 ("notes", Value::Text("tippy".into())),
             ]),
+            Notes::Shown,
         );
         let all: Vec<(&str, &str)> = groups
             .iter()
@@ -256,10 +274,57 @@ mod tests {
         let groups = answers(
             &schema,
             &payload(&[("hang_level", Value::Text("l3".into()))]),
+            Notes::Shown,
         );
         let last = groups.last().unwrap();
         assert_eq!(last.label, "Not on the current form");
         assert_eq!(last.answers[0].value, "l3");
+    }
+
+    #[test]
+    fn another_teams_notes_are_held_back_and_their_numbers_are_not() {
+        let schema = current_season().unwrap();
+        let groups = answers(
+            &schema,
+            &payload(&[
+                ("starting_position", Value::Text("center".into())),
+                ("teleop_scored", Value::Count(9)),
+                ("notes", Value::Text("their driver panics".into())),
+                // From an older form: text, so it might be prose.
+                ("scout_opinion", Value::Text("do not pick".into())),
+                ("old_count", Value::Count(3)),
+            ]),
+            Notes::Hidden,
+        );
+        let all: Vec<&Answer> = groups.iter().flat_map(|g| &g.answers).collect();
+        let find = |label: &str| *all.iter().find(|a| a.label == label).expect(label);
+
+        assert_eq!(find("Starting position").value, "Center", "a choice shows");
+        assert!(!find("Starting position").hidden);
+        assert_eq!(find("Pieces scored in teleop").value, "9");
+        let notes = all.iter().find(|a| a.is_text).expect("the notes field");
+        assert!(notes.hidden && notes.value.is_empty());
+        assert!(find("scout_opinion").hidden && find("scout_opinion").value.is_empty());
+        assert_eq!(find("old_count").value, "3");
+        assert!(
+            !all.iter()
+                .any(|a| a.value.contains("panics") || a.value.contains("pick")),
+            "no prose anywhere"
+        );
+    }
+
+    #[test]
+    fn unwritten_notes_are_not_marked_hidden() {
+        // Nothing to hold back: the page says "—", not "hidden".
+        let schema = current_season().unwrap();
+        let groups = answers(&schema, &payload(&[]), Notes::Hidden);
+        let notes = groups
+            .iter()
+            .flat_map(|g| &g.answers)
+            .find(|a| a.is_text)
+            .unwrap();
+        assert!(!notes.hidden);
+        assert_eq!(notes.value, "—");
     }
 
     #[test]

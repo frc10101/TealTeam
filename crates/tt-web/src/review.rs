@@ -14,6 +14,7 @@ use axum::http::request::Parts;
 use chrono::{DateTime, Utc};
 use tracing::{info, warn};
 use tt_core::connectivity::describe_age;
+use tt_core::notes::Notes;
 use tt_core::records::MatchRecord;
 use tt_core::review::{self, Decision, ReviewState};
 use tt_core::user::User;
@@ -143,11 +144,13 @@ fn queue_href(event_key: &str, reviewed: ReviewState) -> String {
     )
 }
 
-/// One observation in full. `None` when there is no such observation, or
-/// storage could not say.
+/// One observation in full, as `viewer` may see it: another team's notes are
+/// held back (U13). `None` when there is no such observation, or storage
+/// could not say.
 pub async fn page(
     state: &AppState,
     nav: Nav,
+    viewer: &User,
     id: i64,
     notice: String,
     errors: Vec<String>,
@@ -209,7 +212,15 @@ pub async fn page(
         state: o.review_state.as_str(),
         state_label: o.review_state.label(),
         verdict,
-        answers: review::answers(&state.season, &o.payload),
+        answers: review::answers(
+            &state.season,
+            &o.payload,
+            Notes::for_viewer(viewer.team_number, o.submitting_team),
+        ),
+        hidden_notes: match o.submitting_team {
+            Some(team) => format!("Only scouts on team {team} can read these notes."),
+            None => "Saved without a team, so nobody can read these notes.".into(),
+        },
         missing_notes: review::missing_notes(&state.season, &o.payload),
         other_version,
         pending: o.review_state == ReviewState::Pending,

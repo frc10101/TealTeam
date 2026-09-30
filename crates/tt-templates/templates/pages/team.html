@@ -69,6 +69,29 @@
     </div>
   </section>
 
+  <section class="card" id="notes">
+    <div class="card-header"><h2>Notes</h2></div>
+    <div class="card-body">
+      {% if let Some(own) = here.notes_team %}
+        <p class="hint">Only notes by scouts on team {{ own }} are shown. Other teams keep theirs.</p>
+        {% if here.notes.is_empty() %}
+          <p class="muted">No notes from team {{ own }} in these observations yet.</p>
+        {% else %}
+          <ul class="team-notes">
+            {% for note in here.notes %}
+              <li>
+                <p class="muted">{{ note.heading }}{% if !note.label.is_empty() %} · {{ note.label }}{% endif %}</p>
+                <p class="text-answer">{{ note.text }}</p>
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% else %}
+        <p class="muted">Notes are read only by the team whose scouts wrote them. Your account has no team, so none are shown.</p>
+      {% endif %}
+    </div>
+  </section>
+
   <section class="card" id="matches">
     <div class="card-header"><h2>Matches</h2></div>
     <div class="card-body">

@@ -339,6 +339,9 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
 .team-matches li.red  { background: color-mix(in srgb, var(--red-900) 45%, transparent); }
 .team-matches li.blue { background: color-mix(in srgb, var(--blue-900) 45%, transparent); }
 .team-matches a { margin-left: auto; }
+.team-notes { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem; }
+.team-notes p { margin: 0; }
+.team-notes .text-answer { white-space: pre-wrap; overflow-wrap: anywhere; }
 .plain-links { margin: 0; padding-left: 1.25rem; display: grid; gap: 0.25rem; }
 .plain-links a { display: inline-flex; min-height: var(--tap); align-items: center; }
 

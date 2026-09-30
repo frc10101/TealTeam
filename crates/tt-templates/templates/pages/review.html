@@ -32,7 +32,11 @@
       <dl class="detail answers">
         {% for answer in group.answers %}
           <dt>{{ answer.label }}</dt>
-          <dd{% if answer.is_text %} class="text-answer"{% endif %}>{{ answer.value }}</dd>
+          {% if answer.hidden %}
+            <dd class="muted">{{ hidden_notes }}</dd>
+          {% else %}
+            <dd{% if answer.is_text %} class="text-answer"{% endif %}>{{ answer.value }}</dd>
+          {% endif %}
         {% endfor %}
       </dl>
     </div>

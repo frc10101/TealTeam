@@ -596,7 +596,7 @@ pub async fn team(
     team: TeamParam,
 ) -> Response {
     let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
-    html(teams::page(&state, nav, &context, &team).await)
+    html(teams::page(&state, nav, &user, &context, &team).await)
 }
 
 // ── Rankings (L11) and point values (L12) ───────────────────────────────────
@@ -725,6 +725,7 @@ pub async fn review_page(
     match review::page(
         &state,
         nav,
+        &user,
         id,
         reviewed.message(),
         Vec::new(),
@@ -751,7 +752,7 @@ async fn verdict(
         Err(review::Refused::Missing) => StatusCode::NOT_FOUND.into_response(),
         Err(review::Refused::Again { errors, reason }) => {
             let (nav, _) = event_page(&state, Some(&user), requested.as_deref()).await;
-            match review::page(&state, nav, id, String::new(), errors, reason).await {
+            match review::page(&state, nav, &user, id, String::new(), errors, reason).await {
                 Some(page) => html(page),
                 None => StatusCode::NOT_FOUND.into_response(),
             }

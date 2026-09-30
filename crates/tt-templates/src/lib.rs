@@ -15,8 +15,8 @@ use askama::Template;
 
 mod team;
 pub use team::{
-    EventLink, StatLine, SummaryLine, SummarySection, TeamAtEvent, TeamCard, TeamMatchLine,
-    TeamPage, stat_lines, summary_sections, team_href,
+    EventLink, NoteLine, StatLine, SummaryLine, SummarySection, TeamAtEvent, TeamCard,
+    TeamMatchLine, TeamPage, stat_lines, summary_sections, team_href,
 };
 use tt_core::assignments::{self, AssigneeKey, Assignment, Sighting, SlotState};
 use tt_core::form::{FormErrors, RawAnswers, input_name, is_on};
@@ -496,6 +496,9 @@ pub struct ReviewPage {
     /// `"Declined by Kim, 2 minutes ago: that was 1678"`. Empty while pending.
     pub verdict: String,
     pub answers: Vec<tt_core::review::AnswerGroup>,
+    /// Said in place of notes held back from this viewer (U13): whose they
+    /// are, e.g. "Only scouts on team 10101 can read these notes."
+    pub hidden_notes: String,
     pub missing_notes: bool,
     /// Saved on a different version of the form than the one in use.
     pub other_version: String,
