@@ -13,6 +13,8 @@
 
 use askama::Template;
 
+mod coach;
+pub use coach::{AllianceView, CoachCard, CoachTeam, DriveCoachPage};
 mod team;
 pub use team::{
     EventLink, NoteLine, StatLine, SummaryLine, SummarySection, TeamAtEvent, TeamCard,

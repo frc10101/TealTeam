@@ -28,6 +28,7 @@ use crate::auth::{
     Auth, Coach, LeadScout, MaybeAuth, SESSION_COOKIE, clear_session_cookie, device_uuid,
     hash_password, new_session, session_cookie, verify_password,
 };
+use crate::coach;
 use crate::events::{self, EventContext, EventParam};
 use crate::ranking::{self, RankingParams};
 use crate::review::{self, ReviewedParam};
@@ -852,33 +853,14 @@ pub async fn submit_observation(
     }
 }
 
-// ── Role-guarded pages ──────────────────────────────────────────────────────
-//
-// The nav links these for users who hold the role, so they must exist. Their
-// content arrives in phase 2 (U18-U20); what matters now is that the guard is
-// on the handler, so the access rule is settled before the page has anything
-// worth protecting.
+// ── Drive coach (U18) ───────────────────────────────────────────────────────
 
+/// `GET /drive-coach`: the coach's team's matches, from the local schedule.
 pub async fn drive_coach(
     State(state): State<AppState>,
     Coach(user): Coach,
     EventParam(requested): EventParam,
 ) -> Response {
-    let (nav, _) = event_page(&state, Some(&user), requested.as_deref()).await;
-    placeholder(
-        &state,
-        nav,
-        "Drive Coach",
-        "Match schedule and alliance partners",
-    )
-}
-
-fn placeholder(state: &AppState, nav: Nav, title: &str, summary: &str) -> Response {
-    html(tt_templates::PlaceholderPage {
-        title: title.to_string(),
-        nav,
-        heading: title.to_string(),
-        summary: summary.to_string(),
-        season_name: state.season.name.clone(),
-    })
+    let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
+    html(coach::page(&state, &user, nav, &context).await)
 }

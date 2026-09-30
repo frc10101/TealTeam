@@ -7,7 +7,5 @@ description = "Askama templates and view models. Compiles to wasm32 so rendering
 [dependencies]
 tt-core = { workspace = true }
 askama = { workspace = true }
-thiserror = { workspace = true }
-
-[dev-dependencies]
 chrono = { workspace = true }
+thiserror = { workspace = true }

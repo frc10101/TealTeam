@@ -1,0 +1,67 @@
+{#
+  The drive coach panel (U18). The coach's team's matches at the selected
+  event, from the local schedule, so it works with no internet at all
+  (REBUILD_SPEC.md 12.6). A match is played when the results feed says so;
+  the clock only says how far off the next one is.
+#}
+{% extends "layout.html" %}
+
+{% macro alliance(side, heading) %}
+  <div class="coach-side {{ side.color }}">
+    <p class="coach-side-head">{{ heading }} · {{ side.color }} · OPR {{ side.opr_total }}{% if side.opr_partial %}<span class="muted"> (not all synced)</span>{% endif %}</p>
+    <ul>
+      {% for t in side.teams %}
+        <li{% if t.us %} class="us"{% endif %}>
+          <a href="{{ t.href }}"><strong>{{ t.number }}</strong></a>
+          <span class="muted">OPR {{ t.opr }} · DPR {{ t.dpr }}</span>
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+{% endmacro %}
+
+{% macro card(m, big) %}
+  <article class="coach-card{% if big %} next{% endif %}" id="{{ m.id }}">
+    <p class="coach-card-head">
+      <strong>{{ m.label }}</strong>
+      {% if !m.timing.is_empty() %}<span>{{ m.timing }}</span>{% endif %}
+      {% if !m.result.is_empty() %}<span class="muted">{{ m.result }}</span>{% endif %}
+    </p>
+    <div class="coach-sides">
+      {% call alliance(m.ours, "With") %}{% endcall %}
+      {% call alliance(m.theirs, "Against") %}{% endcall %}
+    </div>
+  </article>
+{% endmacro %}
+
+{% block content %}
+{% for error in errors %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endfor %}
+
+<section class="card">
+  <div class="card-header">
+    <h1>Drive Coach{% if !team.is_empty() %} · {{ team }}{% endif %}{% if !event_name.is_empty() %} at {{ event_name }}{% endif %}</h1>
+  </div>
+  {% if !unavailable.is_empty() %}
+    <div class="card-body"><p>{{ unavailable }}</p></div>
+  {% else %}
+    {# Live: results and schedule changes land while the coach reads. #}
+    <div class="card-body" id="coach-schedule" data-live="{{ live_href }}" data-live-every="30">
+      {% if let Some(m) = next %}
+        <h2 class="subhead">Next</h2>
+        {% call card(m, true) %}{% endcall %}
+      {% else %}
+        <p>No matches left to play here.</p>
+      {% endif %}
+      {% if !later.is_empty() %}
+        <h2 class="subhead">Later</h2>
+        {% for m in later %}{% call card(m, false) %}{% endcall %}{% endfor %}
+      {% endif %}
+      {% if !played.is_empty() %}
+        <h2 class="subhead">Played, latest first</h2>
+        {% for m in played %}{% call card(m, false) %}{% endcall %}{% endfor %}
+      {% endif %}
+      <p class="hint">OPR and DPR as last synced from The Blue Alliance. Times are from the published schedule; events run late.</p>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

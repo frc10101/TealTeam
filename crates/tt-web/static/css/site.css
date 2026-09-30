@@ -345,6 +345,24 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
 .plain-links { margin: 0; padding-left: 1.25rem; display: grid; gap: 0.25rem; }
 .plain-links a { display: inline-flex; min-height: var(--tap); align-items: center; }
 
+/* ── Drive coach (U18) ───────────────────────────────────────────────────── */
+
+.coach-card { display: grid; gap: 0.5rem; padding: 0.75rem; border: 1px solid var(--gray-700); border-radius: var(--radius); }
+.coach-card.next { border: 2px solid var(--teal-500); }
+.coach-card-head { margin: 0; display: flex; flex-wrap: wrap; gap: 0.25rem 0.75rem; align-items: baseline; }
+.coach-card-head strong { font-size: 1.25rem; }
+.coach-card.next .coach-card-head strong { font-size: 1.75rem; }
+.coach-sides { display: grid; gap: 0.5rem; }
+@media (min-width: 40rem) { .coach-sides { grid-template-columns: 1fr 1fr; } }
+.coach-side { padding: 0.5rem 0.75rem; border-radius: var(--radius); }
+.coach-side.red  { background: color-mix(in srgb, var(--red-900) 45%, transparent); }
+.coach-side.blue { background: color-mix(in srgb, var(--blue-900) 45%, transparent); }
+.coach-side-head { margin: 0 0 0.25rem; font-size: 0.8125rem; color: var(--gray-300); }
+.coach-side ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.125rem; }
+.coach-side li { display: flex; flex-wrap: wrap; gap: 0 0.75rem; align-items: center; min-height: var(--tap); }
+.coach-side li.us strong { color: var(--teal-300); }
+#coach-schedule { gap: 0.75rem; }
+
 /* ── Assignment grid (L1) ───────────────────────────────────────────────── */
 
 /* Phone first: each match is a card -- its label across the top, then red 1-3

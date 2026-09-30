@@ -230,7 +230,7 @@ This is the highest-leverage cluster in either source document. It removes the 5
 
 | # | Action | Source | Effort | Status |
 | --- | --- | --- | --- | --- |
-| U18 | **Coach panel reads the local `matches` table**, not the live FIRST schedule. It was non-functional offline, at exactly the event where it matters most | RS §12.6 | M |  |
+| U18 | **Coach panel reads the local `matches` table**, not the live FIRST schedule. It was non-functional offline, at exactly the event where it matters most | RS §12.6 | M || **Done** — `/drive-coach`, `tt_core::coach` |
 | U19 | Match status classification (±15 min windows) as a pure function in `tt-core` | RS §5.7 | S | **Done** — `tt_core::matches::classify`, since the ingestion commit; see Phase 2 notes |
 | U20 | Pick list read / upsert / delete | RS §5.8 | S |  |
 
@@ -363,7 +363,9 @@ Checked against the binary at 390 and 1280px on a seeded 40-team event: the pref
 
 Checked against the binary at phone width: a lead on 10101 opening a 254 scout's observation sees the counts and choices, and the notes card says whose they are. The page's HTML carries none of the text. On team 254's profile, Sam (10101) reads their own note, and Kim (on 254) is told team 254 has written none there. Kim's HTML carries none of Sam's text.
 
-**Still open in Phase 2:** I11, U14-U18, U20, and P3-P9.
+**The drive coach panel reads the local schedule (U18).** `/drive-coach` shows the coach's team's matches at the selected event from the `matches` table the background sync fills — so it works with no internet, where the retired panel, which fetched FIRST live, showed nothing (§12.6). **The feed, not the clock, says what is played:** a played match shows its result; the first unplayed one is **Next**, however late the event is running; the clock only describes it — "in 12 min", "due now", "running 22 min late" — relative, so no timezone is needed (`tt_core::coach`). Each card shows our alliance and theirs with every team's OPR and DPR from the local stats, the alliance's OPR total (marked when some are not synced yet), and each team linked to its profile. Played matches are listed latest first. The schedule is a live region, refreshing every 30 seconds. A coach with no team number, or a team not on the schedule, is told so. The role-guarded placeholder page it replaces is no longer used by any route.
+
+**Still open in Phase 2:** I11, U14-U17, U20, and P3-P9.
 
 ---
 

@@ -2668,6 +2668,73 @@ mod flow_tests {
         assert!(home.contains(r#"<a href="/teams?event=2026now">Teams</a>"#));
     }
 
+    // ── Drive coach (U18) ───────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn the_coach_sees_their_matches_from_the_local_schedule() {
+        // Q1 played, Q2 not; team 10101 is red 1 in both. No upstream at all.
+        let (state, admin) = scouting().await;
+        let stats = tt_core::records::TeamEventStats {
+            team_number: 254,
+            event_key: "2026now".into(),
+            opr: Some(45.5),
+            dpr: Some(12.0),
+            ..Default::default()
+        };
+        state
+            .repo
+            .upsert_team_stats(&stats, chrono::Utc::now())
+            .await
+            .expect("stats");
+
+        let body = text(get(&state, "/drive-coach", Some(&admin)).await).await;
+        assert!(
+            body.contains("Drive Coach · 10101 at This Weekend"),
+            "{body}"
+        );
+        let next = body
+            .find("<h2 class=\"subhead\">Next</h2>")
+            .expect("a next match");
+        let played = body.find("Played, latest first").expect("a played match");
+        assert!(body[next..played].contains("<strong>Q2</strong>"));
+        assert!(body[next..played].contains("time not published"));
+        assert!(body[played..].contains("<strong>Q1</strong>"));
+        assert!(
+            body.contains("OPR 45.5 · DPR 12.0"),
+            "254's synced strength"
+        );
+        assert!(body.contains(r#"href="/teams?event=2026now&#38;team=254""#));
+        assert_live_regions_resolve(&state, &body, &admin).await;
+    }
+
+    #[tokio::test]
+    async fn the_coach_page_says_why_it_has_nothing_to_show() {
+        let (state, admin) = scouting().await;
+        // A coach with no team number.
+        let response = post(
+            &state,
+            "/api/auth/signup",
+            "name=Lee&email=lee%40example.com&password=longenough1&confirm_password=longenough1",
+            None,
+        )
+        .await;
+        let coach = session_cookie_from(&response).expect("session");
+        sqlx::query("UPDATE users SET is_coach = 1 WHERE email = 'lee@example.com'")
+            .execute(state.repo.pool())
+            .await
+            .expect("promote");
+        let body = text(get(&state, "/drive-coach", Some(&coach)).await).await;
+        assert!(body.contains("Your account has no team number"));
+
+        // A team that is not on this event's schedule.
+        sqlx::query("UPDATE users SET team_number = 9999 WHERE id = 1")
+            .execute(state.repo.pool())
+            .await
+            .expect("move team");
+        let body = text(get(&state, "/drive-coach?event=2026now", Some(&admin)).await).await;
+        assert!(body.contains("Team 9999 is not on the schedule at This Weekend."));
+    }
+
     // ── Assignment-driven scouting (L3-L5) ─────────────────────────────────
 
     #[tokio::test]

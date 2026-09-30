@@ -9,6 +9,7 @@
 
 mod assignments;
 mod auth;
+mod coach;
 mod config;
 mod errors;
 mod events;

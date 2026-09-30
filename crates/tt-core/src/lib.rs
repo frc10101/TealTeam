@@ -10,6 +10,7 @@
 //! the code belongs in an adapter crate instead.
 
 pub mod assignments;
+pub mod coach;
 pub mod connectivity;
 pub mod error;
 pub mod form;
