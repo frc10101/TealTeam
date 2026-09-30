@@ -85,9 +85,15 @@ impl SyncReport {
 // ── FIRST: events, teams, rosters (I4) ──────────────────────────────────────
 
 /// Pull the event list and each event's roster into the database.
+///
+/// Each event is stored under its TBA key, which `tba` supplies (I15).
+/// Without it, or when TBA does not answer, the key is built from FIRST's
+/// code: right for regionals and districts, wrong for Championship divisions
+/// and many offseason events, which then sync nothing from TBA.
 pub async fn sync_events<R: Repo + Sync>(
     repo: &R,
     client: &FirstClient,
+    tba: Option<&TbaClient>,
     filters: &EventFilters,
 ) -> Result<SyncReport> {
     let mut report = SyncReport::default();
@@ -96,8 +102,22 @@ pub async fn sync_events<R: Repo + Sync>(
     let events = client.events(filters).await?;
     info!("FIRST returned {} event(s)", events.len());
 
+    let known = match tba {
+        Some(tba) => match tba.events(client.season()).await {
+            Ok(listed) => upstream::tba_keys(&listed),
+            Err(e) => {
+                report.problem(format!(
+                    "TBA's event list is unavailable ({e}); divisions and some offseason \
+                     events may be stored under keys TBA does not use"
+                ));
+                Default::default()
+            }
+        },
+        None => Default::default(),
+    };
+
     for raw in &events {
-        let Some(key) = raw.tba_key() else {
+        let Some(key) = raw.tba_key_in(&known) else {
             report.problem(format!("event {:?} has no usable code or date", raw.name));
             continue;
         };
@@ -373,7 +393,7 @@ pub async fn bulk_load<R: Repo + Sync>(
     filters: &EventFilters,
     uplink: &Uplink,
 ) -> Result<SyncReport> {
-    let mut report = sync_events(repo, first, filters).await?;
+    let mut report = sync_events(repo, first, tba, filters).await?;
 
     if let Some(tba) = tba {
         let events = repo.list_events().await.unwrap_or_default();

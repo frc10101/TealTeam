@@ -24,7 +24,7 @@ use crate::{
     MAX_ATTEMPTS, REQUEST_TIMEOUT, Result, Uplink, UpstreamError, backoff, is_retryable, probe,
     truncate,
 };
-use tt_core::upstream::{ComponentOprs, Match, Oprs, Rankings};
+use tt_core::upstream::{ComponentOprs, Match, Oprs, Rankings, TbaEvent};
 
 const API: &str = "tba";
 pub const DEFAULT_BASE_URL: &str = "https://www.thebluealliance.com/api/v3";
@@ -257,6 +257,12 @@ impl TbaClient {
     pub async fn matches(&self, event_key: &str) -> Result<Vec<Match>> {
         self.get_or_empty(&format!("/event/{event_key}/matches"))
             .await
+    }
+
+    /// Every event TBA has for `year`: one request, to learn its keys for
+    /// FIRST's codes (I15).
+    pub async fn events(&self, year: i32) -> Result<Vec<TbaEvent>> {
+        self.get_or_empty(&format!("/events/{year}")).await
     }
 
     async fn get_or_empty<T: DeserializeOwned + Default>(&self, path: &str) -> Result<T> {

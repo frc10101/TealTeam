@@ -36,6 +36,9 @@ const TBA_COPRS: &str = r#"{
   "totalEndgamePoints": {"frc10101": 12.9,    "frc254": 15.25}
 }"#;
 
+/// TBA's event list: its key for each FIRST code (I15).
+const TBA_EVENTS: &str = r#"[{"key":"2026mabil","first_event_code":"mabil"}]"#;
+
 const TBA_OPRS: &str = r#"{
   "oprs":  {"frc10101": 55.5, "frc254": 88.25},
   "dprs":  {"frc10101": 20.1, "frc254": 15.0},
@@ -73,6 +76,7 @@ async fn stub_server() -> String {
     let app = Router::new()
         .route("/2026/events", get(|| async { FIRST_EVENTS }))
         .route("/2026/teams", get(|| async { FIRST_TEAMS }))
+        .route("/events/2026", get(|| async { TBA_EVENTS }))
         .route("/event/{key}/oprs", get(|| async { TBA_OPRS }))
         .route("/event/{key}/coprs", get(|| async { TBA_COPRS }))
         .route("/event/{key}/rankings", get(|| async { TBA_RANKINGS }))
@@ -141,7 +145,7 @@ async fn the_event_is_stored_with_its_derived_key_and_location() {
     let uplink = Uplink::new();
     let (first, _) = clients(&base, &uplink);
 
-    sync::sync_events(&repo, &first, &EventFilters::all())
+    sync::sync_events(&repo, &first, None, &EventFilters::all())
         .await
         .expect("sync");
 
@@ -172,7 +176,7 @@ async fn component_oprs_survive_their_dynamic_names() {
     let uplink = Uplink::new();
     let (first, tba) = clients(&base, &uplink);
 
-    sync::sync_events(&repo, &first, &EventFilters::all())
+    sync::sync_events(&repo, &first, None, &EventFilters::all())
         .await
         .expect("events");
     sync::sync_stats(&repo, &tba, "2026mabil")
@@ -201,7 +205,7 @@ async fn ranking_points_come_out_of_the_arrays_when_the_primitives_are_null() {
     let uplink = Uplink::new();
     let (first, tba) = clients(&base, &uplink);
 
-    sync::sync_events(&repo, &first, &EventFilters::all())
+    sync::sync_events(&repo, &first, None, &EventFilters::all())
         .await
         .expect("events");
     sync::sync_stats(&repo, &tba, "2026mabil")
@@ -225,7 +229,7 @@ async fn matches_record_scores_only_when_played() {
     let uplink = Uplink::new();
     let (first, tba) = clients(&base, &uplink);
 
-    sync::sync_events(&repo, &first, &EventFilters::all())
+    sync::sync_events(&repo, &first, None, &EventFilters::all())
         .await
         .expect("events");
     sync::sync_matches(&repo, &tba, "2026mabil")
@@ -256,7 +260,7 @@ async fn playoff_matches_keep_their_set_number_rather_than_being_folded() {
     let uplink = Uplink::new();
     let (first, tba) = clients(&base, &uplink);
 
-    sync::sync_events(&repo, &first, &EventFilters::all())
+    sync::sync_events(&repo, &first, None, &EventFilters::all())
         .await
         .expect("events");
     sync::sync_matches(&repo, &tba, "2026mabil")
@@ -278,7 +282,7 @@ async fn a_team_schedule_contains_only_that_teams_matches() {
     let uplink = Uplink::new();
     let (first, tba) = clients(&base, &uplink);
 
-    sync::sync_events(&repo, &first, &EventFilters::all())
+    sync::sync_events(&repo, &first, None, &EventFilters::all())
         .await
         .expect("events");
     sync::sync_matches(&repo, &tba, "2026mabil")
@@ -303,7 +307,7 @@ async fn syncing_twice_updates_rather_than_duplicating() {
     let (first, tba) = clients(&base, &uplink);
 
     for _ in 0..2 {
-        sync::sync_events(&repo, &first, &EventFilters::all())
+        sync::sync_events(&repo, &first, None, &EventFilters::all())
             .await
             .expect("events");
         sync::sync_matches(&repo, &tba, "2026mabil")
@@ -327,7 +331,7 @@ async fn event_stats_come_back_ranked() {
     let uplink = Uplink::new();
     let (first, tba) = clients(&base, &uplink);
 
-    sync::sync_events(&repo, &first, &EventFilters::all())
+    sync::sync_events(&repo, &first, None, &EventFilters::all())
         .await
         .expect("events");
     sync::sync_stats(&repo, &tba, "2026mabil")
@@ -345,7 +349,7 @@ async fn active_events_pick_up_a_running_event() {
     let repo = repo().await;
     let uplink = Uplink::new();
     let (first, _) = clients(&base, &uplink);
-    sync::sync_events(&repo, &first, &EventFilters::all())
+    sync::sync_events(&repo, &first, None, &EventFilters::all())
         .await
         .expect("events");
 
@@ -406,7 +410,7 @@ async fn upstream_failures_are_reported_not_swallowed() {
         .unwrap()
         .with_base_url(format!("http://{addr}"));
 
-    let report = sync::sync_events(&repo, &first, &EventFilters::all())
+    let report = sync::sync_events(&repo, &first, None, &EventFilters::all())
         .await
         .expect("the run continues past a roster failure");
 
@@ -429,7 +433,7 @@ async fn seeded(base: &str) -> (SqliteRepo, TbaClient, Uplink) {
     let repo = repo().await;
     let uplink = Uplink::new();
     let (first, tba) = clients(base, &uplink);
-    sync::sync_events(&repo, &first, &EventFilters::all())
+    sync::sync_events(&repo, &first, None, &EventFilters::all())
         .await
         .expect("events");
     (repo, tba, uplink)
@@ -512,6 +516,7 @@ async fn a_pass_that_overruns_its_budget_stops_and_says_so() {
     let app = Router::new()
         .route("/2026/events", get(|| async { FIRST_EVENTS }))
         .route("/2026/teams", get(|| async { FIRST_TEAMS }))
+        .route("/events/2026", get(|| async { TBA_EVENTS }))
         .route("/event/{key}/matches", get(slow_matches));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();

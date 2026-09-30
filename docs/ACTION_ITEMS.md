@@ -225,6 +225,7 @@ This is the highest-leverage cluster in either source document. It removes the 5
 | I12 | **Upstream freshness badges**; amber past 20 minutes during quals. Stale rankings that look live cause bad picks | RI-S11 | S | **Done** — `connectivity::Freshness`, with U14 |
 | I13 | `POST /api/frc/sync` manual sync, admin/lead only | RS §6.1 | S | **Done** |
 | I14 | **Manual rankings entry screen** — the true last resort. A lead scout can type 40 rows off the audience display in five minutes, and it has never once failed to work | RI-S13 | S | **Done** — `/lead-scout/rankings/enter` |
+| I15 | **Store each FIRST event under TBA's key.** FIRST and TBA disagree on the code for every Championship division and about fifty offseason events (`MILSTEIN` / `2026mil`), so a key built from FIRST's code 404s at TBA | Q2 | S | **Done** — `tt_core::upstream::tba_keys`, one `/events/{year}` request per sync |
 
 ### Coach and pick list
 
@@ -401,6 +402,8 @@ Checked by a script in headless Chromium that measures every link, button, input
 
 Checked by copying the debug binary alone into a directory outside the repo and running it from there. `site.css`, `link.js`, and `tabs.js` came back 200 with their types, the CSS byte-for-byte the source's; a request with its ETag got a 304 with no body; `js/gone.js` got a 404.
 
+**Events are stored under TBA's key (I15).** FIRST and TBA agree on most event codes, but not all. In TBA's 2026 list, 91 events have a FIRST code different from their own. Among them are all eight Championship divisions (FIRST `MILSTEIN`, TBA `2026mil`) and some fifty offseason events that FIRST syncs: the Arizona League's qualifiers are `AZGLE` to `AZGLE3` at FIRST and `2026azrl1` to `2026azrl4` at TBA. Every one of those got a key built from FIRST's code, which 404s at TBA, so it would never get a schedule, rankings, or OPRs. Now `sync_events` fetches TBA's `/events/{year}` once and stores each FIRST event under the key TBA lists for its code, in any case. FIRST's own code stays in `event_code` for FIRST's calls. Twelve FIRST events in 2026 are unknown to TBA, and those keep the built key, as they do when TBA is not configured. When TBA is configured but its list fails, the sync goes ahead on built keys and reports it. An event stored under a built key before this change stays in the database next to the right one; nothing deletes it.
+
 **Still open in Phase 2:** U17, P3, P4, and P6-P9.
 
 ---
@@ -491,7 +494,7 @@ The architectural payoff. Phase 2 must be shipping before this starts.
 
 **Found, not fixed:**
 
-- **FIRST and TBA name divisions differently.** FIRST calls Milstein `MILSTEIN`, TBA `2026mil`, so `FirstEvent::tba_key()` makes `2026milstein`, and TBA sync at a Championship would 404. The fix is a lookup on TBA's `first_event_code`, which needs one more request per season. It needs its own item.
+- **FIRST and TBA name divisions differently.** FIRST calls Milstein `MILSTEIN`, TBA `2026mil`, so `FirstEvent::tba_key()` makes `2026milstein`, and TBA sync at a Championship would 404. Fixed as I15, see the Phase 2 notes.
 - **FIRST's `timezone` is a Windows zone name** (`"Central Standard Time"`), stored as is. Mapped to IANA in Q5.
 
 **Q5: the event's clock.** Timestamps were already stored as UTC `DateTime<Utc>`, and every page but one showed times relative to now ("in 12 min", "5 minutes ago"), which need no zone. What Q5 changed:

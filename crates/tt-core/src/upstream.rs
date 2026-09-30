@@ -466,6 +466,8 @@ impl FirstEvent {
     }
 
     /// The TBA-style key for this event, derived from its start year and code.
+    /// Right for most events, wrong for about sixty a season: see
+    /// [`tba_key_in`](Self::tba_key_in).
     pub fn tba_key(&self) -> Option<String> {
         let code = self.code.trim().to_ascii_lowercase();
         if code.is_empty() {
@@ -474,6 +476,40 @@ impl FirstEvent {
         let year = parse_date(&self.date_start)?.0;
         Some(format!("{year}{code}"))
     }
+
+    /// This event's key at TBA: the one TBA lists under this FIRST code, else
+    /// [`tba_key`](Self::tba_key). `known` is from [`tba_keys`].
+    pub fn tba_key_in(&self, known: &HashMap<String, String>) -> Option<String> {
+        let code = self.code.trim().to_ascii_lowercase();
+        known.get(&code).cloned().or_else(|| self.tba_key())
+    }
+}
+
+/// One entry of TBA's `/events/{year}`, as much as matching it to FIRST needs.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct TbaEvent {
+    pub key: String,
+    /// The event's code at FIRST, in whatever case TBA stored it.
+    #[serde(default)]
+    pub first_event_code: Option<String>,
+}
+
+/// FIRST code, lowercased, to TBA key, for every TBA event that names one.
+///
+/// The two agree on most events but not all (I15). In 2026 FIRST called the
+/// Championship divisions `MILSTEIN` and `ARCHIMEDES` where TBA has `2026mil`
+/// and `2026arc`, and some fifty offseason events differ outright: the
+/// Arizona League's qualifiers are `AZGLE`-`AZGLE3` at FIRST and `2026azrl1`
+/// to `2026azrl4` at TBA. A key built from FIRST's code 404s at TBA for all of
+/// them.
+pub fn tba_keys(events: &[TbaEvent]) -> HashMap<String, String> {
+    events
+        .iter()
+        .filter_map(|e| {
+            let code = e.first_event_code.as_deref()?.trim().to_ascii_lowercase();
+            (!code.is_empty()).then(|| (code, e.key.clone()))
+        })
+        .collect()
 }
 
 /// One entry of `/{season}/teams`.
@@ -1030,6 +1066,44 @@ mod tests {
     #[test]
     fn dates_format_back_to_iso_with_padding() {
         assert_eq!(iso_date((2026, 3, 1)), "2026-03-01");
+    }
+
+    #[test]
+    fn a_first_code_resolves_to_the_key_tba_lists_it_under() {
+        let tba: Vec<TbaEvent> = serde_json::from_str(
+            r#"[{"key": "2026mil", "first_event_code": "milstein"},
+                {"key": "2026nyro2", "first_event_code": "NYROC"},
+                {"key": "2026mslr", "first_event_code": "mslr"},
+                {"key": "2026cabl", "first_event_code": null},
+                {"key": "2026x", "first_event_code": "  "}]"#,
+        )
+        .expect("parse");
+        let known = tba_keys(&tba);
+        assert_eq!(known.len(), 3, "an event without a FIRST code maps nothing");
+        let first = |code: &str| FirstEvent {
+            code: code.into(),
+            date_start: "2026-04-29T00:00:00".into(),
+            ..FirstEvent::default()
+        };
+        assert_eq!(
+            first("MILSTEIN").tba_key_in(&known).as_deref(),
+            Some("2026mil")
+        );
+        assert_eq!(
+            first("NYROC").tba_key_in(&known).as_deref(),
+            Some("2026nyro2"),
+            "any case"
+        );
+        assert_eq!(
+            first("MSLR").tba_key_in(&known).as_deref(),
+            Some("2026mslr")
+        );
+        assert_eq!(
+            first("WAPER").tba_key_in(&known).as_deref(),
+            Some("2026waper"),
+            "unknown to TBA: built from the code, as before"
+        );
+        assert_eq!(first("").tba_key_in(&known), None);
     }
 
     #[test]

@@ -13,7 +13,10 @@
 //!     2025 (`LAKE`).
 //!   * **2026 Arizona Robotics League Championship** (`2026azrl`), before it
 //!     had happened: every list empty.
-//!   * **2026 Milstein Division** (FIRST `MILSTEIN`): 74 teams, over two pages.
+//!   * **2026 Milstein Division** (FIRST `MILSTEIN`, TBA `2026mil`): 74
+//!     teams, over two pages.
+//!   * **TBA's 2026 event list** (`tba/events_2026.json`), cut to a dozen
+//!     events whose TBA key and FIRST code disagree, or agree (I15).
 //!
 //! Upstream drifts every season. When a sync breaks on a new shape, record
 //! it here next to these.
@@ -63,10 +66,14 @@ async fn recorded_upstream() -> String {
             get(
                 |Path((season, what)): Path<(String, String)>,
                  Query(q): Query<HashMap<String, String>>| async move {
+                    // TBA's `/events/{year}` shares FIRST's two-segment shape.
+                    if season == "events" {
+                        return served(format!("tba/events_{what}.json"));
+                    }
                     let code = q.get("eventCode").cloned().unwrap_or_default();
                     let page = match q.get("page") {
                         Some(n) => format!("_p{n}"),
-                        None if code == "MILSTEIN" => "_p1".into(),
+                        None if code == "MILSTEIN" && what == "teams" => "_p1".into(),
                         None => String::new(),
                     };
                     served(format!("first/{season}_{what}_{code}{page}.json"))
@@ -155,7 +162,7 @@ async fn this_seasons_event_syncs_whole_from_both_apis() {
     let base = recorded_upstream().await;
     let repo = repo().await;
 
-    let events = sync::sync_events(&repo, &first(&base, 2026), &only("MSLR"))
+    let events = sync::sync_events(&repo, &first(&base, 2026), Some(&tba(&base)), &only("MSLR"))
         .await
         .expect("events");
     assert!(events.problems.is_empty(), "{:?}", events.problems);
@@ -229,6 +236,57 @@ async fn a_championship_division_roster_is_every_page() {
     numbers.sort_unstable();
     numbers.dedup();
     assert_eq!(numbers.len(), 74);
+}
+
+#[tokio::test]
+async fn a_championship_division_is_stored_under_tbas_key_not_firsts_code() {
+    let base = recorded_upstream().await;
+    let repo = repo().await;
+
+    let report = sync::sync_events(
+        &repo,
+        &first(&base, 2026),
+        Some(&tba(&base)),
+        &only("MILSTEIN"),
+    )
+    .await
+    .expect("events");
+    assert!(report.problems.is_empty(), "{:?}", report.problems);
+    let events = repo.list_events().await.unwrap();
+    let keys: Vec<&str> = events.iter().map(|e| e.key.as_str()).collect();
+    assert_eq!(keys, ["2026mil"], "not 2026milstein, which TBA 404s");
+    assert_eq!(
+        events[0].event_code.as_deref(),
+        Some("milstein"),
+        "FIRST's, for its own calls"
+    );
+    assert_eq!(repo.event_teams("2026mil").await.unwrap().len(), 74);
+}
+
+#[tokio::test]
+async fn without_tba_the_key_is_built_from_firsts_code() {
+    let base = recorded_upstream().await;
+    let repo = repo().await;
+    sync::sync_events(&repo, &first(&base, 2026), None, &only("MILSTEIN"))
+        .await
+        .expect("events");
+    assert!(repo.event("2026milstein").await.unwrap().is_some());
+}
+
+#[tokio::test]
+async fn a_tba_event_list_that_fails_is_a_problem_not_a_failed_sync() {
+    let base = recorded_upstream().await;
+    let repo = repo().await;
+    // No fixture for 2025's list: the stub answers 404.
+    let report = sync::sync_events(&repo, &first(&base, 2025), Some(&tba(&base)), &only("LAKE"))
+        .await
+        .expect("events");
+    assert!(
+        repo.event("2025lake").await.unwrap().is_some(),
+        "FIRST's data still lands"
+    );
+    assert_eq!(report.problems.len(), 1, "{:?}", report.problems);
+    assert!(report.problems[0].contains("TBA's event list is unavailable"));
 }
 
 // ── Prior seasons ───────────────────────────────────────────────────────────

@@ -133,7 +133,7 @@ async fn boot_sync(repo: &SqliteRepo, upstream: &Upstream) {
     };
     let _one_at_a_time = upstream.first_sync.lock().await;
 
-    let run = sync::sync_events(repo, first, &upstream.filters);
+    let run = sync::sync_events(repo, first, upstream.tba.as_ref(), &upstream.filters);
     match tokio::time::timeout(sync::BOOT_SYNC_TIMEOUT, run).await {
         Ok(Ok(report)) => {
             if !report.is_empty() {
@@ -208,7 +208,7 @@ pub async fn sync_now(repo: &SqliteRepo, upstream: &Upstream) -> ManualSync {
             .problems
             .push("A sync is already running; try again when it finishes".into()),
         (Some(first), Ok(_one_at_a_time)) => {
-            let run = sync::sync_events(repo, first, &upstream.filters);
+            let run = sync::sync_events(repo, first, upstream.tba.as_ref(), &upstream.filters);
             match tokio::time::timeout(sync::MANUAL_SYNC_TIMEOUT, run).await {
                 Ok(Ok(r)) => report.merge(r),
                 Ok(Err(e)) => report.problems.push(e.to_string()),
