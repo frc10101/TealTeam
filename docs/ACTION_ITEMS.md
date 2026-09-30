@@ -239,7 +239,7 @@ This is the highest-leverage cluster in either source document. It removes the 5
 
 | # | Action | Source | Effort | Status |
 | --- | --- | --- | --- | --- |
-| P3 | SQLite WAL, single writer, on **NVMe/USB SSD — not the SD card** | RI-N2 · RS §10 | M |  |
+| P3 | SQLite WAL, single writer, on **NVMe/USB SSD — not the SD card** | RI-N2 · RS §10 | M | **Done** (software) — `tt_repo_sqlite::storage`, [PI_STORAGE.md](PI_STORAGE.md); the hardware steps are untested |
 | P4 | Avahi → `http://tealteam.local`. Removes the most common event-day support question | RI-N3 · RS §10 | S |  |
 | P5 | Asset resolution: walk up from both the exe and cwd, or embed assets in the binary | RS §10 | S | **Done** — embedded: `tt-web/build.rs`, `src/assets.rs` |
 | P6 | Wired Ethernet to clients + USB tethering as the uplink (`usb0`, route metric). **Build no Wi-Fi AP** — it violates E143 | RI-N4, RI-N5 · RS §10 | M |  |
@@ -404,7 +404,15 @@ Checked by copying the debug binary alone into a directory outside the repo and 
 
 **Events are stored under TBA's key (I15).** FIRST and TBA agree on most event codes, but not all. In TBA's 2026 list, 91 events have a FIRST code different from their own. Among them are all eight Championship divisions (FIRST `MILSTEIN`, TBA `2026mil`) and some fifty offseason events that FIRST syncs: the Arizona League's qualifiers are `AZGLE` to `AZGLE3` at FIRST and `2026azrl1` to `2026azrl4` at TBA. Every one of those got a key built from FIRST's code, which 404s at TBA, so it would never get a schedule, rankings, or OPRs. Now `sync_events` fetches TBA's `/events/{year}` once and stores each FIRST event under the key TBA lists for its code, in any case. FIRST's own code stays in `event_code` for FIRST's calls. Twelve FIRST events in 2026 are unknown to TBA, and those keep the built key, as they do when TBA is not configured. When TBA is configured but its list fails, the sync goes ahead on built keys and reports it. An event stored under a built key before this change stays in the database next to the right one; nothing deletes it.
 
-**Still open in Phase 2:** U17, P3, P4, and P6-P9.
+**The database on the SSD (P3): the software side.** The server already had most of it. `SqliteRepo::connect` opened SQLite in WAL mode with `synchronous=NORMAL` and a pool of **one** connection, so its writes queue up one at a time, each waiting up to 5 seconds rather than failing. Now there are tests on a real file: one that journal mode is `wal`, and one that a second write waits while a transaction is open and then lands.
+
+**What is new: the server says where its database is.** At startup, and in `tt-web bulk-load`, it logs the absolute path and the device under it: "database is at /srv/tealteam/data/tealteam.db on nvme0n1p1". If that device is an `mmcblk` (the SD card, or eMMC) the line is a **warning** pointing at the doc. `tt_repo_sqlite::storage::locate` looks the device up through `/sys/dev/block`, and falls back to the deepest mount in `/proc/self/mountinfo` for filesystems like btrfs whose device number has no block device behind it. Anything it cannot place is "an unknown device", never an error. The path is still set with `DATABASE_URL`; a second setting for the same thing would only be a way for the two to disagree.
+
+**[PI_STORAGE.md](PI_STORAGE.md)** covers mounting the SSD by UUID with `nofail`, and putting the database in a `data/` folder *inside* the mount. If the SSD is missing, the server then cannot open its database and says **Storage unavailable**, instead of quietly starting an empty one on the SD card. It also covers moving an existing database with `.backup`, so what is still in the `-wal` file is not lost. **None of the hardware steps have been run on the Pi**, and the doc says so. Blind spots: an SD card in a USB reader shows up as `sda`, and a LUKS volume on the SD card as `dm-0`, so neither is warned about.
+
+Checked on a development machine: a database on the encrypted btrfs root was reported "on dm-0" (through the mountinfo fallback), one on tmpfs "on an unknown device", and the SD-card wording by unit test.
+
+**Still open in Phase 2:** U17, P4, P6, P7, P8, and P9.
 
 ---
 

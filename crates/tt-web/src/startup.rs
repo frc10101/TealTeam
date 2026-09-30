@@ -84,6 +84,7 @@ pub async fn run() -> anyhow::Result<()> {
     // 4. Lazy: succeeds even if the storage path is unwritable.
     let repo = SqliteRepo::connect(&config.database_url)
         .with_context(|| format!("opening database {}", config.database_url))?;
+    log_storage(&config.database_url);
 
     // 5. Degrade, do not abort.
     let storage_ready = match repo.health().await {
@@ -155,6 +156,7 @@ pub async fn bulk_load() -> anyhow::Result<()> {
 
     let repo = SqliteRepo::connect(&config.database_url)
         .with_context(|| format!("opening database {}", config.database_url))?;
+    log_storage(&config.database_url);
     if !repo.health().await.is_ready() {
         anyhow::bail!("database unavailable at {}", config.database_url);
     }
@@ -163,6 +165,20 @@ pub async fn bulk_load() -> anyhow::Result<()> {
         .context("applying migrations")?;
 
     upstream::bulk_load(&repo, &Upstream::from_env(), &mut std::io::stdout()).await
+}
+
+/// Say where the database file is, once, and loudly if it is on the SD card
+/// (P3). `connect` reports a URL that does not parse in its own words.
+fn log_storage(url: &str) {
+    match tt_repo_sqlite::storage::locate(url) {
+        Some(at) if at.on_sd_card() => warn!(
+            "database is at {} -- an SD card wears out under a database's writes \
+             and fails mid-event. Move it to the SSD: docs/PI_STORAGE.md",
+            at.describe()
+        ),
+        Some(at) => info!("database is at {}", at.describe()),
+        None => {}
+    }
 }
 
 pub fn router(state: AppState) -> Router {

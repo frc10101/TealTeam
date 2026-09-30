@@ -21,6 +21,7 @@ pub mod migrate;
 mod observations;
 mod picklist;
 mod standings;
+pub mod storage;
 mod users;
 mod weights;
 
@@ -439,5 +440,91 @@ mod tests {
             .await
             .expect("read pragma");
         assert_eq!(enabled, 1);
+    }
+
+    /// A database file in a directory of its own, removed on drop.
+    struct TempDb(std::path::PathBuf);
+
+    impl TempDb {
+        fn new(name: &str) -> Self {
+            let dir = std::env::temp_dir().join(format!("tt-{name}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            TempDb(dir)
+        }
+        fn url(&self) -> String {
+            format!("sqlite://{}", self.0.join("tealteam.db").display())
+        }
+    }
+
+    impl Drop for TempDb {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[tokio::test]
+    async fn a_file_database_is_wal_with_normal_sync() {
+        // P3. Memory databases cannot be WAL, so this needs a real file.
+        let db = TempDb::new("wal");
+        let repo = SqliteRepo::connect(&db.url()).expect("connect");
+        let mode: String = sqlx::query_scalar("PRAGMA journal_mode")
+            .fetch_one(repo.pool())
+            .await
+            .unwrap();
+        assert_eq!(mode, "wal");
+        let sync: i64 = sqlx::query_scalar("PRAGMA synchronous")
+            .fetch_one(repo.pool())
+            .await
+            .unwrap();
+        assert_eq!(sync, 1, "NORMAL");
+    }
+
+    #[tokio::test]
+    async fn there_is_one_writer_and_the_next_one_waits() {
+        // P3. The pool's one connection is the single writer: while a
+        // transaction is open, nothing else in the process can write, and a
+        // second write waits for it rather than failing with SQLITE_BUSY.
+        let db = TempDb::new("writer");
+        let repo = SqliteRepo::connect(&db.url()).expect("connect");
+        assert_eq!(repo.pool().options().get_max_connections(), 1);
+        sqlx::query("CREATE TABLE t (n INTEGER)")
+            .execute(repo.pool())
+            .await
+            .unwrap();
+
+        let mut first = repo.pool().begin().await.unwrap();
+        sqlx::query("INSERT INTO t VALUES (1)")
+            .execute(&mut *first)
+            .await
+            .unwrap();
+
+        let pool = repo.pool().clone();
+        let second = tokio::spawn(async move {
+            sqlx::query("INSERT INTO t VALUES (2)")
+                .execute(&pool)
+                .await
+                .map(|_| ())
+        });
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(!second.is_finished(), "the second write waited");
+
+        first.commit().await.unwrap();
+        second.await.unwrap().expect("then landed");
+        let rows: Vec<i64> = sqlx::query_scalar("SELECT n FROM t ORDER BY rowid")
+            .fetch_all(repo.pool())
+            .await
+            .unwrap();
+        assert_eq!(rows, [1, 2]);
+    }
+
+    #[test]
+    fn the_startup_log_can_say_where_the_database_is() {
+        let db = TempDb::new("where");
+        let at = storage::locate(&db.url()).expect("parses");
+        assert_eq!(at.path.as_deref(), Some(db.0.join("tealteam.db").as_path()));
+        // This machine's disk, whatever it is; on the Pi's SD card it would
+        // say so.
+        assert_ne!(at.medium, storage::Medium::Memory);
     }
 }
