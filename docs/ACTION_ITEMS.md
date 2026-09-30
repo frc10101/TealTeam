@@ -232,7 +232,7 @@ This is the highest-leverage cluster in either source document. It removes the 5
 | --- | --- | --- | --- | --- |
 | U18 | **Coach panel reads the local `matches` table**, not the live FIRST schedule. It was non-functional offline, at exactly the event where it matters most | RS §12.6 | M || **Done** — `/drive-coach`, `tt_core::coach` |
 | U19 | Match status classification (±15 min windows) as a pure function in `tt-core` | RS §5.7 | S | **Done** — `tt_core::matches::classify`, since the ingestion commit; see Phase 2 notes |
-| U20 | Pick list read / upsert / delete | RS §5.8 | S |  |
+| U20 | Pick list read / upsert / delete | RS §5.8 | S | **Done** — `/pick-list`; edits, not positions, so two people at once both land |
 
 ### Platform
 
@@ -371,7 +371,15 @@ Checked against the binary at phone width: a lead on 10101 opening a 254 scout's
 
 Checked against the binary at phone width: ranks synced 35 minutes ago read "last updated 35 minutes ago" with the amber badge on the rankings page and the team profile, and the badge goes when the event is over.
 
-**Still open in Phase 2:** I11, U15-U17, U20, and P3-P9.
+**The pick list (U20).** `/pick-list` is the viewer's team's list for the selected event, best first, for lead scouts **and coaches** — the lead builds it, and at alliance selection the coach is the one crossing teams off; a scout is sent home. A **Pick List** link is in the nav for both roles. Each row shows the place, the team (linked to its profile), its name and event rank, an optional colour tag (green, yellow, red, blue — named in text, not only by colour; what each means is the team's call), and full-size ↑ / ↓ / **Cross off** buttons; **More** holds move-to-place, the colour, and removal. Crossed-off teams keep their place, struck through, so an undone pick reads the same. Teams are added by number (type-ahead from the roster) or from **Not on the list**, the rest of the roster best-ranked first, one tap each. After a change the page comes back scrolled to the team that moved.
+
+**Two people editing at once both land.** The retired API took whatever `position` the client sent, so the second of two reorders silently undid the first (§5.8). Here the browser sends an *edit* — "254 up one", "cross off 1678" — and `tt_core::picklist::apply` performs it on the list as stored when it arrives. The write is a compare-and-swap (`Repo::replace_pick_list` stores the new list only if the stored one still matches what the edit was applied to); if someone changed it in between, the edit is redone on the new list, up to three times. That covers moves, crosses, and tags from several people without a CRDT. **L14 is still wanted** for what this cannot do: offline edits merged later, and live updates without a reload. Rows keep their `client_record_id` across edits, so L14 can adopt them.
+
+**Also fixed here: the empty band under short pages.** `.page` is a grid that grows to fill the screen, and its rows stretched to share the spare height, so every card on a short page grew an empty band — the gap under the assignment grid noted with L6. `align-content: start` on `.page`.
+
+**Not built:** the retired JSON endpoints (`GET /api/pick-list`, `POST`/`DELETE /api/pick-list/entry`). Nothing calls them; the Phase 3 client will want its own sync shape anyway.
+
+**Still open in Phase 2:** I11, U15-U17, and P3-P9.
 
 ---
 

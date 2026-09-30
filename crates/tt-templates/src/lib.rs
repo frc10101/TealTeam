@@ -15,6 +15,8 @@ use askama::Template;
 
 mod coach;
 pub use coach::{AllianceView, CoachCard, CoachTeam, DriveCoachPage};
+mod picklist;
+pub use picklist::{Candidate, PickListPage, PickRow, TagOption};
 mod team;
 pub use team::{
     EventLink, NoteLine, StatLine, SummaryLine, SummarySection, TeamAtEvent, TeamCard,
@@ -61,6 +63,8 @@ pub struct Nav {
     pub name: String,
     pub can_lead: bool,
     pub can_coach: bool,
+    /// May open the pick list: a lead scout or a coach.
+    pub can_pick: bool,
     pub can_admin: bool,
     /// False when the database is unreachable, so the footer can say so rather
     /// than letting a scout type into a form that will not save.
@@ -84,6 +88,7 @@ impl Nav {
                 name: u.name.clone(),
                 can_lead: u.roles.can_lead(),
                 can_coach: u.roles.can_coach(),
+                can_pick: u.roles.can_pick(),
                 can_admin: u.roles.can_admin(),
                 storage_ready,
                 event: EventSwitcher::default(),

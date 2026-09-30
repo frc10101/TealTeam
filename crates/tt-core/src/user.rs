@@ -55,6 +55,12 @@ impl Roles {
         self.is_admin || self.is_coach
     }
 
+    /// May read and change the team's pick list: the lead scout builds it,
+    /// and at alliance selection the coach crosses teams off.
+    pub fn can_pick(self) -> bool {
+        self.can_lead() || self.can_coach()
+    }
+
     /// May see the database viewer and anything else unrestricted.
     ///
     /// The retired implementation left its database viewer with **no check at
@@ -202,6 +208,7 @@ mod tests {
         };
         assert!(coach.can_coach());
         assert!(!coach.can_lead());
+        assert!(coach.can_pick(), "coaches cross teams off at selection");
         assert!(!coach.can_admin());
     }
 
@@ -220,6 +227,7 @@ mod tests {
     fn a_plain_scout_can_do_none_of_it() {
         assert!(!Roles::SCOUT.can_lead());
         assert!(!Roles::SCOUT.can_coach());
+        assert!(!Roles::SCOUT.can_pick());
         assert!(!Roles::SCOUT.can_admin());
     }
 

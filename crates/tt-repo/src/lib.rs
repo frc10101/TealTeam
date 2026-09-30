@@ -24,6 +24,7 @@
 use chrono::{DateTime, Utc};
 use thiserror::Error;
 use tt_core::assignments::{AssigneeKey, Assignment, Sighting};
+use tt_core::picklist::Entry;
 use tt_core::records::{Event, MatchRecord, Team, TeamEventStats};
 use tt_core::review::{Decision, ReviewState};
 use tt_core::season::{Payload, WeightOverrides};
@@ -485,6 +486,23 @@ pub trait LocalRepo {
         event_key: &str,
         scouter_id: i64,
     ) -> Result<Vec<StoredObservation>>;
+
+    // ── Pick list (U20) ─────────────────────────────────────────────────────
+
+    /// A team's pick list for an event, best first.
+    async fn pick_list(&self, owning_team: i32, event_key: &str) -> Result<Vec<Entry>>;
+
+    /// Store `list` as the team's pick list, if the stored one still reads
+    /// `expected`. `false` when someone changed it in between, and nothing was
+    /// written: read it again and redo the edit on what is there now.
+    async fn replace_pick_list(
+        &self,
+        owning_team: i32,
+        event_key: &str,
+        expected: &[Entry],
+        list: &[Entry],
+        now: DateTime<Utc>,
+    ) -> Result<bool>;
 }
 
 #[cfg(test)]

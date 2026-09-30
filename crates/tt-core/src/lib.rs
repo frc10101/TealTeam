@@ -16,6 +16,7 @@ pub mod error;
 pub mod form;
 pub mod matches;
 pub mod notes;
+pub mod picklist;
 pub mod profile;
 pub mod ranking;
 pub mod record_id;

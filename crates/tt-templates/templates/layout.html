@@ -44,6 +44,7 @@
           {% if nav.signed_in %}<a href="/teams{{ nav.event.query() }}">Teams</a>{% endif %}
           {% if nav.can_lead %}<a href="/lead-scout{{ nav.event.query() }}">Lead Scout</a>{% endif %}
           {% if nav.can_coach %}<a href="/drive-coach{{ nav.event.query() }}">Drive Coach</a>{% endif %}
+          {% if nav.can_pick %}<a href="/pick-list{{ nav.event.query() }}">Pick List</a>{% endif %}
         </nav>
 
         <div class="nav-account">

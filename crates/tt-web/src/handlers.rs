@@ -25,11 +25,12 @@ use tt_templates::{AccountPage, HomePage, LeadScoutPage, Nav, Page, SignInPage, 
 
 use crate::assignments::{self, GridParams};
 use crate::auth::{
-    Auth, Coach, LeadScout, MaybeAuth, SESSION_COOKIE, clear_session_cookie, device_uuid,
-    hash_password, new_session, session_cookie, verify_password,
+    Auth, Coach, LeadScout, MaybeAuth, SESSION_COOKIE, Strategist, clear_session_cookie,
+    device_uuid, hash_password, new_session, session_cookie, verify_password,
 };
 use crate::coach;
 use crate::events::{self, EventContext, EventParam};
+use crate::picklist;
 use crate::ranking::{self, RankingParams};
 use crate::review::{self, ReviewedParam};
 use crate::scouting::{self, ScoutParams};
@@ -598,6 +599,55 @@ pub async fn team(
 ) -> Response {
     let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
     html(teams::page(&state, nav, &user, &context, &team).await)
+}
+
+// ── Pick list (U20) ─────────────────────────────────────────────────────────
+
+/// `GET /pick-list`: the viewer's team's list for the selected event.
+pub async fn pick_list(
+    State(state): State<AppState>,
+    Strategist(user): Strategist,
+    EventParam(requested): EventParam,
+    Query(query): Query<HashMap<String, String>>,
+) -> Response {
+    let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
+    let removed = query.get("removed").and_then(|n| n.parse().ok());
+    html(
+        picklist::page(
+            &state,
+            nav,
+            &user,
+            &context,
+            Vec::new(),
+            String::new(),
+            removed,
+        )
+        .await,
+    )
+}
+
+/// `POST /api/pick-list?event=`: one change.
+pub async fn change_pick_list(
+    State(state): State<AppState>,
+    Strategist(user): Strategist,
+    EventParam(requested): EventParam,
+    Form(form): Form<Vec<(String, String)>>,
+) -> Response {
+    let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
+    match picklist::change(&state, &user, requested.as_deref(), &context, &form).await {
+        Ok(next) => Redirect::to(&next).into_response(),
+        Err(error) => {
+            // Only an add has typing worth keeping.
+            let typed = form
+                .iter()
+                .any(|(n, v)| n == "op" && v == "add")
+                .then(|| form.iter().find(|(n, _)| n == "team"))
+                .flatten()
+                .map(|(_, v)| v.clone())
+                .unwrap_or_default();
+            html(picklist::page(&state, nav, &user, &context, vec![error], typed, None).await)
+        }
+    }
 }
 
 // ── Rankings (L11) and point values (L12) ───────────────────────────────────

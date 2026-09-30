@@ -19,6 +19,7 @@ mod assignments;
 mod competition;
 pub mod migrate;
 mod observations;
+mod picklist;
 mod standings;
 mod users;
 mod weights;
@@ -29,6 +30,7 @@ use std::str::FromStr;
 use std::time::Duration;
 use tracing::warn;
 use tt_core::assignments::{Assignment, Sighting};
+use tt_core::picklist::Entry;
 use tt_core::records::{Event, MatchRecord, Team, TeamEventStats};
 use tt_core::review::{Decision, ReviewState};
 use tt_core::season::WeightOverrides;
@@ -371,6 +373,22 @@ impl Repo for SqliteRepo {
         scouter_id: i64,
     ) -> Result<Vec<StoredObservation>> {
         self.declined_for_impl(event_key, scouter_id).await
+    }
+
+    async fn pick_list(&self, owning_team: i32, event_key: &str) -> Result<Vec<Entry>> {
+        self.pick_list_impl(owning_team, event_key).await
+    }
+
+    async fn replace_pick_list(
+        &self,
+        owning_team: i32,
+        event_key: &str,
+        expected: &[Entry],
+        list: &[Entry],
+        now: DateTime<Utc>,
+    ) -> Result<bool> {
+        self.replace_pick_list_impl(owning_team, event_key, expected, list, now)
+            .await
     }
 }
 

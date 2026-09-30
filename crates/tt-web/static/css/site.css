@@ -104,7 +104,9 @@ h1, h2 { margin: 0; font-size: 1.25rem; line-height: 1.3; }
 
 /* ── Layout ─────────────────────────────────────────────────────────────── */
 
-.page { flex: 1; width: 100%; max-width: 70rem; margin: 0 auto; padding: 1rem; display: grid; gap: 1rem; }
+/* align-content: start, or on a short page the grid's rows stretch to fill the
+   screen and every card grows an empty band under its content. */
+.page { flex: 1; width: 100%; max-width: 70rem; margin: 0 auto; padding: 1rem; display: grid; gap: 1rem; align-content: start; }
 
 .footer {
   border-top: 1px solid var(--gray-700); background: var(--gray-900);
@@ -446,6 +448,37 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
 details.card > summary { cursor: pointer; list-style-position: inside; }
 details.card > summary h2 { display: inline; }
 details.card:not([open]) > summary { border-bottom: 0; }
+
+/* ── Pick list (U20) ────────────────────────────────────────────────────── */
+
+.pick-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.pick {
+  display: grid; gap: 0.5rem; padding: 0.5rem 0.75rem;
+  background: var(--gray-800); border: 1px solid var(--gray-700); border-radius: var(--radius);
+}
+.pick:target { border-color: var(--teal-300); }
+.pick-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 0.75rem; }
+.pick-place { min-width: 1.75rem; color: var(--gray-500); font-variant-numeric: tabular-nums; }
+.pick-team { font-size: 1.25rem; font-weight: 600; color: var(--gray-100); }
+.pick-name { min-width: 0; overflow-wrap: anywhere; }
+.pick.crossed .pick-team, .pick.crossed .pick-name { text-decoration: line-through; color: var(--gray-500); }
+.pick-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.pick-actions .btn { min-width: var(--tap); }
+.pick-more > summary { cursor: pointer; min-height: var(--tap); display: flex; align-items: center; gap: 0.5rem; color: var(--gray-300); list-style: none; }
+.pick-more > summary::-webkit-details-marker { display: none; }
+.pick-more > summary::before { content: "▸"; }
+.pick-more[open] > summary::before { content: "▾"; }
+.pick-more[open] { display: grid; gap: 0.5rem; }
+.pick-more .inline-field { align-items: center; flex-wrap: wrap; }
+.pick-more .form-input { max-width: 10rem; }
+/* The colour is named in text too; the swatch is only a quicker read. */
+.pick-tag { padding: 0.125rem 0.5rem; border-radius: 999px; font-size: 0.8125rem; font-weight: 600; border-left: 0.75rem solid; }
+.tag-green  { background: var(--green-900); color: #bbf7d0; border-color: var(--green-500); }
+.tag-yellow { background: var(--amber-900); color: #fde68a; border-color: var(--amber-500); }
+.tag-red    { background: var(--red-900);   color: #fecaca; border-color: var(--red-500); }
+.tag-blue   { background: var(--blue-900);  color: #bfdbfe; border-color: var(--blue-500); }
+.pick-candidates { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.pick-candidates .btn { gap: 0.375rem; }
 
 @media (min-width: 40rem) {
   h1, h2 { font-size: 1.5rem; }

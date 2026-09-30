@@ -184,6 +184,7 @@ pub fn router(state: AppState) -> Router {
         .route("/lead-scout/rankings/enter", get(handlers::rankings_entry))
         .route("/lead-scout/weights", get(handlers::weights))
         .route("/drive-coach", get(handlers::drive_coach))
+        .route("/pick-list", get(handlers::pick_list))
         // Forms
         .route("/api/auth/login", post(handlers::login))
         .route("/api/auth/signup", post(handlers::signup))
@@ -214,6 +215,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/devices/{id}/rename", post(handlers::rename_device))
         .route("/api/weights", post(handlers::save_weights))
         .route("/api/rankings/manual", post(handlers::save_rankings))
+        .route("/api/pick-list", post(handlers::change_pick_list))
         .route("/api/weights/reset", post(handlers::reset_weights))
         .route(
             "/api/observations/{id}/approve",
@@ -2016,6 +2018,116 @@ mod flow_tests {
         .await;
         assert_eq!(location(&response), "/");
         assert_eq!(stored_rank(&state, 254).await, None);
+    }
+
+    // ── Pick list (U20) ─────────────────────────────────────────────────────
+
+    /// Post one pick list change as the admin (team 10101) and follow it.
+    async fn pick(state: &AppState, cookie: &str, change: &str) -> Response {
+        post(state, "/api/pick-list?event=2026now", change, Some(cookie)).await
+    }
+
+    /// The teams on the page's list, top first.
+    fn picked(body: &str) -> Vec<String> {
+        body.split("<li id=\"team-")
+            .skip(1)
+            .map(|rest| rest.split('"').next().unwrap().to_string())
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn a_pick_list_is_built_one_change_at_a_time() {
+        let (state, admin) = scouting().await;
+        let body = text(get(&state, "/pick-list?event=2026now", Some(&admin)).await).await;
+        assert!(body.contains("Nobody yet."), "{body}");
+        assert!(
+            body.contains("Not on the list · 2"),
+            "both roster teams offered"
+        );
+
+        let response = pick(&state, &admin, "op=add&team=254").await;
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        assert_eq!(location(&response), "/pick-list?event=2026now#team-254");
+        pick(&state, &admin, "op=add&team=10101").await;
+        pick(&state, &admin, "op=up&team=10101").await;
+        pick(&state, &admin, "op=tag&team=10101&tag=green").await;
+        pick(&state, &admin, "op=cross&team=254").await;
+
+        let body = text(get(&state, "/pick-list?event=2026now", Some(&admin)).await).await;
+        assert_eq!(picked(&body), ["10101", "254"]);
+        assert!(body.contains(r#"<span class="pick-tag tag-green">Green</span>"#));
+        assert!(body.contains(r#"<li id="team-254" class="pick crossed">"#));
+        assert!(body.contains("2 teams · 1 crossed off"));
+        assert!(!body.contains("Not on the list ·"), "everyone is on it");
+
+        pick(&state, &admin, "op=move&team=254&place=1").await;
+        let response = pick(&state, &admin, "op=remove&team=10101").await;
+        assert_eq!(
+            location(&response),
+            "/pick-list?event=2026now&removed=10101"
+        );
+        let body = text(get(&state, location(&response), Some(&admin)).await).await;
+        assert!(body.contains("Took 10101 off the list."));
+        assert_eq!(picked(&body), ["254"]);
+    }
+
+    #[tokio::test]
+    async fn a_refused_change_says_why_and_keeps_what_was_typed() {
+        let (state, admin) = scouting().await;
+        let response = pick(&state, &admin, "op=add&team=9999").await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = text(response).await;
+        assert!(body.contains("Team 9999 is not at this event."), "{body}");
+        assert!(body.contains(r#"value="9999""#), "the typed number is kept");
+
+        pick(&state, &admin, "op=add&team=254").await;
+        let body = text(pick(&state, &admin, "op=add&team=254").await).await;
+        assert!(body.contains("Team 254 is already on the list, at 1."));
+
+        // A change naming no event, or another one, never falls back to the
+        // default event's list.
+        let body =
+            text(post(&state, "/api/pick-list", "op=add&team=10101", Some(&admin)).await).await;
+        assert!(body.contains("The event was not recognised. Choose it again."));
+        let list = state.repo.pick_list(10101, "2026now").await.unwrap();
+        assert_eq!(list.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn the_list_is_for_leads_and_coaches_and_only_their_team_sees_it() {
+        let (state, admin) = scouting().await;
+        pick(&state, &admin, "op=add&team=254").await;
+
+        // A scout is sent home, and cannot change the list either.
+        let kim = with_kim(&state).await;
+        let response = get(&state, "/pick-list?event=2026now", Some(&kim)).await;
+        assert_eq!(location(&response), "/");
+        let response = pick(&state, &kim, "op=remove&team=254").await;
+        assert_eq!(location(&response), "/");
+        let nav = text(get(&state, "/?event=2026now", Some(&kim)).await).await;
+        assert!(!nav.contains("Pick List"));
+
+        // A coach can, once they have a team -- and sees their own team's list.
+        sqlx::query("UPDATE users SET is_coach = 1 WHERE id = 2")
+            .execute(state.repo.pool())
+            .await
+            .expect("promote");
+        let body = text(get(&state, "/pick-list?event=2026now", Some(&kim)).await).await;
+        assert!(body.contains("Your account has no team, and a pick list belongs to a team."));
+        assert!(body.contains(r#"href="/pick-list?event=2026now">Pick List</a>"#));
+
+        sqlx::query("UPDATE users SET team_number = 254 WHERE id = 2")
+            .execute(state.repo.pool())
+            .await
+            .expect("team");
+        let body = text(get(&state, "/pick-list?event=2026now", Some(&kim)).await).await;
+        assert!(picked(&body).is_empty(), "team 254's list, not 10101's");
+        let response = pick(&state, &kim, "op=add&team=10101").await;
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        assert_eq!(
+            picked(&text(get(&state, "/pick-list?event=2026now", Some(&admin)).await).await),
+            ["254"]
+        );
     }
 
     // ── Coverage (L6) ───────────────────────────────────────────────────────

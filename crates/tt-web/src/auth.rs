@@ -126,6 +126,8 @@ pub struct LeadScout(pub User);
 
 /// A user who may see the coach panel.
 pub struct Coach(pub User);
+/// A user who may read and change the pick list: a lead scout or a coach.
+pub struct Strategist(pub User);
 
 /// What a failed guard does.
 ///
@@ -217,6 +219,7 @@ macro_rules! role_guard {
 
 role_guard!(LeadScout, can_lead);
 role_guard!(Coach, can_coach);
+role_guard!(Strategist, can_pick);
 
 // NOTE: an `Admin` guard belongs here too, but it would be dead code until the
 // database viewer lands (U17) -- and that viewer shipping *unguarded* is exactly

@@ -14,6 +14,7 @@ mod config;
 mod errors;
 mod events;
 mod handlers;
+mod picklist;
 mod ranking;
 mod review;
 mod scouting;

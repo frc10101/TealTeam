@@ -1,0 +1,123 @@
+{#
+  The pick list (U20): the team's own ranking of who it would pick, best
+  first. Every change is its own small form naming one team and what to do
+  to it, applied to the list as it is when it arrives -- so two people working
+  on it at once both land, instead of the second save undoing the first.
+  After a change the page comes back scrolled to the team that moved.
+#}
+{% extends "layout.html" %}
+{% block content %}
+{% if !errors.is_empty() %}
+  <div class="alert alert-error" role="alert">
+    {% for error in errors %}<p>{{ error }}</p>{% endfor %}
+  </div>
+{% endif %}
+{% if !notice.is_empty() %}<p class="alert alert-success" role="status">{{ notice }}</p>{% endif %}
+
+<section class="card">
+  <div class="card-header">
+    <h1>Pick list{% if !event_name.is_empty() %} · {{ event_name }}{% endif %}</h1>
+  </div>
+  <div class="card-body stack">
+    {% if !unavailable.is_empty() %}
+      <p>{{ unavailable }}</p>
+    {% else %}
+      <p class="hint">
+        Best first. Only your team sees this list. Cross teams off as other
+        alliances pick them; they keep their place, so the list reads the same
+        if a pick is undone.
+      </p>
+      <form class="inline-field" method="post" action="{{ post_href }}">
+        <input type="hidden" name="op" value="add">
+        <label class="visually-hidden" for="add-team">Team number to add</label>
+        <input class="form-input" id="add-team" name="team" inputmode="numeric"
+               autocomplete="off" list="pick-candidates" placeholder="Team number"
+               value="{{ typed_team }}">
+        <button class="btn btn-primary" type="submit">Add</button>
+      </form>
+      <datalist id="pick-candidates">
+        {% for c in candidates %}<option value="{{ c.team }}">{{ c.name }}</option>{% endfor %}
+      </datalist>
+    {% endif %}
+  </div>
+</section>
+
+{% if unavailable.is_empty() %}
+  <section class="card">
+    <div class="card-header">
+      <h2>{{ rows.len() }} {% if rows.len() == 1 %}team{% else %}teams{% endif %}{% if crossed > 0 %} · {{ crossed }} crossed off{% endif %}</h2>
+    </div>
+    <div class="card-body">
+      {% if rows.is_empty() %}
+        <p class="muted">Nobody yet. Add teams above, or from the list below.</p>
+      {% else %}
+        <ol class="pick-list">
+          {% for row in rows %}
+            <li id="team-{{ row.team }}" class="pick{% if row.crossed %} crossed{% endif %}">
+              <div class="pick-line">
+                <span class="pick-place">{{ row.place }}</span>
+                {% if !row.tag.is_empty() %}<span class="pick-tag tag-{{ row.tag }}">{{ row.tag_label }}</span>{% endif %}
+                <a class="pick-team" href="{{ row.profile_href }}">{{ row.team }}</a>
+                <span class="pick-name">{{ row.name }}</span>
+                {% if !row.rank.is_empty() %}<span class="muted">{{ row.rank }}</span>{% endif %}
+                {% if row.crossed %}<span class="badge badge-gray">Crossed off</span>{% endif %}
+              </div>
+              <form class="pick-actions" method="post" action="{{ post_href }}">
+                <input type="hidden" name="team" value="{{ row.team }}">
+                <button class="btn btn-secondary" name="op" value="up"
+                        aria-label="Move {{ row.team }} up"{% if row.first %} disabled{% endif %}>↑</button>
+                <button class="btn btn-secondary" name="op" value="down"
+                        aria-label="Move {{ row.team }} down"{% if row.last %} disabled{% endif %}>↓</button>
+                {% if row.crossed %}
+                  <button class="btn btn-secondary" name="op" value="uncross">Put back</button>
+                {% else %}
+                  <button class="btn btn-secondary" name="op" value="cross">Cross off</button>
+                {% endif %}
+              </form>
+              <details class="pick-more">
+                <summary>More for {{ row.team }}</summary>
+                <form class="inline-field" method="post" action="{{ post_href }}">
+                  <input type="hidden" name="team" value="{{ row.team }}">
+                  <label class="form-label" for="place-{{ row.team }}">Move to place</label>
+                  <input class="form-input" id="place-{{ row.team }}" name="place" type="number"
+                         inputmode="numeric" min="1" max="{{ rows.len() }}" value="{{ row.place }}">
+                  <button class="btn btn-secondary" name="op" value="move">Move</button>
+                </form>
+                <form class="inline-field" method="post" action="{{ post_href }}">
+                  <input type="hidden" name="team" value="{{ row.team }}">
+                  <label class="form-label" for="tag-{{ row.team }}">Colour</label>
+                  <select class="form-input" id="tag-{{ row.team }}" name="tag">
+                    <option value="">None</option>
+                    {% for tag in tags %}<option value="{{ tag.key }}"{% if tag.key == row.tag %} selected{% endif %}>{{ tag.label }}</option>{% endfor %}
+                  </select>
+                  <button class="btn btn-secondary" name="op" value="tag">Set</button>
+                </form>
+                <form method="post" action="{{ post_href }}">
+                  <input type="hidden" name="team" value="{{ row.team }}">
+                  <button class="btn btn-danger" name="op" value="remove">Take {{ row.team }} off the list</button>
+                </form>
+              </details>
+            </li>
+          {% endfor %}
+        </ol>
+      {% endif %}
+    </div>
+  </section>
+
+  {% if !candidates.is_empty() %}
+    <details class="card">
+      <summary class="card-header"><h2>Not on the list · {{ candidates.len() }}</h2></summary>
+      <div class="card-body">
+        <p class="hint">Best ranked first. Tap one to add it to the bottom.</p>
+        <form class="pick-candidates" method="post" action="{{ post_href }}">
+          <input type="hidden" name="op" value="add">
+          {% for c in candidates %}
+            <button class="btn btn-secondary" name="team" value="{{ c.team }}"
+                    title="{{ c.name }}">{{ c.team }}{% if !c.rank.is_empty() %} <span class="muted">{{ c.rank }}</span>{% endif %}</button>
+          {% endfor %}
+        </form>
+      </div>
+    </details>
+  {% endif %}
+{% endif %}
+{% endblock %}
