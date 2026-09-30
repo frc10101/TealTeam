@@ -53,7 +53,7 @@ The server keeps everything in one SQLite file. On the Pi it belongs on an NVMe 
 
    Then `sudo mount -a` and `findmnt /srv/tealteam` should show the SSD. `nofail` lets the Pi boot without the SSD, so you can still get in over SSH and see what is wrong.
 
-5. **Make the data directory *inside* the mount.**
+5. **Make the data directory *inside* the mount.** `deploy/pi/service/install.sh` does steps 5 and 6 for you (folders owned by the `tealteam` user, `.env` at `/opt/tealteam/.env`); the commands below are what it does, for a server run by hand.
 
    ```sh
    sudo mkdir /srv/tealteam/data /srv/tealteam/backups
@@ -62,7 +62,7 @@ The server keeps everything in one SQLite file. On the Pi it belongs on an NVMe 
 
    This matters. If the SSD is missing at boot, `/srv/tealteam` is an empty folder on the SD card, with no `data/` in it. SQLite does not create folders, so the server cannot open its database. Every page then shows **Storage unavailable — data is not being saved**, instead of the server quietly starting an empty database on the SD card.
 
-6. **Point the server at it**, in `.env` beside the binary (three slashes: `sqlite://` and then an absolute path):
+6. **Point the server at it**, in `/opt/tealteam/.env` (or `.env` beside a hand-run binary) (three slashes: `sqlite://` and then an absolute path):
 
    ```
    DATABASE_URL=sqlite:///srv/tealteam/data/tealteam.db
@@ -79,7 +79,7 @@ The server keeps everything in one SQLite file. On the Pi it belongs on an NVMe 
 
 8. **Check the startup line** says `on nvme0n1p1` (or `sda1`), not `the SD card`.
 
-If the server runs as a systemd service, add `RequiresMountsFor=/srv/tealteam` to its `[Unit]` section, so it waits for the mount.
+The systemd unit in `deploy/pi/service/` (P10) already has `RequiresMountsFor=/srv/tealteam`, so it waits for the mount.
 
 ## Backups (Q4)
 
