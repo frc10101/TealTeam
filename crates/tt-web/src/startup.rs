@@ -959,6 +959,59 @@ mod flow_tests {
         );
     }
 
+    // ── No render waits on upstream (U15) ───────────────────────────────────
+
+    #[tokio::test]
+    async fn no_page_asks_upstream_even_when_storage_has_nothing() {
+        use crate::upstream::test_support::{hanging_stub, upstream_everywhere};
+        use std::sync::atomic::Ordering;
+        use std::time::Duration;
+
+        let (base, calls) = hanging_stub().await;
+        let state = AppState {
+            upstream: Arc::new(upstream_everywhere(&base)),
+            ..migrated_state().await
+        };
+        // The two gaps the retired server filled from FIRST mid-render: an
+        // event with a schedule but no roster, and teams with no local events.
+        seed_event(&state, "2026now", "This Weekend", (-1, 1), &[]).await;
+        seed_match(&state, 1, true).await;
+        seed_match(&state, 2, false).await;
+        seed_event(&state, "2026bare", "Nothing Yet", (5, 7), &[]).await;
+        let admin = signed_up(&state).await;
+
+        for uri in [
+            "/",
+            "/account",
+            "/status",
+            "/submission?event=2026now",
+            "/submission?event=2026now&match=2026now_qm2&team=254",
+            "/submission?event=2026bare",
+            "/teams?event=2026now",
+            "/teams?event=2026now&team=254",
+            "/teams?event=2026now&team=9999",
+            "/teams?event=2026bare&team=254",
+            "/lead-scout?event=2026now",
+            "/lead-scout/assignments?event=2026now",
+            "/lead-scout/rankings?event=2026now",
+            "/lead-scout/rankings/enter?event=2026now",
+            "/lead-scout/weights?event=2026now",
+            "/drive-coach?event=2026now",
+            "/pick-list?event=2026now",
+        ] {
+            let response =
+                tokio::time::timeout(Duration::from_secs(5), get(&state, uri, Some(&admin)))
+                    .await
+                    .unwrap_or_else(|_| panic!("{uri} waited on upstream"));
+            assert_eq!(response.status(), StatusCode::OK, "{uri}");
+        }
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            0,
+            "no render may call upstream"
+        );
+    }
+
     // ── Event selection and summary (U2, U3) ────────────────────────────────
 
     /// Store an event running from `start` to `end` days from today, with the

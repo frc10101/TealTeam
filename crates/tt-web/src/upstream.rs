@@ -13,6 +13,11 @@
 //!
 //! Missing credentials switch the matching piece off. That is a supported
 //! configuration, not an error -- scouting works with no upstream at all.
+//!
+//! **No page render calls upstream** (U15). Pages read storage and say how old
+//! it is; the only request that waits on the network is the sync button, which
+//! is asked to. The retired server fetched FIRST mid-render for a team with no
+//! local events and for an empty roster (REBUILD_SPEC.md 12.7).
 
 use std::io::Write;
 use std::sync::Arc;
@@ -330,6 +335,7 @@ pub(crate) mod test_support {
     use super::*;
     use axum::Router;
     use axum::routing::get;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     pub const EVENTS: &str = r#"{"Events":[{
       "code":"MABIL","name":"Greater Boston Regional","city":"Boston",
@@ -356,6 +362,38 @@ pub(crate) mod test_support {
             let _ = axum::serve(listener, app).await;
         });
         format!("http://{addr}")
+    }
+
+    /// A stub that counts every request and never answers one: an upstream
+    /// that is configured, reachable, and hopeless. Returns its base URL and
+    /// the count.
+    pub async fn hanging_stub() -> (String, Arc<AtomicUsize>) {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let counted = calls.clone();
+        let app = Router::new().fallback(move || {
+            counted.fetch_add(1, Ordering::SeqCst);
+            std::future::pending::<&'static str>()
+        });
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        (format!("http://{addr}"), calls)
+    }
+
+    /// FIRST and TBA both pointed at `base`.
+    pub fn upstream_everywhere(base: &str) -> Upstream {
+        let uplink = Uplink::new();
+        let first = FirstClient::new("user", "token", 2026, uplink.clone())
+            .expect("client")
+            .with_base_url(base);
+        let tba = TbaClient::new("key", uplink.clone())
+            .expect("client")
+            .with_base_url(base);
+        Upstream::new(Some(first), Some(tba), EventFilters::all(), uplink)
     }
 
     /// FIRST pointed at `first_base` when given; TBA configured when asked,

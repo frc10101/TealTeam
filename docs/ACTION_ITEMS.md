@@ -203,7 +203,7 @@ This is the highest-leverage cluster in either source document. It removes the 5
 | U12 | **Pick one aggregation rule.** Mode for some fields and latest-row for others was an accident, not a design | RS §5.4, §12 | S || **Done** — `tt_core::profile` |
 | U13 | Notes filtered to the viewer's own `submitting_team_id`; no-team viewers see none | RS §5.4 | S | **Done** — `tt_core::notes::Notes`, on the review page and the team profile |
 | U14 | **Provenance badges** (`n=`, `scouted_at`, `synced ago`) on every aggregate | RI-U7 | S | **Done** — rankings, the team profile, and the drive coach panel |
-| U15 | **Remove synchronous upstream calls from page renders.** `/teams` and the team-select fallback both blocked a render on the network | RS §12.7 | M |  |
+| U15 | **Remove synchronous upstream calls from page renders.** `/teams` and the team-select fallback both blocked a render on the network | RS §12.7 | M | **Done** — no render calls upstream; `no_page_asks_upstream_even_when_storage_has_nothing` holds it |
 | U16 | Mobile pass: bottom nav, 44px touch targets, card layouts under 600px | RI-U10 · RS §7 | M |  |
 | U17 | DB viewer — **guard with `is_admin` and exclude `sessions`**, or do not rebuild it. The old one was completely unguarded and exposed every user's email and all session rows | RS §12.4 | S |  |
 
@@ -379,7 +379,9 @@ Checked against the binary at phone width: ranks synced 35 minutes ago read "las
 
 **Not built:** the retired JSON endpoints (`GET /api/pick-list`, `POST`/`DELETE /api/pick-list/entry`). Nothing calls them; the Phase 3 client will want its own sync shape anyway.
 
-**Still open in Phase 2:** I11, U15-U17, and P3-P9.
+**No page waits on the internet (U15).** Neither of §12.7's calls was ever ported: `/teams` has read storage only since U11, and the scouting page's roster is storage only, even when empty (the robots come from the match; the roster only adds names). U15 makes that a rule the tests hold. `no_page_asks_upstream_even_when_storage_has_nothing` points FIRST and TBA at a stub that counts requests and never answers, seeds an event with a schedule but no roster, and opens every page, including unknown teams and an event with nothing. It fails if any page waits on the stub or calls it. The one request that still waits on the network is `POST /api/frc/sync`, the sync button, where waiting is the point. A new page should be added to that test's list.
+
+**Still open in Phase 2:** I11, U16, U17, and P3-P9.
 
 ---
 

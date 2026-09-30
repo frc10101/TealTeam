@@ -187,6 +187,9 @@ pub async fn page(
     let mut me = vec![AssigneeKey::Scout(user.id)];
     me.extend(device_id.map(AssigneeKey::Device));
     let agenda = assignments::agenda(&matches, &event_assignments, &me, &recorded_here);
+    // Storage only, even when empty: the retired page asked FIRST here
+    // (REBUILD_SPEC.md 12.7). The robots come from the match; the roster only
+    // adds names and the keypad's type-ahead.
     let roster = state
         .repo
         .event_teams(&event.key)
