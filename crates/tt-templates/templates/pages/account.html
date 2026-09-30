@@ -13,6 +13,34 @@
   </div>
 </section>
 
+{# C2: whether this device keeps the app's data. static/js/persist.js asks the
+   browser to keep it and shows which of these is true. #}
+<section class="card narrow">
+  <div class="card-header"><h2>This device</h2></div>
+  <div class="card-body" id="device-storage">
+    <p data-storage="unknown">Whether this device keeps TealTeam's data is checked by a script, and scripts are off.</p>
+    <p data-storage="insecure" hidden>
+      <strong>Nothing is kept here between visits.</strong> Browsers only keep a site's
+      data for pages that come over https, or from the device itself, and this page came
+      over plain http. For now TealTeam keeps nothing on the device, so nothing can be lost
+      from it either.
+    </p>
+    <p data-storage="persisted" hidden>
+      <strong>Kept.</strong> The browser has agreed not to clear TealTeam's data to make room.
+    </p>
+    <p data-storage="best-effort" hidden>
+      <strong>Best effort.</strong> The browser may clear TealTeam's data if the device runs
+      low on space. Adding TealTeam to the home screen usually changes that.
+    </p>
+    <p data-storage="unsupported" hidden>This browser does not say whether it keeps TealTeam's data.</p>
+    <p class="hint" data-storage-usage hidden></p>
+    <p class="hint">
+      On an iPhone or iPad, Safari never asks: it keeps the data of a site added to the
+      Home Screen, and clears a site's data after 7 days without a visit otherwise.
+    </p>
+  </div>
+</section>
+
 <section class="card narrow">
   <div class="card-header"><h2>Change password</h2></div>
   <div class="card-body">

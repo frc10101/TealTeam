@@ -423,10 +423,10 @@ Checked on a development machine: a database on the encrypted btrfs root was rep
 
 The architectural payoff. Phase 2 must be shipping before this starts.
 
-| # | Action | Source | Effort |
-| --- | --- | --- | --- |
+| # | Action | Source | Effort | Status |
+| --- | --- | --- | --- | --- |
 | C1 | **Service Worker + app-shell precache + navigation fallback.** WASM alone makes nothing offline; this is the piece that does | RI-O1 | M |
-| C2 | Web App Manifest, icons, installability, `navigator.storage.persist()` | RI-O2 | S |
+| C2 | Web App Manifest, icons, installability, `navigator.storage.persist()` | RI-O2 | S | **Done** — manifest, placeholder icons, `static/js/persist.js`; installs only over https, see open decision 9 |
 | C3 | Debounced form-state persistence and restore — no more lost in-progress entries | RI-O3 | S | **Done** — `static/js/draft.js`; see Phase 3 notes |
 | C4 | `tt-repo-sqlite` for the browser over SQLite-WASM/OPFS | RI-O7 | L |
 | C5 | Service Worker fragment interception → wasm handler dispatch | RI-O8 | M |
@@ -454,10 +454,23 @@ The architectural payoff. Phase 2 must be shipping before this starts.
 | S11 | Schema version handshake + blocking update banner. The mid-event deploy footgun | RI-O18 | S |
 | S12 | Clients compute and record their clock offset against the server on each sync, so device skew is measurable rather than mysterious | RI §Time Sync | S |
 
-
 ### Phase 3 notes
 
+**The app is installable, where browsers allow it (C2).** Every page links `static/manifest.webmanifest`: "TealTeam Scouting", standalone, start and scope `/`, with the dark theme colour of the header. Its icons are an SVG, PNGs at 192 and 512, a maskable 512 for Android's crop, and a 180px `apple-touch-icon` for iOS's Home Screen. **The icons are placeholders**: two white Ts on the team teal, drawn from rectangles so they do not depend on a font. `static/icons/icon.svg` and `icon-maskable.svg` are the sources, and the PNGs were rendered from them with `rsvg-convert -w <size> -h <size>`. A real mark replaces those two files and the four PNGs. They reach the binary through P5's `build.rs` like every other static file, and `.webmanifest` is served as `application/manifest+json`.
+
+**Asking to keep the data.** On every signed-in page, `static/js/persist.js` asks `navigator.storage.persist()` once in a browser tab, and once more after the app is installed, when Chrome is far likelier to agree. It never asks again after that, because Firefox asks the person and must not do it on every page. The account page's new **This device** card says what the browser decided: kept, best effort, or not available. It also shows how much space is used out of the quota, which the plan wanted checked before it gets tight.
+
+**iOS (open decision 1, both supported).** Safari never shows a prompt for this. It keeps the data of a site added to the Home Screen, and clears a site's data after 7 days without a visit otherwise. That is harmless within an event and matters between events. iOS installs through Share → Add to Home Screen, using the `apple-touch-icon` and the manifest's `display`, and shows no install prompt of its own. The card says this in plain words. **Not tested on an iPhone or iPad.**
+
+**What blocks most of Phase 3: the event LAN is plain http.** A browser offers installation, `navigator.storage`, service workers (C1), OPFS (C4), and `crypto.subtle` (C9) only in a *secure context*: https, or the device itself. REBUILD_SPEC.md §3 (session cookies) says the event LAN is plain http with no TLS on the Pi. Checked over the DevTools protocol against the real server:
+
+- From `http://127.0.0.1`, Chrome parsed the manifest with no errors and listed **no** installability errors, even with no service worker. `persist()` ran, and headless Chrome answered "best effort".
+- From the same server at its LAN address, `http://192.168.68.60`, the same manifest parsed. But Chrome's only installability error was **`not-from-secure-origin`**, and `navigator.storage` did not exist, so the card said "nothing is kept here".
+
+So on the event LAN today, C2 does what it can: an Android "Add to Home screen" shortcut, the iOS Home Screen icon, and an honest card. C1 cannot work there at all. This is **open decision 9**.
+
 **Unsaved answers survive a reload, a crash, or a flat battery (C3).** `static/js/draft.js` writes the scouting form to `localStorage` 400 ms after the last change, and at once when the page is hidden or left. On the next load, a draft that differs from what the server rendered is put back. A note above the form says "Restored your unsaved answers from 10:42 AM", with a button to discard them. The draft keeps the form's `record_id`, so a retry after a save that did land but whose reply was lost is stored once (D7). The server builds the key, `tt-draft:v1:{user}:{event}:{match}:{team}:{form version}` (`tt_templates::draft_key`), so a draft can only return to its own scout, robot, match, and form. The script also checks the match and team before restoring. A confirmed save puts that key on the success message for the script to delete. When the server shows a form it just rejected, the posted answers are newer and they replace the draft. Drafts older than three days are deleted. Storage failures (full, private browsing) are ignored, and the form still works. The format is deliberately simple JSON, for the outbox (C7) to replace. Checked: the page carries the right keys (a Rust test), and the script, in headless Chromium, against a copy of the form. That covered restore, a draft for another match, just-posted answers, debounced saving, clearing, and expiry. Not checked: on a real tablet, and the discard button.
+
 ---
 
 ## Phase 4 — Analysis and communication
@@ -550,6 +563,12 @@ These need a human, and several block Phase 2 or 3.
 6. **Off-site backup.** With Render retired the Pi holds the only authoritative copy. Whose laptop receives the between-blocks copy (Q4), and who verifies it ran?
 7. **DB viewer.** Rebuild it guarded (U17), or drop it entirely?
 8. **Rules.** Pending P2 — the E143 answer determines whether the network topology in P6 is legal as planned.
+9. **HTTPS on the event LAN.** Service workers (C1), installing the app and keeping its storage (C2), OPFS (C4), and `crypto.subtle` (C9) all need https; the Pi serves plain http (found in C2, see Phase 3 notes). The options:
+   - **A local certificate authority** (e.g. `mkcert`) whose root is installed on every client. It is practical on team tablets and painful on personal phones, so it ties to decision 1.
+   - **A real domain with a Let's Encrypt certificate** (DNS-01) whose name points at the Pi's LAN address. It needs internet to renew every 90 days, and a DNS answer at a venue with no internet: the Pi would serve DNS on the wired LAN (P6).
+   - **Staying on http**, and accepting that Phase 3's offline work cannot run in a browser.
+
+   Phase 3 beyond C2 and C3 should wait on this.
 
 ---
 

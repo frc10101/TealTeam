@@ -16,6 +16,14 @@
     <title>{% if title.is_empty() %}TealTeam{% else %}{{ title }} · TealTeam{% endif %}</title>
     {# Vendored, never CDN: this has to work on an event LAN with no internet. #}
     <link rel="stylesheet" href="/static/css/site.css">
+    {# Installable (C2): the manifest names the app and its icons. Chrome and
+       Edge read it; iOS reads the apple-touch-icon for the Home Screen. The
+       icons are placeholders. #}
+    <link rel="manifest" href="/static/manifest.webmanifest">
+    <link rel="icon" href="/static/icons/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+    <meta name="theme-color" content="#111827">
+    <meta name="apple-mobile-web-app-title" content="TealTeam">
   </head>
   <body{% if nav.signed_in %} class="has-tabs"{% endif %}>
     <a class="skip-link" href="#main">Skip to content</a>
@@ -93,6 +101,7 @@
     <script src="/static/js/live.js" defer></script>
     <script src="/static/js/link.js" defer></script>
     <script src="/static/js/tabs.js" defer></script>
+    {% if nav.signed_in %}<script src="/static/js/persist.js" defer></script>{% endif %}
     {% block scripts %}{% endblock %}
   </body>
 </html>

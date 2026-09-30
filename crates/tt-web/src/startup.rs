@@ -591,6 +591,49 @@ mod flow_tests {
         }
     }
 
+    #[tokio::test]
+    async fn every_page_is_installable_and_signed_in_pages_ask_to_keep_data() {
+        // C2.
+        let state = migrated_state().await;
+        let cookie = signed_up(&state).await;
+        for (uri, cookie) in [("/sign-in", None), ("/account", Some(cookie.as_str()))] {
+            let page = text(get(&state, uri, cookie).await).await;
+            assert!(
+                page.contains(r#"<link rel="manifest" href="/static/manifest.webmanifest">"#),
+                "{uri}"
+            );
+            assert!(
+                page.contains(r#"href="/static/icons/apple-touch-icon.png""#),
+                "{uri}"
+            );
+            // Asking to keep storage is for someone who will store something.
+            assert_eq!(
+                page.contains("/static/js/persist.js"),
+                cookie.is_some(),
+                "{uri}"
+            );
+        }
+        let account = text(get(&state, "/account", Some(&cookie)).await).await;
+        for state in [
+            "unknown",
+            "insecure",
+            "persisted",
+            "best-effort",
+            "unsupported",
+        ] {
+            assert!(
+                account.contains(&format!(r#"data-storage="{state}""#)),
+                "{state}"
+            );
+        }
+
+        let manifest = get(&state, "/static/manifest.webmanifest", None).await;
+        assert_eq!(
+            manifest.headers()[header::CONTENT_TYPE],
+            "application/manifest+json"
+        );
+    }
+
     #[test]
     fn offline_is_never_called_a_mode() {
         // It is a state the app observes (I11), not a toggle. The retired

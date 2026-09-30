@@ -35,6 +35,7 @@ fn content_type(path: &str) -> &'static str {
         Some("css") => "text/css; charset=utf-8",
         Some("js") => "text/javascript; charset=utf-8",
         Some("json") => "application/json",
+        Some("webmanifest") => "application/manifest+json",
         Some("svg") => "image/svg+xml",
         Some("png") => "image/png",
         Some("ico") => "image/x-icon",
@@ -100,6 +101,61 @@ mod tests {
         assert_eq!(content_type("css/site.css"), "text/css; charset=utf-8");
         assert_eq!(content_type("js/live.js"), "text/javascript; charset=utf-8");
         assert_eq!(content_type("README"), "application/octet-stream");
+    }
+
+    /// Width and height from a PNG's header.
+    fn png_size(bytes: &[u8]) -> (u32, u32) {
+        assert_eq!(&bytes[..8], b"\x89PNG\r\n\x1a\n", "a PNG");
+        let be = |at: usize| u32::from_be_bytes(bytes[at..at + 4].try_into().unwrap());
+        (be(16), be(20))
+    }
+
+    #[test]
+    fn the_manifest_has_what_install_needs_and_every_icon_it_names() {
+        // C2. What Chrome checks before it offers to install: a name, a
+        // start_url inside the scope, a standalone display, and PNG icons at
+        // 192 and 512. Every icon must be embedded, at the size it claims.
+        let manifest: serde_json::Value =
+            serde_json::from_slice(find("manifest.webmanifest").expect("embedded").bytes)
+                .expect("valid JSON");
+        assert_eq!(manifest["short_name"], "TealTeam");
+        assert!(manifest["name"].as_str().is_some_and(|n| !n.is_empty()));
+        assert_eq!(manifest["display"], "standalone");
+        let (start, scope) = (
+            manifest["start_url"].as_str().unwrap(),
+            manifest["scope"].as_str().unwrap(),
+        );
+        assert!(start.starts_with(scope));
+
+        let mut png_sizes = Vec::new();
+        let mut maskable = false;
+        for icon in manifest["icons"].as_array().unwrap() {
+            let src = icon["src"].as_str().unwrap();
+            let asset = find(src.strip_prefix("/static/").expect("under /static/"))
+                .unwrap_or_else(|| panic!("{src} is not embedded"));
+            assert_eq!(
+                content_type(asset.path),
+                icon["type"].as_str().unwrap(),
+                "{src}"
+            );
+            maskable |= icon["purpose"] == "maskable";
+            if icon["type"] == "image/png" {
+                let (w, h) = png_size(asset.bytes);
+                assert_eq!(icon["sizes"], format!("{w}x{h}"), "{src}");
+                png_sizes.push(w);
+            }
+        }
+        assert!(png_sizes.contains(&192) && png_sizes.contains(&512));
+        assert!(maskable, "Android crops icons to its own shape");
+        assert_eq!(
+            png_size(find("icons/apple-touch-icon.png").unwrap().bytes),
+            (180, 180),
+            "what iOS puts on the Home Screen"
+        );
+        assert_eq!(
+            content_type("manifest.webmanifest"),
+            "application/manifest+json"
+        );
     }
 
     #[test]
