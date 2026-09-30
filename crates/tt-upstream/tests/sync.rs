@@ -266,7 +266,7 @@ async fn playoff_matches_keep_their_set_number_rather_than_being_folded() {
     let matches = repo.event_matches("2026mabil").await.expect("query");
     // Ordering puts qualifications before playoffs.
     let sf = matches.last().expect("a semifinal");
-    assert_eq!(sf.label(), "SF1");
+    assert_eq!(sf.label(), "SF2", "the set is the playoff match");
     assert_eq!(sf.set_number, 2);
     assert_eq!(sf.match_number, 1);
 }

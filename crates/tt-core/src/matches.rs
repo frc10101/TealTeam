@@ -80,13 +80,20 @@ impl CompLevel {
     }
 
     /// Short human label, e.g. `Q42`, `SF3`, `F1`.
-    pub fn label(self, match_number: i32) -> String {
-        let prefix = match self {
-            Self::Qualification => "Q",
-            Self::Semifinal => "SF",
-            Self::Final => "F",
-        };
-        format!("{prefix}{match_number}")
+    ///
+    /// A playoff match is numbered by its set: in the double-elimination
+    /// bracket every `sf` match is its own set, and TBA's `match_number` is 1
+    /// for all thirteen (`2026mabil_sf5m1`). Labelled by `match_number` they
+    /// were all `SF1`. A second match in a set -- a replay, or a best-of-three
+    /// from before 2023 -- reads `SF5-2`. The finals are one set of up to
+    /// three, so those are numbered by match.
+    pub fn label(self, set_number: i32, match_number: i32) -> String {
+        match self {
+            Self::Qualification => format!("Q{match_number}"),
+            Self::Semifinal if match_number > 1 => format!("SF{set_number}-{match_number}"),
+            Self::Semifinal => format!("SF{set_number}"),
+            Self::Final => format!("F{match_number}"),
+        }
     }
 }
 
@@ -141,9 +148,40 @@ mod tests {
 
     #[test]
     fn labels_match_the_scouting_vocabulary() {
-        assert_eq!(CompLevel::Qualification.label(42), "Q42");
-        assert_eq!(CompLevel::Semifinal.label(3), "SF3");
-        assert_eq!(CompLevel::Final.label(1), "F1");
+        assert_eq!(CompLevel::Qualification.label(1, 42), "Q42");
+        assert_eq!(CompLevel::Semifinal.label(3, 1), "SF3");
+        assert_eq!(CompLevel::Final.label(1, 1), "F1");
+    }
+
+    #[test]
+    fn every_double_elimination_match_has_its_own_label() {
+        // sf1m1 .. sf13m1: the set is the match.
+        let labels: Vec<String> = (1..=13)
+            .map(|set| CompLevel::Semifinal.label(set, 1))
+            .collect();
+        assert_eq!(labels[0], "SF1");
+        assert_eq!(labels[12], "SF13");
+        let mut unique = labels.clone();
+        unique.dedup();
+        assert_eq!(unique.len(), 13, "{labels:?}");
+    }
+
+    #[test]
+    fn a_second_match_in_a_set_says_so_and_the_finals_count_by_match() {
+        assert_eq!(CompLevel::Semifinal.label(5, 2), "SF5-2", "a replay");
+        assert_eq!(
+            CompLevel::Semifinal.label(1, 3),
+            "SF1-3",
+            "pre-2023 best of three"
+        );
+        assert_eq!(CompLevel::Final.label(1, 2), "F2");
+        assert_eq!(CompLevel::Final.label(1, 3), "F3");
+    }
+
+    #[test]
+    fn a_qualification_ignores_its_set() {
+        // TBA sends set_number 1 for quals; anything else must not leak in.
+        assert_eq!(CompLevel::Qualification.label(7, 12), "Q12");
     }
 
     #[test]

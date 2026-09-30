@@ -279,6 +279,27 @@ mod tests {
     }
 
     #[test]
+    fn a_success_outranks_a_failed_probe_for_exactly_ten_minutes() {
+        let mut s = NetworkSnapshot::default();
+        s.record_api_success(at(0));
+        s.record_probe(at(1), false, "timeout");
+        assert_eq!(s.classify(at(10)), UplinkState::Online, "the edge counts");
+        assert_eq!(
+            s.classify(at(10) + TimeDelta::seconds(1)),
+            UplinkState::Offline
+        );
+    }
+
+    #[test]
+    fn a_success_does_not_outrank_a_newer_api_error_even_inside_the_window() {
+        let mut s = NetworkSnapshot::default();
+        s.record_api_success(at(0));
+        s.record_api_error(at(1), "503");
+        s.record_probe(at(2), false, "timeout");
+        assert_eq!(s.classify(at(3)), UplinkState::Offline, "the probe decides");
+    }
+
+    #[test]
     fn an_unreachable_probe_beats_a_stale_success() {
         let mut s = NetworkSnapshot::default();
         s.record_api_success(at(0));

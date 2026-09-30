@@ -166,7 +166,7 @@ pub struct MatchRecord {
 impl MatchRecord {
     /// `Q14`, `SF3`, `F1`.
     pub fn label(&self) -> String {
-        self.comp_level.label(self.match_number)
+        self.comp_level.label(self.set_number, self.match_number)
     }
 
     /// Every robot in the match, red first, skipping empty slots.

@@ -304,6 +304,50 @@ mod tests {
         assert_eq!(scores[0].average, 15.0);
     }
 
+    #[test]
+    fn a_team_seen_only_on_another_form_has_no_score_rather_than_zero() {
+        let schema = current_season().unwrap();
+        let p = payload(&[("teleop_scored", Value::Count(5))]);
+        let observations = [Scored {
+            team_number: 254,
+            payload: &p,
+            schema_version: schema.version - 1,
+        }];
+        assert_eq!(
+            team_scores(&schema, &WeightOverrides::new(), &observations),
+            [],
+            "unscouted, so it sorts last rather than as a zero"
+        );
+    }
+
+    #[test]
+    fn an_average_keeps_its_fraction_and_can_go_negative() {
+        let schema = current_season().unwrap();
+        let (three, four) = (
+            payload(&[("teleop_scored", Value::Count(3))]),
+            payload(&[("teleop_scored", Value::Count(4))]),
+        );
+        let broke = payload(&[("broke_down", Value::Flag(true))]);
+        let seen = |team_number, payload| Scored {
+            team_number,
+            payload,
+            schema_version: schema.version,
+        };
+        let observations = [seen(1, &three), seen(1, &four), seen(2, &broke)];
+
+        let scores = team_scores(&schema, &WeightOverrides::new(), &observations);
+        assert_eq!(scores[0].average, 7.0, "(6 + 8) / 2");
+        assert!(scores[1].average < 0.0, "a breakdown costs points");
+
+        let odd = [seen(3, &three), seen(3, &four), seen(3, &four)];
+        let scores = team_scores(&schema, &WeightOverrides::new(), &odd);
+        assert!(
+            (scores[0].average - 22.0 / 3.0).abs() < 1e-9,
+            "not integer division: {}",
+            scores[0].average
+        );
+    }
+
     fn row(team: i32, name: &str, rank: Option<i32>, average: Option<f64>) -> RankingRow {
         RankingRow {
             team_number: team,

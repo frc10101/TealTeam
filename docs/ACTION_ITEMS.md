@@ -449,13 +449,22 @@ The architectural payoff. Phase 2 must be shipping before this starts.
 
 ## Cross-cutting
 
-| # | Action | Source | Effort |
-| --- | --- | --- | --- |
-| Q1 | `tt-core` unit tests: scoring, mode aggregation, match-status, connectivity classification, match-number normalization, TBA fallback extraction. **Every one of these had a bug** | RS §11 | M |
-| Q2 | Deserialization tests against **recorded** FIRST/TBA payloads, including at least one from a prior season | RS §11 | M |
-| Q3 | Load test before the season: 30 simulated clients, two hours, p95 latency and SSE stability — with the cable pulled, the power killed, and a client's storage filled, deliberately | RI §Load Testing · RS §11 | M |
-| Q4 | Backups: timed dump to the SSD (10-minute interval, 24-hour retention), USB copy between match blocks, and **one deliberate restore test** before you need it | RI §Backups | M |
-| Q5 | Store everything in UTC; render in the event's IANA zone per `TIMEZONE_HANDLING.md` | RI §Time Sync | S |
+| # | Action | Source | Effort | Status |
+| --- | --- | --- | --- | --- |
+| Q1 | `tt-core` unit tests: scoring, mode aggregation, match-status, connectivity classification, match-number normalization, TBA fallback extraction. **Every one of these had a bug** | RS §11 | M | **Done** — gaps filled in `tt-core`; two bugs fixed, see notes |
+| Q2 | Deserialization tests against **recorded** FIRST/TBA payloads, including at least one from a prior season | RS §11 | M |  |
+| Q3 | Load test before the season: 30 simulated clients, two hours, p95 latency and SSE stability — with the cable pulled, the power killed, and a client's storage filled, deliberately | RI §Load Testing · RS §11 | M |  |
+| Q4 | Backups: timed dump to the SSD (10-minute interval, 24-hour retention), USB copy between match blocks, and **one deliberate restore test** before you need it | RI §Backups | M |  |
+| Q5 | Store everything in UTC; render in the event's IANA zone per `TIMEZONE_HANDLING.md` | RI §Time Sync | S |  |
+
+### Cross-cutting notes
+
+**Q1: what was already covered, and what was added.** Most of the six areas had tests from when they were written. Match status (`matches::classify`) had every boundary. Connectivity had the three-state order and the staleness edge. The TBA fallbacks had modern, legacy, and empty rankings. Scoring had each field kind and saturation. Added: a tied tally keeps form order; averages keep their fraction; a box never ticked is "0 of n", not unanswered; a team seen only on an old form has no score, not zero, and a breakdown can take an average negative; the success window's exact edge against a failed probe; half-way rounding in the fallbacks. **Two of the new tests found bugs, fixed here:**
+
+- **Every double-elimination playoff match was labelled `SF1`.** TBA keys them `sf1m1` to `sf13m1`: the set is the match, and `match_number` is always 1. The label used `match_number`, so the scouting page, the assignment grid, and the coach panel showed thirteen `SF1`s. The sync test asserted `sf2m1` read `SF1`. `CompLevel::label` now takes the set: `SF5`, `SF5-2` for a replay or a pre-2023 best-of-three, and finals by match, `F1` to `F3`. Storage and ordering were already right (D3 keys on `tba_key`); only the label was wrong.
+- **One `null` failed a whole event's sync.** TBA sends `"actual_time": null` for every unplayed match, and serde's `default` covers a missing field, not a null one. Every non-`Option` field in `tt_core::upstream` now reads `null` as missing, through one `or_default` helper (`set_number` stays 1, a score stays TBA's `-1`).
+
+**Left for Q2:** `tt-upstream`'s rankings envelope is not an `Option`, and TBA answers `null` for an event with no rankings yet. `CompLevel::parse` rejects `qf` and `ef`, so a pre-2023 event's quarterfinals are skipped with a problem line. Both want recorded payloads to confirm.
 
 ---
 

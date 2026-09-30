@@ -21,21 +21,33 @@
 //! documented array position, and only then gives up. Do not "simplify" them to
 //! direct field access; that is the bug.
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use std::collections::HashMap;
 
 use crate::matches::CompLevel;
+
+/// Upstream sends `null` where a field has nothing to say -- TBA does for a
+/// match's `actual_time` until it is played -- and serde's `default` covers
+/// only a field left out. Read `null` as left out, or one null fails a whole
+/// event's sync.
+fn or_default<'de, D, T>(d: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Default + Deserialize<'de>,
+{
+    Ok(Option::deserialize(d)?.unwrap_or_default())
+}
 
 // ── The Blue Alliance ───────────────────────────────────────────────────────
 
 /// `/event/{key}/oprs`
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Oprs {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub oprs: HashMap<String, f64>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub dprs: HashMap<String, f64>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub ccwms: HashMap<String, f64>,
 }
 
@@ -108,11 +120,11 @@ impl ComponentOprs {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct WinLossRecord {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub wins: i32,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub losses: i32,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub ties: i32,
 }
 
@@ -123,13 +135,13 @@ pub struct WinLossRecord {
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Ranking {
     pub team_key: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub rank: i32,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub matches_played: i32,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub dq: i32,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub record: WinLossRecord,
 
     #[serde(default)]
@@ -146,10 +158,10 @@ pub struct Ranking {
     pub alliance_points: Option<i64>,
 
     /// `[0]` ranking score / qual average, `[1]` average match points.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub sort_orders: Vec<f64>,
     /// `[0]` an alternative total ranking points.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub extra_stats: Vec<f64>,
 }
 
@@ -184,9 +196,9 @@ impl Ranking {
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct MatchAlliance {
     /// TBA reports `-1` for an unplayed match.
-    #[serde(default = "minus_one")]
+    #[serde(default = "minus_one", deserialize_with = "or_minus_one")]
     pub score: i64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub team_keys: Vec<String>,
 }
 
@@ -194,24 +206,28 @@ fn minus_one() -> i64 {
     -1
 }
 
+fn or_minus_one<'de, D: Deserializer<'de>>(d: D) -> Result<i64, D::Error> {
+    Ok(Option::deserialize(d)?.unwrap_or_else(minus_one))
+}
+
 /// One entry of `/event/{key}/matches`.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Match {
     pub key: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub comp_level: String,
-    #[serde(default = "one")]
+    #[serde(default = "one", deserialize_with = "or_one")]
     pub set_number: i32,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub match_number: i32,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub alliances: MatchAlliances,
     /// Unix seconds. `0` or absent means unknown.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub time: i64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub actual_time: i64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub predicted_time: i64,
     #[serde(default)]
     pub score_breakdown: Option<serde_json::Value>,
@@ -221,11 +237,15 @@ fn one() -> i32 {
     1
 }
 
+fn or_one<'de, D: Deserializer<'de>>(d: D) -> Result<i32, D::Error> {
+    Ok(Option::deserialize(d)?.unwrap_or_else(one))
+}
+
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct MatchAlliances {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub red: MatchAlliance,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub blue: MatchAlliance,
 }
 
@@ -366,23 +386,23 @@ pub fn split_event_key(key: &str) -> Option<(i32, String)> {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FirstEvent {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub code: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub name: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub venue: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub city: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub stateprov: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub country: String,
     #[serde(default)]
     pub timezone: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub date_start: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "or_default")]
     pub date_end: String,
     #[serde(default)]
     pub event_type: Option<String>,
@@ -733,6 +753,69 @@ mod tests {
         )
         .expect("parse");
         assert!(!m.played());
+    }
+
+    #[test]
+    fn an_unplayed_match_with_null_times_parses_and_has_no_time() {
+        // TBA's shape for a match not yet played. One of these failed the
+        // whole event's match sync.
+        let m: Match = serde_json::from_str(
+            r#"{"key": "2026mabil_qm40", "comp_level": "qm", "set_number": null,
+                "match_number": 40, "time": null, "actual_time": null,
+                "predicted_time": null, "score_breakdown": null,
+                "alliances": {"red": {"score": null, "team_keys": ["frc254"]},
+                              "blue": {"score": -1, "team_keys": null}}}"#,
+        )
+        .expect("parse");
+        assert_eq!(m.set_number, 1);
+        assert_eq!((m.scheduled_unix(), m.actual_unix()), (None, None));
+        assert!(!m.played());
+        assert_eq!(
+            (m.red_score(), m.blue_score(), m.winner()),
+            (None, None, None)
+        );
+        assert_eq!(m.red_teams(), [Some(254), None, None]);
+        assert_eq!(m.blue_teams(), [None, None, None]);
+    }
+
+    #[test]
+    fn a_ranking_of_nulls_parses_and_every_fallback_is_none() {
+        let r: Ranking = serde_json::from_str(
+            r#"{"team_key": "frc254", "rank": null, "matches_played": null,
+                "dq": null, "record": null, "qual_average": null,
+                "sort_orders": null, "extra_stats": null}"#,
+        )
+        .expect("parse");
+        assert_eq!((r.rank, r.matches_played, r.record.wins), (0, 0, 0));
+        assert_eq!(r.effective_qual_average(), None);
+        assert_eq!(r.effective_avg_match_points(), None);
+        assert_eq!(r.effective_total_points(), None);
+        assert_eq!(r.effective_qual_points(), None);
+    }
+
+    #[test]
+    fn a_fallback_rounds_half_away_from_zero_rather_than_truncating() {
+        let r: Ranking = serde_json::from_str(
+            r#"{"team_key": "frc1", "sort_orders": [2.5, 31.6], "extra_stats": [17.5]}"#,
+        )
+        .expect("parse");
+        assert_eq!(r.effective_qual_points(), Some(3));
+        assert_eq!(r.effective_total_points(), Some(18));
+        assert_eq!(r.effective_avg_match_points(), Some(31.6));
+    }
+
+    #[test]
+    fn null_component_oprs_and_event_fields_read_as_empty() {
+        let o: Oprs =
+            serde_json::from_str(r#"{"oprs": null, "dprs": {}, "ccwms": null}"#).expect("parse");
+        assert!(o.oprs.is_empty() && o.ccwms.is_empty());
+        let e: FirstEvent = serde_json::from_str(
+            r#"{"code": "MABIL", "venue": null, "city": "Boston", "stateprov": null,
+                "country": "USA", "dateStart": "2026-03-12T00:00:00", "dateEnd": null}"#,
+        )
+        .expect("parse");
+        assert_eq!(e.location(), "Boston, USA");
+        assert_eq!(e.tba_key().as_deref(), Some("2026mabil"));
     }
 
     #[test]

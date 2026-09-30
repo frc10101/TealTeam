@@ -206,4 +206,54 @@ mod tests {
             "a section of only notes is dropped"
         );
     }
+
+    #[test]
+    fn a_tied_tally_keeps_form_order() {
+        // Right before left in time, but left comes first on the form.
+        let observations = [
+            payload(&[("starting_position", Value::Text("right".into()))]),
+            payload(&[("starting_position", Value::Text("left".into()))]),
+        ];
+        let refs: Vec<&Payload> = observations.iter().collect();
+        let summary = summarize(&current_season().unwrap(), &refs);
+        assert_eq!(
+            field(&summary, "Starting position").summary,
+            Some(Summary::Choice(vec![
+                ("Left".into(), 1),
+                ("Right".into(), 1)
+            ]))
+        );
+    }
+
+    #[test]
+    fn a_counter_average_keeps_its_fraction() {
+        let observations = [
+            payload(&[("teleop_scored", Value::Count(4))]),
+            payload(&[("teleop_scored", Value::Count(5))]),
+        ];
+        let refs: Vec<&Payload> = observations.iter().collect();
+        let summary = summarize(&current_season().unwrap(), &refs);
+        assert_eq!(
+            field(&summary, "Pieces scored in teleop").summary,
+            Some(Summary::Counter {
+                average: 4.5,
+                best: 5
+            })
+        );
+    }
+
+    #[test]
+    fn never_ticked_is_zero_of_n_not_unanswered() {
+        let observations = [
+            payload(&[("broke_down", Value::Flag(false))]),
+            payload(&[("broke_down", Value::Flag(false))]),
+        ];
+        let refs: Vec<&Payload> = observations.iter().collect();
+        let summary = summarize(&current_season().unwrap(), &refs);
+        let broke = field(&summary, "Broke down or tipped");
+        assert_eq!(
+            (broke.answered, &broke.summary),
+            (2, &Some(Summary::Toggle { yes: 0 }))
+        );
+    }
 }
