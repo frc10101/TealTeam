@@ -289,6 +289,61 @@ async fn a_tba_event_list_that_fails_is_a_problem_not_a_failed_sync() {
     assert!(report.problems[0].contains("TBA's event list is unavailable"));
 }
 
+#[tokio::test]
+async fn every_response_lands_in_the_upstream_log_once() {
+    // S1: the sync writes the tables as before; the log gets what it read.
+    let base = recorded_upstream().await;
+    let repo = std::sync::Arc::new(repo().await);
+    let (recorder, journal) = tt_upstream::journal::journal(repo.clone());
+    let first = first(&base, 2026).with_recorder(recorder.clone());
+    let tba = tba(&base).with_recorder(recorder);
+
+    for _ in 0..2 {
+        sync::sync_events(&*repo, &first, Some(&tba), &only("MSLR"))
+            .await
+            .expect("events");
+        sync::sync_event(&*repo, &tba, "2026mslr").await;
+    }
+    drop((first, tba));
+    journal.await.expect("journal");
+
+    let log = repo.upstream_since(0, 100).await.unwrap();
+    let paths: Vec<(&str, &str)> = log
+        .iter()
+        .map(|e| (e.entry.api.as_str(), e.entry.path.as_str()))
+        .collect();
+    for expected in [
+        ("first", "/2026/events?eventCode=MSLR"),
+        ("first", "/2026/teams?eventCode=MSLR"),
+        ("tba", "/events/2026"),
+        ("tba", "/event/2026mslr/matches"),
+        ("tba", "/event/2026mslr/rankings"),
+        ("tba", "/event/2026mslr/oprs"),
+        ("tba", "/event/2026mslr/coprs"),
+    ] {
+        assert_eq!(
+            paths.iter().filter(|p| **p == expected).count(),
+            1,
+            "{expected:?} once, though synced twice: {paths:?}"
+        );
+    }
+    let matches = log
+        .iter()
+        .find(|e| e.entry.path == "/event/2026mslr/matches")
+        .unwrap();
+    assert_eq!(matches.entry.via, "pi");
+    assert_eq!(
+        matches.entry.body.trim(),
+        fixture("tba/2026mslr_matches.json").unwrap().trim(),
+        "the body as received, to replay or pass on"
+    );
+    assert_eq!(
+        repo.event_matches("2026mslr").await.unwrap().len(),
+        18,
+        "and the pages' tables as before"
+    );
+}
+
 // ── Prior seasons ───────────────────────────────────────────────────────────
 
 #[tokio::test]

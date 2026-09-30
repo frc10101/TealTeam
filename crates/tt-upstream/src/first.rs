@@ -8,10 +8,12 @@ use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use tracing::{debug, warn};
 
+use crate::journal::{Fetched, Recorder};
 use crate::{
     MAX_ATTEMPTS, REQUEST_TIMEOUT, Result, Uplink, UpstreamError, backoff, is_retryable, probe,
     truncate,
 };
+use chrono::Utc;
 use tt_core::upstream::{FirstEvent, FirstTeam};
 
 const API: &str = "first";
@@ -32,6 +34,8 @@ pub struct FirstClient {
     token: String,
     season: i32,
     uplink: Uplink,
+    /// Where new responses go for the upstream log (S1).
+    recorder: Option<Recorder>,
 }
 
 impl FirstClient {
@@ -59,7 +63,15 @@ impl FirstClient {
             token,
             season,
             uplink,
+            recorder: None,
         })
+    }
+
+    /// Send every response to `recorder` (S1). FIRST sends no ETags, so the
+    /// log itself drops a body that has not changed.
+    pub fn with_recorder(mut self, recorder: Recorder) -> Self {
+        self.recorder = Some(recorder);
+        self
     }
 
     pub fn with_base_url(mut self, base_url: impl Into<String>) -> Self {
@@ -139,6 +151,15 @@ impl FirstClient {
                     return match serde_json::from_str(&body) {
                         Ok(value) => {
                             self.uplink.record_success();
+                            if let Some(recorder) = &self.recorder {
+                                recorder.record(Fetched {
+                                    api: API,
+                                    path: logged_path(path, query),
+                                    etag: None,
+                                    body: body.into(),
+                                    fetched_at: Utc::now(),
+                                });
+                            }
                             Ok(value)
                         }
                         Err(source) => {
@@ -228,6 +249,16 @@ impl FirstClient {
             page += 1;
         }
     }
+}
+
+/// `path?a=1&b=2`, parameters sorted, so one request always logs as one path.
+fn logged_path(path: &str, query: &HashMap<String, String>) -> String {
+    let mut pairs: Vec<String> = query.iter().map(|(k, v)| format!("{k}={v}")).collect();
+    if pairs.is_empty() {
+        return path.to_string();
+    }
+    pairs.sort();
+    format!("{path}?{}", pairs.join("&"))
 }
 
 /// Which slice of the season to pull.

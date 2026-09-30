@@ -236,6 +236,33 @@ pub enum Recorded {
     Duplicate(i64),
 }
 
+/// One upstream response for the `upstream` log (S1).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewUpstream {
+    /// `"first"` or `"tba"`.
+    pub api: String,
+    /// The request, query included, parameters sorted.
+    pub path: String,
+    pub etag: Option<String>,
+    /// The JSON as received.
+    pub body: String,
+    pub fetched_at: DateTime<Utc>,
+    /// `"pi"`, or the device a pushed bundle came from.
+    pub via: String,
+}
+
+/// A row of the `upstream` log.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpstreamEntry {
+    /// Increases with every append and is never reused: a pull cursor.
+    pub seq: i64,
+    pub entry: NewUpstream,
+}
+
+/// How many responses per path the `upstream` log keeps. The newest is the
+/// current state; the few before it are for looking back at what changed.
+pub const UPSTREAM_KEEP_PER_PATH: i64 = 5;
+
 #[trait_variant::make(Repo: Send)]
 pub trait LocalRepo {
     // ── Health ──────────────────────────────────────────────────────────────
@@ -503,6 +530,16 @@ pub trait LocalRepo {
         list: &[Entry],
         now: DateTime<Utc>,
     ) -> Result<bool>;
+
+    // ── Upstream log (S1) ───────────────────────────────────────────────────
+
+    /// Append a response, unless its body is the same as the newest one for
+    /// its path, then prune that path to [`UPSTREAM_KEEP_PER_PATH`]. The new
+    /// `seq`, or `None` when nothing changed.
+    async fn append_upstream(&self, entry: &NewUpstream) -> Result<Option<i64>>;
+
+    /// Up to `limit` entries after `after`, oldest first.
+    async fn upstream_since(&self, after: i64, limit: i64) -> Result<Vec<UpstreamEntry>>;
 }
 
 #[cfg(test)]

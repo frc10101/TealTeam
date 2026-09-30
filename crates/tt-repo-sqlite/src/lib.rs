@@ -23,6 +23,7 @@ mod observations;
 mod picklist;
 mod standings;
 pub mod storage;
+mod upstream;
 mod users;
 mod weights;
 
@@ -391,6 +392,14 @@ impl Repo for SqliteRepo {
     ) -> Result<bool> {
         self.replace_pick_list_impl(owning_team, event_key, expected, list, now)
             .await
+    }
+
+    async fn append_upstream(&self, entry: &tt_repo::NewUpstream) -> Result<Option<i64>> {
+        self.append_upstream_impl(entry).await
+    }
+
+    async fn upstream_since(&self, after: i64, limit: i64) -> Result<Vec<tt_repo::UpstreamEntry>> {
+        self.upstream_since_impl(after, limit).await
     }
 }
 

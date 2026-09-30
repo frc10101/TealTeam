@@ -20,10 +20,12 @@ use reqwest::header::{ETAG, HeaderValue, IF_NONE_MATCH};
 use serde::de::DeserializeOwned;
 use tracing::{debug, warn};
 
+use crate::journal::{Fetched, Recorder};
 use crate::{
     MAX_ATTEMPTS, REQUEST_TIMEOUT, Result, Uplink, UpstreamError, backoff, is_retryable, probe,
     truncate,
 };
+use chrono::Utc;
 use tt_core::upstream::{ComponentOprs, Match, Oprs, Rankings, TbaEvent};
 
 const API: &str = "tba";
@@ -41,6 +43,8 @@ pub struct TbaClient {
     uplink: Uplink,
     /// Shared between clones, like the uplink.
     cache: Arc<Mutex<Cache>>,
+    /// Where new responses go for the upstream log (S1).
+    recorder: Option<Recorder>,
 }
 
 /// The last good response per path, for `If-None-Match` (I9).
@@ -107,10 +111,17 @@ impl TbaClient {
             auth_key,
             uplink,
             cache: Arc::default(),
+            recorder: None,
         })
     }
 
     /// Point at a different host. For tests against a local stub.
+    /// Send every response with new content to `recorder` (S1).
+    pub fn with_recorder(mut self, recorder: Recorder) -> Self {
+        self.recorder = Some(recorder);
+        self
+    }
+
     pub fn with_base_url(mut self, base_url: impl Into<String>) -> Self {
         self.base_url = base_url.into();
         self
@@ -189,11 +200,24 @@ impl TbaClient {
                             })?;
 
                     let value = self.parse(path, &body)?;
+                    let body: Arc<str> = body.into();
+                    if let Some(recorder) = &self.recorder {
+                        recorder.record(Fetched {
+                            api: API,
+                            path: path.to_string(),
+                            etag: etag
+                                .as_ref()
+                                .and_then(|e| e.to_str().ok())
+                                .map(str::to_string),
+                            body: body.clone(),
+                            fetched_at: Utc::now(),
+                        });
+                    }
                     // Only a body that parsed is worth revalidating against.
                     if let Some(etag) = etag
                         && let Ok(mut cache) = self.cache.lock()
                     {
-                        cache.put(path, etag, body.into());
+                        cache.put(path, etag, body);
                     }
                     return Ok(value);
                 }

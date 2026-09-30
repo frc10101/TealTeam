@@ -114,10 +114,18 @@ pub async fn run() -> anyhow::Result<()> {
         }
     };
 
+    let repo = Arc::new(repo);
+    let mut upstream = Upstream::from_env();
+    // The upstream log (S1): every new FIRST and TBA response, kept beside
+    // the tables the sync writes. Only with storage up, like the sync.
+    if storage_ready {
+        let (recorder, _journal) = tt_upstream::journal::journal(repo.clone());
+        upstream = upstream.recording(recorder);
+    }
     let state = AppState {
-        repo: Arc::new(repo),
+        repo,
         season: Arc::new(season),
-        upstream: Arc::new(Upstream::from_env()),
+        upstream: Arc::new(upstream),
     };
 
     // 6. Only with storage up. When it is down, migrations did not run and a
@@ -168,7 +176,15 @@ pub async fn bulk_load() -> anyhow::Result<()> {
         .await
         .context("applying migrations")?;
 
-    upstream::bulk_load(&repo, &Upstream::from_env(), &mut std::io::stdout()).await
+    let repo = Arc::new(repo);
+    let (recorder, journal) = tt_upstream::journal::journal(repo.clone());
+    let upstream = Upstream::from_env().recording(recorder);
+    let loaded = upstream::bulk_load(&repo, &upstream, &mut std::io::stdout()).await;
+    // Let the log catch up before the process exits: the journal ends once the
+    // last recorder, held by the clients, is gone.
+    drop(upstream);
+    let _ = journal.await;
+    loaded
 }
 
 /// Say where the database file is, once, and loudly if it is on the SD card

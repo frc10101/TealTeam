@@ -34,6 +34,7 @@ use tt_repo_sqlite::SqliteRepo;
 use tt_templates::UpstreamPanel;
 use tt_upstream::Uplink;
 use tt_upstream::first::{EventFilters, FirstClient};
+use tt_upstream::journal::Recorder;
 use tt_upstream::sync::{self, SyncReport};
 use tt_upstream::tba::TbaClient;
 
@@ -79,6 +80,14 @@ impl Upstream {
             EventFilters::from_env(),
             uplink,
         )
+    }
+
+    /// Every new response from either API goes to `recorder`, for the
+    /// upstream log (S1).
+    pub fn recording(mut self, recorder: Recorder) -> Self {
+        self.first = self.first.map(|c| c.with_recorder(recorder.clone()));
+        self.tba = self.tba.map(|c| c.with_recorder(recorder));
+        self
     }
 
     /// No upstream at all.

@@ -110,6 +110,7 @@ mod tests {
                 "sessions",
                 "team_event_stats",
                 "teams",
+                "upstream",
                 "users",
             ]
         );

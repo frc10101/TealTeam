@@ -7,6 +7,7 @@
 //! wasm32 for a client that has signal to fetch upstream itself (S4).
 
 pub mod first;
+pub mod journal;
 pub mod probe;
 pub mod sync;
 pub mod tba;
