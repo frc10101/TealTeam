@@ -24,6 +24,11 @@ pub struct DriveCoachPage {
     pub played: Vec<CoachCard>,
     /// This page, which the schedule refreshes itself from.
     pub live_href: String,
+    /// When OPR and DPR were last synced: `"12 minutes ago"`; empty when
+    /// none have been (U14).
+    pub stats_synced: String,
+    /// Old enough, while the event runs, that they may have moved (I12).
+    pub stats_stale: bool,
 }
 
 /// One match, from the coach's side.
@@ -198,6 +203,8 @@ mod tests {
             later: Vec::new(),
             played: Vec::new(),
             live_href: "/drive-coach?event=2026mabil".into(),
+            stats_synced: String::new(),
+            stats_stale: false,
         }
     }
 

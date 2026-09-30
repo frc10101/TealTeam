@@ -93,6 +93,8 @@ pub struct TeamAtEvent {
     pub stale: bool,
     /// Approved observations the summaries are drawn from.
     pub observed: usize,
+    /// When the newest of them was recorded: `"12 minutes ago"` (U14).
+    pub latest_scouted: String,
     /// Observations still waiting for review, not counted.
     pub waiting: usize,
     pub sections: Vec<SummarySection>,
@@ -224,12 +226,15 @@ pub struct SummarySection {
 #[derive(Debug, Clone)]
 pub struct SummaryLine {
     pub label: String,
-    /// `"Center 2 · Left 1"`, `"avg 6.0 · best 9"`, `"1 of 2"`, or `"—"`.
+    /// `"Center 2 · Left 1"`, `"avg 6.0 · best 9"`, `"1 of 2"`, or `"—"`;
+    /// with `"· 2 answered"` when fewer than all `observed` answered it (U14).
     pub text: String,
 }
 
-/// The U12 summaries, in words.
-pub fn summary_sections(sections: &[SectionSummary]) -> Vec<SummarySection> {
+/// The U12 summaries, in words. `observed` is how many observations they
+/// were drawn from: a field fewer of them answered says how many did, so an
+/// average of two is never read as an average of ten (U14).
+pub fn summary_sections(sections: &[SectionSummary], observed: usize) -> Vec<SummarySection> {
     sections
         .iter()
         .map(|section| SummarySection {
@@ -237,20 +242,31 @@ pub fn summary_sections(sections: &[SectionSummary]) -> Vec<SummarySection> {
             fields: section
                 .fields
                 .iter()
-                .map(|f| SummaryLine {
-                    label: f.label.clone(),
-                    text: match &f.summary {
-                        None => "—".into(),
-                        Some(Summary::Choice(tally)) => tally
-                            .iter()
-                            .map(|(label, n)| format!("{label} {n}"))
-                            .collect::<Vec<_>>()
-                            .join(" · "),
-                        Some(Summary::Counter { average, best }) => {
-                            format!("avg {average:.1} · best {best}")
-                        }
-                        Some(Summary::Toggle { yes }) => format!("{yes} of {}", f.answered),
-                    },
+                .map(|f| {
+                    let answered = if f.answered < observed {
+                        format!(" · {} answered", f.answered)
+                    } else {
+                        String::new()
+                    };
+                    SummaryLine {
+                        label: f.label.clone(),
+                        text: match &f.summary {
+                            None => "—".into(),
+                            Some(Summary::Choice(tally)) => {
+                                let tally = tally
+                                    .iter()
+                                    .map(|(label, n)| format!("{label} {n}"))
+                                    .collect::<Vec<_>>()
+                                    .join(" · ");
+                                format!("{tally}{answered}")
+                            }
+                            Some(Summary::Counter { average, best }) => {
+                                format!("avg {average:.1} · best {best}{answered}")
+                            }
+                            // "1 of 2" already says how many answered.
+                            Some(Summary::Toggle { yes }) => format!("{yes} of {}", f.answered),
+                        },
+                    }
                 })
                 .collect(),
         })
@@ -387,7 +403,7 @@ mod tests {
                 },
             ],
         }];
-        let texts: Vec<String> = summary_sections(&sections)[0]
+        let texts: Vec<String> = summary_sections(&sections, 3)[0]
             .fields
             .iter()
             .map(|f| f.text.clone())
@@ -395,6 +411,22 @@ mod tests {
         assert_eq!(
             texts,
             ["Center 2 · Left 1", "avg 6.0 · best 9", "1 of 2", "—"]
+        );
+
+        // Drawn from five: the fields three answered say so.
+        let texts: Vec<String> = summary_sections(&sections, 5)[0]
+            .fields
+            .iter()
+            .map(|f| f.text.clone())
+            .collect();
+        assert_eq!(
+            texts,
+            [
+                "Center 2 · Left 1 · 3 answered",
+                "avg 6.0 · best 9 · 3 answered",
+                "1 of 2",
+                "—"
+            ]
         );
     }
 

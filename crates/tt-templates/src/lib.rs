@@ -366,6 +366,13 @@ pub struct RankingsPage {
     pub pending: usize,
     /// Point values the lead scout has changed from the schema.
     pub weights_changed: usize,
+    /// When the newest counted observation was recorded; empty with none (U14).
+    pub latest_scouted: String,
+    /// When the ranks were last synced or typed in; empty when there are none
+    /// (I12).
+    pub ranks_updated: String,
+    /// Old enough, while the event runs, that the ranks may have moved.
+    pub ranks_stale: bool,
 }
 
 #[derive(Debug, Clone)]

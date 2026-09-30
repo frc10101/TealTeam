@@ -7,16 +7,18 @@ use axum::extract::{FromRequestParts, Query};
 use axum::http::request::Parts;
 use chrono::Utc;
 use tracing::{info, warn};
+use tt_core::connectivity::Freshness;
 use tt_core::ranking::{self, RankingRow, Scored, SortKey, WeightErrors};
 use tt_core::review::ReviewState;
 use tt_core::user::User;
-use tt_repo::Repo;
+use tt_repo::{Repo, StoredObservation};
 use tt_templates::{
     Nav, RankingView, RankingsPage, SortLink, THIN_BELOW, WeightGroup, WeightInput, WeightsPage,
 };
 
 use crate::events::EventContext;
 use crate::startup::AppState;
+use crate::teams::latest_scouted;
 
 /// `?sort=`, and `?saved=` after a weights save. Never rejects: an unknown
 /// sort is the default one.
@@ -62,6 +64,9 @@ pub async fn page(
         columns: Vec::new(),
         pending: 0,
         weights_changed: 0,
+        latest_scouted: String::new(),
+        ranks_updated: String::new(),
+        ranks_stale: false,
     };
     let Some(event) = &context.selected else {
         page.unavailable = if storage_ready {
@@ -97,6 +102,22 @@ pub async fn page(
     };
     page.pending = pending.len();
     page.weights_changed = overrides.iter().count();
+
+    // Where each column's numbers come from, and how old they are (U14, I12).
+    let now = Utc::now();
+    let counted: Vec<&StoredObservation> = approved
+        .iter()
+        .filter(|o| o.schema_version == state.season.version)
+        .collect();
+    page.latest_scouted = latest_scouted(&counted, now);
+    let ranks = stats
+        .iter()
+        .filter(|s| s.rank.is_some())
+        .filter_map(|s| s.synced_at)
+        .max()
+        .map(|at| Freshness::of(at, now, event.is_active_on(now.date_naive())));
+    page.ranks_updated = ranks.as_ref().map(|f| f.age.clone()).unwrap_or_default();
+    page.ranks_stale = ranks.is_some_and(|f| f.stale);
 
     let scored: Vec<Scored> = approved
         .iter()

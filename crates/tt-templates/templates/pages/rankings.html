@@ -16,7 +16,8 @@
     {% else %}
       <p class="hint">
         Score is the average of a team's approved observations, with how many
-        there were beside it. Fewer than three is marked thin.
+        there were beside it{% if !latest_scouted.is_empty() %}; the latest was recorded {{ latest_scouted }}{% endif %}.
+        Fewer than three is marked thin.
         {% if pending > 0 %}{{ pending }} more {% if pending == 1 %}is{% else %}are{% endif %} waiting for review and not counted yet.{% endif %}
       </p>
       <p class="hint">
@@ -24,7 +25,7 @@
         <a href="/lead-scout/weights{{ nav.event.query() }}">Point values</a>
       </p>
       <p class="hint">
-        Rank comes from The Blue Alliance. When nothing can reach it,
+        Rank comes from The Blue Alliance{% if ranks_updated.is_empty() %}, and none has been synced yet{% else %}, last updated {{ ranks_updated }}{% if ranks_stale %} <span class="badge badge-amber">stale</span>{% endif %}{% endif %}. When nothing can reach it,
         <a href="/lead-scout/rankings/enter{{ nav.event.query() }}">type the rankings in</a>.
       </p>
     {% endif %}

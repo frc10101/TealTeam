@@ -166,9 +166,53 @@ pub fn describe_age(age: TimeDelta) -> String {
     format!("{n} {unit}{plural} ago")
 }
 
+/// How old a synced value is, and whether to warn about it (I12). One
+/// struct, so every page that shows an upstream number says its age the same
+/// way.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Freshness {
+    /// `"12 minutes ago"`.
+    pub age: String,
+    /// Shown amber: old enough that it may have moved since.
+    pub stale: bool,
+}
+
+impl Freshness {
+    /// `event_running`: whether the event's numbers are still changing. Past
+    /// [`STALE_AFTER`] during an event, a ranking that looks live causes bad
+    /// picks. Before or after it nothing upstream moves, so an old sync is not
+    /// suspect and a permanent amber badge would teach people to ignore it.
+    pub fn of(synced_at: DateTime<Utc>, now: DateTime<Utc>, event_running: bool) -> Self {
+        Self {
+            age: describe_age(now - synced_at),
+            stale: event_running && is_stale(Some(synced_at), now),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_sync_is_stale_only_while_the_event_is_running() {
+        let now = DateTime::parse_from_rfc3339("2026-03-14T15:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let ago = |minutes| now - TimeDelta::minutes(minutes);
+        assert_eq!(
+            Freshness::of(ago(20), now, true),
+            Freshness {
+                age: "20 minutes ago".into(),
+                stale: false
+            }
+        );
+        assert!(Freshness::of(ago(21), now, true).stale);
+        assert!(
+            !Freshness::of(ago(600), now, false).stale,
+            "the event is over: nothing upstream will move"
+        );
+    }
 
     #[test]
     fn ages_read_in_the_largest_whole_unit() {

@@ -2431,6 +2431,40 @@ mod flow_tests {
     }
 
     #[tokio::test]
+    async fn rankings_say_how_old_their_numbers_are() {
+        let (state, admin) = ranked().await;
+        let body = text(get(&state, "/lead-scout/rankings", Some(&admin)).await).await;
+        assert!(
+            body.contains("; the latest was recorded just now."),
+            "{body}"
+        );
+        assert!(body.contains("Rank comes from The Blue Alliance, and none has been synced yet."));
+
+        // Half an hour old, while the event is running: flagged (I12).
+        let then = chrono::Utc::now() - chrono::TimeDelta::minutes(30);
+        let stats = tt_core::records::TeamEventStats {
+            team_number: 254,
+            event_key: "2026now".into(),
+            rank: Some(1),
+            synced_at: Some(then),
+            ..Default::default()
+        };
+        state
+            .repo
+            .upsert_team_stats(&stats, then)
+            .await
+            .expect("stats");
+        let body = text(get(&state, "/lead-scout/rankings", Some(&admin)).await).await;
+        assert!(body.contains(
+            r#"last updated 30 minutes ago <span class="badge badge-amber">stale</span>."#
+        ));
+        let team = text(get(&state, "/teams?team=254", Some(&admin)).await).await;
+        assert!(
+            team.contains(r#"synced 30 minutes ago <span class="badge badge-amber">stale</span>."#)
+        );
+    }
+
+    #[tokio::test]
     async fn rankings_sort_by_the_column_asked_for() {
         let (state, admin) = ranked().await;
         let body = text(
@@ -2577,7 +2611,7 @@ mod flow_tests {
 
         // U12: both approved observations, one rule: a tally, most common
         // first, a tie in form order.
-        assert!(body.contains("From 2 approved observations."));
+        assert!(body.contains("From 2 approved observations, the latest recorded just now."));
         assert!(body.contains("<dt>Starting position</dt><dd>Left 1 · Center 1</dd>"));
         assert!(body.contains("<dt>Pieces scored in teleop</dt><dd>avg 5.0 · best 9</dd>"));
         assert!(
@@ -2613,7 +2647,7 @@ mod flow_tests {
         .expect("session");
         let other = text(get(&state, "/teams?team=254", Some(&lee)).await).await;
         assert!(
-            other.contains("From 2 approved observations."),
+            other.contains("From 2 approved observations,"),
             "the numbers are shared"
         );
         assert!(other.contains("No notes from team 254 in these observations yet."));
@@ -2704,7 +2738,20 @@ mod flow_tests {
             "254's synced strength"
         );
         assert!(body.contains(r#"href="/teams?event=2026now&#38;team=254""#));
+        assert!(body.contains("OPR and DPR as synced from The Blue Alliance just now."));
         assert_live_regions_resolve(&state, &body, &admin).await;
+
+        // Half an hour old, mid-event: flagged (U14, I12).
+        let then = chrono::Utc::now() - chrono::TimeDelta::minutes(30);
+        state
+            .repo
+            .upsert_team_stats(&stats, then)
+            .await
+            .expect("stats");
+        let body = text(get(&state, "/drive-coach", Some(&admin)).await).await;
+        assert!(body.contains(
+            r#"synced from The Blue Alliance 30 minutes ago <span class="badge badge-amber">stale</span>."#
+        ));
     }
 
     #[tokio::test]

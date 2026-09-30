@@ -202,7 +202,7 @@ This is the highest-leverage cluster in either source document. It removes the 5
 | U11 | **Consolidate team stats into one `TeamProfile` view model** — synced stats plus scouting aggregates, empty strings for absent values rather than zeros | RI-U8 · RS §5.4 | M || **Done** — `/teams?team=N` |
 | U12 | **Pick one aggregation rule.** Mode for some fields and latest-row for others was an accident, not a design | RS §5.4, §12 | S || **Done** — `tt_core::profile` |
 | U13 | Notes filtered to the viewer's own `submitting_team_id`; no-team viewers see none | RS §5.4 | S | **Done** — `tt_core::notes::Notes`, on the review page and the team profile |
-| U14 | **Provenance badges** (`n=`, `scouted_at`, `synced ago`) on every aggregate | RI-U7 | S |  |
+| U14 | **Provenance badges** (`n=`, `scouted_at`, `synced ago`) on every aggregate | RI-U7 | S | **Done** — rankings, the team profile, and the drive coach panel |
 | U15 | **Remove synchronous upstream calls from page renders.** `/teams` and the team-select fallback both blocked a render on the network | RS §12.7 | M |  |
 | U16 | Mobile pass: bottom nav, 44px touch targets, card layouts under 600px | RI-U10 · RS §7 | M |  |
 | U17 | DB viewer — **guard with `is_admin` and exclude `sessions`**, or do not rebuild it. The old one was completely unguarded and exposed every user's email and all session rows | RS §12.4 | S |  |
@@ -222,7 +222,7 @@ This is the highest-leverage cluster in either source document. It removes the 5
 | I9 | ETag / conditional requests on the TBA poller | RI-S10 | S | **Done** — in-memory, inside `TbaClient` |
 | I10 | Connectivity tracker: TCP connect to `1.1.1.1:443`, 1500 ms, 3s cache, skip loopback/RFC1918/link-local | RS §6.4 | S | **Done** |
 | I11 | **Four-state connection chip describing the client's link to the server**, not the server's internet — and remove all "offline mode" toggle language | RI-O11 · RS §6.4, §12 | S |  |
-| I12 | **Upstream freshness badges**; amber past 20 minutes during quals. Stale rankings that look live cause bad picks | RI-S11 | S | `is_stale` + `synced_at` done; badges pending |
+| I12 | **Upstream freshness badges**; amber past 20 minutes during quals. Stale rankings that look live cause bad picks | RI-S11 | S | **Done** — `connectivity::Freshness`, with U14 |
 | I13 | `POST /api/frc/sync` manual sync, admin/lead only | RS §6.1 | S | **Done** |
 | I14 | **Manual rankings entry screen** — the true last resort. A lead scout can type 40 rows off the audience display in five minutes, and it has never once failed to work | RI-S13 | S | **Done** — `/lead-scout/rankings/enter` |
 
@@ -365,7 +365,13 @@ Checked against the binary at phone width: a lead on 10101 opening a 254 scout's
 
 **The drive coach panel reads the local schedule (U18).** `/drive-coach` shows the coach's team's matches at the selected event from the `matches` table the background sync fills — so it works with no internet, where the retired panel, which fetched FIRST live, showed nothing (§12.6). **The feed, not the clock, says what is played:** a played match shows its result; the first unplayed one is **Next**, however late the event is running; the clock only describes it — "in 12 min", "due now", "running 22 min late" — relative, so no timezone is needed (`tt_core::coach`). Each card shows our alliance and theirs with every team's OPR and DPR from the local stats, the alliance's OPR total (marked when some are not synced yet), and each team linked to its profile. Played matches are listed latest first. The schedule is a live region, refreshing every 30 seconds. A coach with no team number, or a team not on the schedule, is told so. The role-guarded placeholder page it replaces is no longer used by any route.
 
-**Still open in Phase 2:** I11, U14-U17, U20, and P3-P9.
+**Every aggregate says where it came from (U14, I12).** Rankings: the score line says when the latest counted observation was recorded, beside the `n` column L11 already had, and the rank line says when ranks were last synced or typed in, or that none have been. The team profile: "From 5 approved observations, the latest recorded 12 minutes ago", and a field fewer of them answered says so ("avg 6.0 · best 9 · 3 answered"), so an average of two is never read as an average of ten. Yes/no fields already read "1 of 2". The statistics card keeps its "synced … ago". The drive coach panel says when its OPR and DPR were synced, with the same badge.
+
+**Stale is amber only while the event runs.** `tt_core::connectivity::Freshness::of(synced_at, now, event_running)` says the age once for every page, and marks it stale past 20 minutes (`STALE_AFTER`) only when the event is on today. Before and after an event nothing upstream moves, and a permanent amber badge would teach people to ignore it. The Lead Scout sync card keeps its own rule, since it is about the sync, not an event's numbers. **"Today" is the UTC date,** as the event picker's is, so on an event's last evening in the Americas the badge goes quiet a few hours early. The right fix is the event's own timezone (TIMEZONE_HANDLING.md), for the picker and the badge together.
+
+Checked against the binary at phone width: ranks synced 35 minutes ago read "last updated 35 minutes ago" with the amber badge on the rankings page and the team profile, and the badge goes when the event is over.
+
+**Still open in Phase 2:** I11, U15-U17, U20, and P3-P9.
 
 ---
 

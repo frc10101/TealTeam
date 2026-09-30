@@ -10,9 +10,9 @@ use std::convert::Infallible;
 
 use axum::extract::{FromRequestParts, Query};
 use axum::http::request::Parts;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use tracing::warn;
-use tt_core::connectivity::{describe_age, is_stale};
+use tt_core::connectivity::{Freshness, describe_age};
 use tt_core::notes::{self, Notes};
 use tt_core::profile;
 use tt_core::records::MatchRecord;
@@ -172,17 +172,22 @@ pub async fn page(
     }
 
     let now = Utc::now();
-    let synced_at = stats.as_ref().and_then(|s| s.synced_at);
+    let synced = stats
+        .as_ref()
+        .and_then(|s| s.synced_at)
+        .map(|at| Freshness::of(at, now, event.is_active_on(now.date_naive())));
     page.at_event = Some(TeamAtEvent {
         event_name: event.name.clone(),
         stats: stat_lines(stats.as_ref()),
-        synced: synced_at
-            .map(|at| describe_age(now - at))
-            .unwrap_or_default(),
-        stale: synced_at.is_some() && is_stale(synced_at, now),
+        synced: synced.as_ref().map(|f| f.age.clone()).unwrap_or_default(),
+        stale: synced.is_some_and(|f| f.stale),
         observed: payloads.len(),
+        latest_scouted: latest_scouted(&observed, now),
         waiting: pending.iter().filter(|o| o.team_number == number).count(),
-        sections: summary_sections(&profile::summarize(&state.season, &payloads)),
+        sections: summary_sections(
+            &profile::summarize(&state.season, &payloads),
+            payloads.len(),
+        ),
         notes: note_lines(state, viewer, &observed, &matches),
         notes_team: viewer.team_number,
         matches: matches
@@ -191,6 +196,17 @@ pub async fn page(
             .collect(),
     });
     page
+}
+
+/// When the newest of `observed` was recorded (U14): `"12 minutes ago"`,
+/// empty when there are none.
+pub fn latest_scouted(observed: &[&StoredObservation], now: DateTime<Utc>) -> String {
+    observed
+        .iter()
+        .filter_map(|o| o.observed_at.or(o.created_at))
+        .max()
+        .map(|at| describe_age(now - at))
+        .unwrap_or_default()
 }
 
 /// The notes `viewer` may read on `observed`, in match order: their own

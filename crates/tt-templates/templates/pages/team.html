@@ -54,7 +54,7 @@
     <div class="card-header"><h2>What scouts saw</h2></div>
     <div class="card-body">
       <p class="hint">
-        {% if here.observed == 0 %}No approved observations yet.{% else %}From {{ here.observed }} approved observation{% if here.observed != 1 %}s{% endif %}.{% endif %}
+        {% if here.observed == 0 %}No approved observations yet.{% else %}From {{ here.observed }} approved observation{% if here.observed != 1 %}s{% endif %}{% if !here.latest_scouted.is_empty() %}, the latest recorded {{ here.latest_scouted }}{% endif %}.{% endif %}
         {% if here.waiting > 0 %}{{ here.waiting }} more waiting for review.{% endif %}
         Choices are tallied, most common first; counts are the average and the best.
       </p>

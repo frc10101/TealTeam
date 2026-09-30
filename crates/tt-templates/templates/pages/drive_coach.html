@@ -60,7 +60,7 @@
         <h2 class="subhead">Played, latest first</h2>
         {% for m in played %}{% call card(m, false) %}{% endcall %}{% endfor %}
       {% endif %}
-      <p class="hint">OPR and DPR as last synced from The Blue Alliance. Times are from the published schedule; events run late.</p>
+      <p class="hint">{% if stats_synced.is_empty() %}No OPR or DPR synced from The Blue Alliance yet.{% else %}OPR and DPR as synced from The Blue Alliance {{ stats_synced }}{% if stats_stale %} <span class="badge badge-amber">stale</span>{% endif %}.{% endif %} Times are from the published schedule; events run late.</p>
     </div>
   {% endif %}
 </section>

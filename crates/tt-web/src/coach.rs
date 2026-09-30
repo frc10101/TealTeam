@@ -6,6 +6,7 @@
 
 use chrono::Utc;
 use tracing::warn;
+use tt_core::connectivity::Freshness;
 use tt_core::user::User;
 use tt_repo::Repo;
 use tt_templates::{DriveCoachPage, Nav};
@@ -31,6 +32,8 @@ pub async fn page(
         later: Vec::new(),
         played: Vec::new(),
         live_href: String::new(),
+        stats_synced: String::new(),
+        stats_stale: false,
     };
     let Some(team) = user.team_number else {
         page.unavailable = "Your account has no team number, so there is no schedule to \
@@ -75,7 +78,16 @@ pub async fn page(
         );
         return page;
     }
-    page.schedule(&event.key, &matches, team, &stats, Utc::now());
+    let now = Utc::now();
+    page.schedule(&event.key, &matches, team, &stats, now);
+    let synced = stats
+        .iter()
+        .filter(|s| s.opr.is_some() || s.dpr.is_some())
+        .filter_map(|s| s.synced_at)
+        .max()
+        .map(|at| Freshness::of(at, now, event.is_active_on(now.date_naive())));
+    page.stats_synced = synced.as_ref().map(|f| f.age.clone()).unwrap_or_default();
+    page.stats_stale = synced.is_some_and(|f| f.stale);
     if page.next.is_none() && page.later.is_empty() && page.played.is_empty() {
         page.unavailable = format!("Team {team} is not on the schedule at {}.", event.name);
     }
