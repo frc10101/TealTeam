@@ -1,0 +1,57 @@
+{#
+  One field of a form drawn from the season schema: the scouting form (U4),
+  and a refused entry's answers as a lead corrects them (C10b). Include it
+  inside a loop over a section's fields, with the field as `field`.
+#}
+{% macro field_notes(field) %}
+  {% if !field.help.is_empty() %}<p class="hint">{{ field.help }}</p>{% endif %}
+  {% if !field.error.is_empty() %}<p class="form-error" id="{{ field.id }}-error">{{ field.error }}</p>{% endif %}
+{% endmacro %}
+
+{% match field.input %}
+  {% when FormInput::Choice { options } %}
+    <fieldset class="field">
+      <legend class="form-label">{{ field.label }}{% if field.required %} <span class="required">required</span>{% endif %}</legend>
+      <div class="choices">
+        {% for option in options %}
+          <label class="choice">
+            <input type="radio" name="{{ field.name }}" value="{{ option.value }}"{% if option.checked %} checked{% endif %}{% if field.required %} required{% endif %}>
+            <span>{{ option.label }}</span>
+          </label>
+        {% endfor %}
+      </div>
+      {% call field_notes(field) %}{% endcall %}
+    </fieldset>
+  {% when FormInput::Counter { min, max, value } %}
+    <div class="field">
+      <label class="form-label" for="{{ field.id }}">{{ field.label }}{% if field.required %} <span class="required">required</span>{% endif %}</label>
+      <div class="counter" data-counter>
+        <button type="button" class="btn btn-secondary" data-step="-1" aria-label="One fewer" hidden>−</button>
+        <input class="form-input" type="number" id="{{ field.id }}" name="{{ field.name }}" value="{{ value }}"
+               min="{{ min }}" max="{{ max }}" step="1" inputmode="numeric"{% if field.required %} required{% endif %}>
+        <button type="button" class="btn btn-secondary" data-step="1" aria-label="One more" hidden>+</button>
+      </div>
+      {% call field_notes(field) %}{% endcall %}
+    </div>
+  {% when FormInput::Toggle { checked } %}
+    <div class="field">
+      <label class="toggle">
+        <input type="checkbox" name="{{ field.name }}" value="on"{% if checked %} checked{% endif %}>
+        <span>{{ field.label }}</span>
+      </label>
+      {% call field_notes(field) %}{% endcall %}
+    </div>
+  {% when FormInput::Text { max_len, value } %}
+    <div class="field">
+      <label class="form-label" for="{{ field.id }}">{{ field.label }}{% if field.required %} <span class="required">required</span>{% endif %}</label>
+      <textarea class="form-input" id="{{ field.id }}" name="{{ field.name }}" rows="4"
+                maxlength="{{ max_len }}"{% if field.required %} required{% endif %}>{{ value }}</textarea>
+      {% call field_notes(field) %}{% endcall %}
+    </div>
+  {% when FormInput::Withheld { message } %}
+    <div class="field">
+      <span class="form-label">{{ field.label }}</span>
+      <p class="muted">{{ message }}</p>
+      {% call field_notes(field) %}{% endcall %}
+    </div>
+{% endmatch %}

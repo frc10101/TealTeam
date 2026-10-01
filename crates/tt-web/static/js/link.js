@@ -2,7 +2,9 @@
 //
 // The layout renders every state the chip can be in, one shown; this only
 // picks which. The words and the rule live in tt_core::link -- this is the
-// same order as Link::classify: unreachable, then sending, then synced.
+// same order as Link::classify: unreachable, then sending, then what needs
+// review, then synced. The review count is the server's, as of this page
+// (C10b); only a page that has it renders that state.
 //
 // Offline is observed, never a mode. Nothing here can be switched on or off.
 //
@@ -31,11 +33,12 @@
     location.pathname !== "/offline";
   var reachable = !shell;
   var sending = false;
+  var review = !!chip.querySelector('[data-link="review"]');
   var timer = null;
   var checking = false;
 
   function show() {
-    var key = !reachable ? "offline" : sending ? "syncing" : "synced";
+    var key = !reachable ? "offline" : sending ? "syncing" : review ? "review" : "synced";
     chip.querySelectorAll("[data-link]").forEach(function (state) {
       state.hidden = state.dataset.link !== key;
     });

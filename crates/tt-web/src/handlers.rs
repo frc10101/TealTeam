@@ -22,7 +22,7 @@ use chrono::Utc;
 use serde::Deserialize;
 use tt_core::user::{self, Roles};
 use tt_repo::{NewUser, Repo};
-use tt_templates::{AccountPage, LeadScoutPage, Nav, Page, SignInPage, SignUpPage};
+use tt_templates::{AccountPage, LeadScoutPage, LinkChips, Nav, Page, SignInPage, SignUpPage};
 
 use crate::assignments::{self, GridParams};
 use crate::auth::{
@@ -65,6 +65,15 @@ fn html(page: impl Page) -> Response {
 pub(crate) async fn nav_for(state: &AppState, user: Option<&tt_core::user::User>) -> Nav {
     let mut nav = Nav::for_user(user, state.repo.health().await.is_ready());
     nav.version = crate::shell::page_version(state);
+    // The chip's "N need review" (C10b): for a lead, every refused entry
+    // waiting; for a scout, their own, which a lead has not got to yet.
+    if let Some(user) = user.filter(|_| nav.storage_ready) {
+        let scouter = (!nav.can_lead).then_some(user.id);
+        match state.repo.open_refusal_count(scouter).await {
+            Ok(count) => nav.link = LinkChips::new(count, nav.can_lead),
+            Err(e) => tracing::warn!("counting refused entries for the chip: {e}"),
+        }
+    }
     nav
 }
 
@@ -965,7 +974,7 @@ async fn refused_outcome(
         Err(refused::Refused::Missing) => StatusCode::NOT_FOUND.into_response(),
         Err(refused::Refused::Again { errors, draft }) => {
             let (nav, context) = event_page(state, Some(user), requested).await;
-            match refused::page(state, nav, &context, user, id, draft, errors).await {
+            match refused::page(state, nav, &context, user, id, draft.map(|d| *d), errors).await {
                 Some(page) => html(page),
                 None => StatusCode::NOT_FOUND.into_response(),
             }

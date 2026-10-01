@@ -44,7 +44,11 @@
            different thing, on the lead scout page. #}
         <span class="link-chip" id="link-chip" role="status" aria-live="polite">
           {% for state in nav.link.states %}
-            <span class="badge {{ state.class }}" data-link="{{ state.key }}" title="{{ state.meaning }}"{% if !state.shown %} hidden{% endif %}>{{ state.label }}<span class="visually-hidden">: {{ state.meaning }}</span></span>
+            {% if state.href.is_empty() %}
+              <span class="badge {{ state.class }}" data-link="{{ state.key }}" title="{{ state.meaning }}"{% if !state.shown %} hidden{% endif %}>{{ state.label }}<span class="visually-hidden">: {{ state.meaning }}</span></span>
+            {% else %}
+              <a class="badge {{ state.class }}" data-link="{{ state.key }}" title="{{ state.meaning }}" href="{{ state.href }}{{ nav.event.query() }}#refused"{% if !state.shown %} hidden{% endif %}>{{ state.label }}<span class="visually-hidden">: {{ state.meaning }}</span></a>
+            {% endif %}
           {% endfor %}
         </span>
 

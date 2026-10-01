@@ -160,6 +160,20 @@ impl SqliteRepo {
         Ok(rows.iter().map(from_row).collect())
     }
 
+    /// How many refusals wait for a lead: all of them, or `scouter`'s, for
+    /// the connection chip (C10b). Every page asks, so this reads no rows.
+    pub async fn open_refusal_count(&self, scouter: Option<i64>) -> Result<usize> {
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM refused_entries \
+             WHERE resolution IS NULL AND (?1 IS NULL OR scouter_id = ?1)",
+        )
+        .bind(scouter)
+        .fetch_one(self.pool())
+        .await
+        .map_err(|e| query_err("counting refused entries", e))?;
+        Ok(usize::try_from(count).unwrap_or_default())
+    }
+
     pub async fn refusal(&self, id: i64) -> Result<Option<Refusal>> {
         let row = sqlx::query(sqlx::AssertSqlSafe(format!("{SELECT} WHERE r.id = ?")))
             .bind(id)
@@ -253,6 +267,9 @@ mod tests {
 
         let open = repo.open_refusals().await.unwrap();
         assert_eq!(open.len(), 2);
+        assert_eq!(repo.open_refusal_count(None).await.unwrap(), 2);
+        assert_eq!(repo.open_refusal_count(Some(1)).await.unwrap(), 2);
+        assert_eq!(repo.open_refusal_count(Some(2)).await.unwrap(), 0);
         let first = &open[0];
         assert_eq!(first.entry, refusal("r1", "").entry);
         assert_eq!(first.reason, "still not on the schedule");
@@ -285,6 +302,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["r2"]
         );
+        assert_eq!(repo.open_refusal_count(None).await.unwrap(), 1);
         let done = repo.refusal(first.id).await.unwrap().unwrap();
         assert_eq!(done.resolution, Some(Resolution::Dismissed));
         assert_eq!(done.resolved_by.as_deref(), Some("Sam"));

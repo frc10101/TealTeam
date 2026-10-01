@@ -2,7 +2,9 @@
   An observation the Pi refused when a scout's tablet pushed it (C10): why,
   every answer, and what a lead can do. Recording it again runs the same
   checks as the push, so a match not on the schedule then is fine once it
-  is. Dismissing records who did it; nothing is deleted.
+  is. While it waits, its answers are the scouting form's own inputs, so a
+  lead can correct one that did not fit (C10b). Dismissing records who did
+  it; nothing is deleted.
 #}
 {% extends "layout.html" %}
 {% block content %}
@@ -23,6 +25,10 @@
   </div>
 </section>
 
+{# Once dealt with, the answers are only read. Before, the form below holds
+   them, and these are shown only for answers from another version of the
+   form, which the form below cannot hold all of. #}
+{% if !resolution.is_empty() || !other_version.is_empty() %}
 {% for group in answers %}
   <section class="card">
     <div class="card-header"><h2>{{ group.label }}</h2></div>
@@ -40,6 +46,7 @@
     </div>
   </section>
 {% endfor %}
+{% endif %}
 
 {% if resolution.is_empty() %}
   <section class="card" id="resolve">
@@ -63,12 +70,29 @@
           <label class="form-label" for="refused-team">Team</label>
           <input class="form-input" type="number" id="refused-team" name="team" value="{{ team_number }}" min="1" inputmode="numeric" required>
         </div>
-        <p class="hint">Recorded as the scout who saved it, checked as if it had just been sent. It goes into the review queue like any other.</p>
+
+        {# Marks the answers as posted: without it they are kept as sent. #}
+        <input type="hidden" name="answers" value="1">
+        {% if answers_invalid %}
+          <div class="alert alert-error" role="alert">
+            <p>Some answers do not fit the form. Correct them to record it.</p>
+            {% for message in answer_errors %}<p>{{ message }}</p>{% endfor %}
+          </div>
+        {% endif %}
+        {% for section in sections %}
+          <fieldset class="stack">
+            <legend><h3>{{ section.label }}</h3></legend>
+            {% for field in section.fields %}
+              {% include "form_field.html" %}
+            {% endfor %}
+          </fieldset>
+        {% endfor %}
+        <p class="hint">Recorded as the scout who saved it, checked as if it had just been sent. It goes into the review queue like any other.{% if !other_version.is_empty() %} Change an answer and they are all recorded on this version of the form, without what it no longer asks.{% endif %}</p>
         <button class="btn btn-primary btn-lg" type="submit">Record it</button>
       </form>
       <form method="post" action="/api/refused/{{ id }}/dismiss{{ nav.event.query() }}">
         <button class="btn btn-danger" type="submit">Dismiss</button>
-        <p class="hint">For one nobody can place, or answers that do not fit the form. The scout's tablet still has it, to export or discard.</p>
+        <p class="hint">For one nobody can place. The scout's tablet still has it, to export or discard.</p>
       </form>
     </div>
   </section>

@@ -52,6 +52,51 @@ impl RawAnswers {
         )
     }
 
+    /// A saved payload as the form would post it, to show it in the form
+    /// again (C10b): only `schema`'s fields, a ticked toggle as `on`, and a
+    /// counter left out as blank rather than its minimum, so it stays left
+    /// out.
+    pub fn from_payload(schema: &SeasonSchema, payload: &Payload) -> Self {
+        Self(
+            schema
+                .fields()
+                .filter_map(|field| {
+                    let raw = match (payload.get(&field.key), &field.kind) {
+                        (None, FieldKind::Counter { .. }) => String::new(),
+                        (None, _) | (Some(Value::Flag(false)), _) => return None,
+                        (Some(Value::Flag(true)), _) => "on".into(),
+                        (Some(Value::Count(n)), _) => n.to_string(),
+                        (Some(Value::Text(text)), _) => text.clone(),
+                    };
+                    Some((field.key.clone(), raw))
+                })
+                .collect(),
+        )
+    }
+
+    /// Answer `field_key` with `value`, replacing what was posted.
+    pub fn set(&mut self, field_key: &str, value: Option<&str>) {
+        match value {
+            Some(value) => self.0.insert(field_key.to_string(), value.to_string()),
+            None => self.0.remove(field_key),
+        };
+    }
+
+    /// Whether two sets of answers say the same thing: equal once each is
+    /// trimmed, line breaks are `\n`, and blanks are dropped -- the
+    /// differences between a payload shown in a form and that form posted
+    /// back untouched.
+    pub fn same_as(&self, other: &RawAnswers) -> bool {
+        fn said(raw: &RawAnswers) -> BTreeMap<&str, String> {
+            raw.0
+                .iter()
+                .map(|(key, value)| (key.as_str(), value.replace("\r\n", "\n").trim().to_string()))
+                .filter(|(_, value)| !value.is_empty())
+                .collect()
+        }
+        said(self) == said(other)
+    }
+
     pub fn get(&self, field_key: &str) -> Option<&str> {
         self.0.get(field_key).map(String::as_str)
     }
@@ -363,6 +408,38 @@ mod tests {
         assert!(season.validate_payload(&payload).is_ok());
         assert_eq!(payload["broke_down"], Value::Flag(false));
         assert_eq!(payload["no_show"], Value::Flag(false));
+    }
+
+    #[test]
+    fn a_saved_payload_shown_in_the_form_and_posted_back_untouched_is_the_same() {
+        let saved: Payload = [
+            ("defense".to_string(), Value::Text("high".into())),
+            ("notes".to_string(), Value::Text("fast\nslow".into())),
+            ("climbed".to_string(), Value::Flag(false)),
+            ("hang_level".to_string(), Value::Text("l3".into())),
+        ]
+        .into();
+        let shown = RawAnswers::from_payload(&schema(), &saved);
+        assert_eq!(shown.get("pieces"), Some(""), "left out stays left out");
+        assert_eq!(shown.get("climbed"), None, "an unticked box");
+        assert_eq!(shown.get("hang_level"), None, "not this form's");
+        assert_eq!(
+            read_answers(&schema(), &shown).unwrap()["climbed"],
+            Value::Flag(false)
+        );
+
+        // What a browser sends back: CRLF, every input, no unticked box.
+        let posted = raw(&[
+            ("f.defense", "high"),
+            ("f.pieces", ""),
+            ("f.notes", "fast\r\nslow"),
+        ]);
+        assert!(posted.same_as(&shown));
+        let mut changed = posted.clone();
+        changed.set("pieces", Some("4"));
+        assert!(!changed.same_as(&shown));
+        changed.set("pieces", None);
+        assert!(changed.same_as(&shown));
     }
 
     #[test]

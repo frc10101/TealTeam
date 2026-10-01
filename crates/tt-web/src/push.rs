@@ -681,6 +681,220 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_lead_corrects_a_refused_entrys_answers_and_the_chip_counts_what_waits() {
+        let repo = SqliteRepo::connect("sqlite::memory:").unwrap();
+        tt_repo_sqlite::migrate::apply(repo.pool()).await.unwrap();
+        let state = AppState {
+            repo: Arc::new(repo),
+            season: Arc::new(tt_core::season::current_season().unwrap()),
+            upstream: Arc::new(crate::upstream::Upstream::disabled()),
+            snapshots: Default::default(),
+            tokens: Default::default(),
+        };
+        seed(&state).await;
+        let sign_up = async |name: &str, team: i32| {
+            let form = format!(
+                "name={name}&email={name}%40example.com&team_number={team}\
+                 &password=longenough1&confirm_password=longenough1"
+            );
+            let response = router(state.clone())
+                .oneshot(
+                    Request::post("/api/auth/signup")
+                        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                        .body(Body::from(form))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let session = response.headers()[header::SET_COOKIE]
+                .to_str()
+                .unwrap()
+                .split(';')
+                .next()
+                .unwrap()
+                .to_string();
+            Wire {
+                state: state.clone(),
+                cookies: Some(session),
+                bearer: None,
+            }
+        };
+        // Sam made the first account, so may act as lead; Kim scouts for 254.
+        let sam = sign_up("Sam", 10101).await;
+        let kim = sign_up("Kim", 254).await;
+        let chip = |page: &Reply| {
+            let at = page.body.find(r#"data-link="review""#)?;
+            let tag = page.body[..at].rfind('<').unwrap();
+            let end = at + page.body[at..].find('>').unwrap();
+            Some(page.body[tag..=end].to_string())
+        };
+        let home = async |wire: &Wire| {
+            wire.send(Request::get("/?event=2026now"), Body::empty())
+                .await
+        };
+        assert_eq!(chip(&home(&kim).await), None, "nothing waits");
+
+        // Kim's tablet sent 99 scored in teleop, and the form stops at 60.
+        let payload: Payload = [
+            ("starting_position", Value::Text("center".into())),
+            ("teleop_scored", Value::Count(99)),
+            ("notes", Value::Text("Kim's own notes".into())),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v))
+        .collect();
+        let entry = QueuedObservation {
+            client_record_id: MINE.into(),
+            match_key: "2026now_qm2".into(),
+            team_number: 1,
+            payload,
+            schema_version: state.season.version,
+            observed_at: Utc::now() - TimeDelta::minutes(5),
+        };
+        let refusal = NewRefusal {
+            entry: entry.clone(),
+            scouter_id: Some(2),
+            device_id: None,
+            submitting_team: Some(254),
+            reason: "Not saved: the answers do not fit the form (teleop_scored).".into(),
+        };
+        state.repo.keep_refusal(&refusal, Utc::now()).await.unwrap();
+        let id = state.repo.open_refusals().await.unwrap()[0].id;
+
+        // Both chips say so; only the lead's goes somewhere.
+        let kims = chip(&home(&kim).await).expect("Kim's chip");
+        assert!(
+            kims.starts_with("<span") && !kims.contains(" hidden"),
+            "{kims}"
+        );
+        let sams = chip(&home(&sam).await).expect("Sam's chip");
+        assert!(
+            sams.contains(r#"href="/lead-scout?event=2026now#refused""#),
+            "{sams}"
+        );
+        assert!(home(&sam).await.body.contains("1 needs review"));
+
+        // The detail page is the form, saying what does not fit, and Kim's
+        // notes are not Sam's to read.
+        let href = format!("/lead-scout/refused/{id}?event=2026now");
+        let detail = sam.send(Request::get(&href), Body::empty()).await;
+        assert!(
+            detail.body.contains("Must be between 0 and 60."),
+            "{}",
+            detail.body
+        );
+        assert!(detail.body.contains(r#"name="f.teleop_scored" value="99""#));
+        assert!(
+            detail
+                .body
+                .contains("Only scouts on team 254 can read these notes.")
+        );
+        assert!(!detail.body.contains("Kim&#39;s own notes") && !detail.body.contains("Kim's own"));
+
+        let record = |body: &'static str| {
+            sam.send(
+                Request::post(format!("/api/refused/{id}/record?event=2026now"))
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded"),
+                Body::from(body),
+            )
+        };
+        // Untouched, it is refused for the same reason as the push.
+        let again = record(
+            "match=2026now_qm2&team=1&answers=1&f.starting_position=center\
+             &f.teleop_scored=99&f.auto_scored=&f.penalties=",
+        )
+        .await;
+        assert_eq!(again.status, 200);
+        assert!(
+            again.body.contains("do not fit the form (teleop_scored"),
+            "{}",
+            again.body
+        );
+        // Wrong in the form: said by the field, with what Sam typed kept.
+        let again = record(
+            "match=2026now_qm2&team=1&answers=1&f.starting_position=center\
+             &f.teleop_scored=9x&f.auto_scored=&f.penalties=",
+        )
+        .await;
+        assert_eq!(again.status, 200);
+        assert!(
+            again.body.contains("Enter a whole number."),
+            "{}",
+            again.body
+        );
+        assert!(again.body.contains(r#"value="9x""#));
+        assert_eq!(state.repo.open_refusal_count(None).await.unwrap(), 1);
+
+        // Corrected. Notes Sam was sent in their place are not kept.
+        let recorded = record(
+            "match=2026now_qm2&team=1&answers=1&f.starting_position=center\
+             &f.teleop_scored=12&f.auto_scored=&f.penalties=&f.notes=gone",
+        )
+        .await;
+        assert_eq!(recorded.status, 303, "{}", recorded.body);
+        let pending = state.repo.pending_observations("2026now").await.unwrap();
+        let fixed = pending.iter().find(|o| o.team_number == 1).unwrap();
+        assert_eq!(fixed.payload["teleop_scored"], Value::Count(12));
+        assert_eq!(
+            fixed.payload["notes"],
+            Value::Text("Kim's own notes".into())
+        );
+        assert_eq!(fixed.payload["broke_down"], Value::Flag(false));
+        assert_eq!(fixed.scouter_name.as_deref(), Some("Kim"));
+        assert_eq!(chip(&home(&kim).await), None);
+        assert_eq!(chip(&home(&sam).await), None);
+
+        // From an older form and posted back untouched, the answers stay
+        // exactly as sent, including what this form no longer asks.
+        let mut old = entry;
+        old.client_record_id = WRONG.into();
+        old.team_number = 254;
+        old.schema_version = state.season.version - 1;
+        old.payload = [
+            ("teleop_scored".to_string(), Value::Count(5)),
+            ("hang_level".to_string(), Value::Text("l3".into())),
+        ]
+        .into();
+        let refusal = NewRefusal {
+            entry: old,
+            reason: "Not saved: 2026now_qm2 is not on the schedule.".into(),
+            ..refusal
+        };
+        state.repo.keep_refusal(&refusal, Utc::now()).await.unwrap();
+        let id = state.repo.open_refusals().await.unwrap()[0].id;
+        let detail = sam
+            .send(
+                Request::get(format!("/lead-scout/refused/{id}?event=2026now")),
+                Body::empty(),
+            )
+            .await;
+        assert!(
+            detail.body.contains("Not on the current form"),
+            "{}",
+            detail.body
+        );
+        assert!(
+            !detail.body.contains("form-error"),
+            "nothing flagged on another form"
+        );
+        let recorded = sam
+            .send(
+                Request::post(format!("/api/refused/{id}/record?event=2026now"))
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded"),
+                Body::from(
+                    "match=2026now_qm2&team=254&answers=1&f.teleop_scored=5\
+                     &f.auto_scored=&f.penalties=&f.notes=",
+                ),
+            )
+            .await;
+        assert_eq!(recorded.status, 303, "{}", recorded.body);
+        let pending = state.repo.pending_observations("2026now").await.unwrap();
+        let kept = pending.iter().find(|o| o.team_number == 254).unwrap();
+        assert_eq!(kept.schema_version, state.season.version - 1);
+        assert_eq!(kept.payload, refusal.entry.payload);
+    }
+
+    #[tokio::test]
     async fn a_scout_whose_session_ran_out_still_syncs_with_the_tablets_token() {
         let repo = SqliteRepo::connect("sqlite::memory:").unwrap();
         tt_repo_sqlite::migrate::apply(repo.pool()).await.unwrap();

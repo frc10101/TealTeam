@@ -141,8 +141,9 @@ impl Nav {
 ///
 /// Every state `static/js/link.js` may switch to is rendered, one shown and the
 /// rest hidden, so the words stay in `tt_core::link` and the script only picks
-/// one. Without the script the chip says Synced, which is true of a page that
-/// just came from the server.
+/// one. Without the script the chip says Synced, or how many refused entries
+/// wait for a lead (C10b), which is true of a page that just came from the
+/// server.
 #[derive(Debug, Clone)]
 pub struct LinkChips {
     pub states: Vec<LinkChip>,
@@ -155,20 +156,40 @@ pub struct LinkChip {
     pub meaning: String,
     pub class: &'static str,
     pub shown: bool,
+    /// Where tapping it goes, before the page's event; empty when nowhere.
+    pub href: &'static str,
 }
 
 impl Default for LinkChips {
     fn default() -> Self {
-        // No outbox (C5) and no review count on the client yet, so offline
-        // has nothing unsent and "needs review" is never reached.
+        Self::new(0, false)
+    }
+}
+
+impl LinkChips {
+    /// `needs_review` entries the server refused wait for a lead, as the
+    /// server counted them for this viewer (C10b). A lead's chip goes to
+    /// them. The outbox is not in pages yet (C5), so offline has nothing
+    /// unsent.
+    pub fn new(needs_review: usize, can_lead: bool) -> Self {
+        let review = (needs_review > 0).then_some(Link::NeedsReview {
+            count: needs_review,
+        });
+        let shown = Link::classify(true, false, 0, needs_review);
         let states = [Link::Synced, Link::Syncing, Link::Offline { unsent: 0 }]
             .into_iter()
+            .chain(review)
             .map(|link| LinkChip {
                 key: link.key(),
                 label: link.label(),
                 meaning: link.meaning(),
                 class: link.css_class(),
-                shown: link == Link::Synced,
+                shown: link == shown,
+                href: if can_lead && matches!(link, Link::NeedsReview { .. }) {
+                    "/lead-scout"
+                } else {
+                    ""
+                },
             })
             .collect();
         LinkChips { states }
@@ -664,9 +685,17 @@ pub struct RefusedPage {
     pub resolution: String,
     /// The observation it was recorded as, once it was.
     pub observation_href: String,
+    /// The answers to read, once a lead has dealt with it.
     pub answers: Vec<tt_core::review::AnswerGroup>,
     pub hidden_notes: String,
     pub other_version: String,
+    /// The answers to correct, while it waits (C10b): the entry's, or what
+    /// was just tried, with what is wrong with them.
+    pub sections: Vec<FormSection>,
+    /// Some answer does not fit the form.
+    pub answers_invalid: bool,
+    /// Problems with the answers that belong to no one field.
+    pub answer_errors: Vec<String>,
     /// The selected event's matches, to record it against another. Empty
     /// with no event, and the match key is typed instead.
     pub matches: Vec<MatchChoice>,
@@ -1450,6 +1479,11 @@ pub enum FormInput {
     Text {
         max_len: usize,
         value: String,
+    },
+    /// Notes this viewer may not read (U13), named but not shown, and kept
+    /// as written when the form is saved (C10b).
+    Withheld {
+        message: String,
     },
 }
 

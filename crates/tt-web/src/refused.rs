@@ -8,8 +8,11 @@
 //! another, and the push's own checks run on it, as the scout who saved it,
 //! from the tablet it came from. It keeps its record id, so when it comes
 //! back to that tablet through the change log, the tablet's refused entry
-//! clears like any other. Or a lead dismisses it, for answers nobody can
-//! place; the tablet still has it, to export or discard.
+//! clears like any other. Its answers can be corrected first (C10b), in the
+//! scouting form's own inputs, for one refused because they did not fit the
+//! form; notes the lead may not read are kept as the scout wrote them. Or a
+//! lead dismisses it, for one nobody can place; the tablet still has it, to
+//! export or discard.
 
 use std::collections::HashMap;
 use std::convert::Infallible;
@@ -19,13 +22,17 @@ use axum::http::request::Parts;
 use chrono::{DateTime, Utc};
 use tracing::{info, warn};
 use tt_core::connectivity::describe_age;
+use tt_core::form::{FormErrors, RawAnswers, read_answers};
 use tt_core::notes::Notes;
 use tt_core::records::MatchRecord;
 use tt_core::review;
+use tt_core::season::{FieldKind, SeasonSchema};
 use tt_core::user::User;
 use tt_repo::{Recorded, Repo};
 use tt_repo_sqlite::refused::{Refusal, Resolution};
-use tt_templates::{MatchChoice, Nav, RefusedItem, RefusedList, RefusedPage};
+use tt_templates::{
+    FormInput, FormSection, MatchChoice, Nav, RefusedItem, RefusedList, RefusedPage, form_sections,
+};
 
 use crate::events::EventContext;
 use crate::push::{Author, record_as};
@@ -158,6 +165,51 @@ fn choice(m: &MatchRecord) -> MatchChoice {
 pub struct Draft {
     pub match_key: String,
     pub team_number: String,
+    /// The answers as posted; `None` shows the entry's own.
+    pub answers: Option<RawAnswers>,
+    pub errors: FormErrors,
+}
+
+/// The entry's answers as the form shows them, with notes `viewer` may not
+/// read named but held back.
+fn editor(
+    schema: &SeasonSchema,
+    answers: &RawAnswers,
+    errors: &FormErrors,
+    notes: Notes,
+    hidden_notes: &str,
+) -> Vec<FormSection> {
+    let mut sections = form_sections(schema, answers, errors);
+    if !notes.shown() {
+        for field in sections.iter_mut().flat_map(|s| s.fields.iter_mut()) {
+            if matches!(field.input, FormInput::Text { .. }) {
+                field.input = FormInput::Withheld {
+                    message: hidden_notes.to_string(),
+                };
+            }
+        }
+    }
+    sections
+}
+
+/// The answers a lead posted, with the notes they may not read put back as
+/// the scout wrote them: the page never showed those, so whatever came in
+/// their place is not the lead's to say.
+fn posted_answers(
+    schema: &SeasonSchema,
+    pairs: &[(String, String)],
+    sent: &RawAnswers,
+    notes: Notes,
+) -> RawAnswers {
+    let mut answers = RawAnswers::from_pairs(pairs);
+    if !notes.shown() {
+        for field in schema.fields() {
+            if matches!(field.kind, FieldKind::Text { .. }) {
+                answers.set(&field.key, sent.get(&field.key));
+            }
+        }
+    }
+    answers
 }
 
 /// One refusal in full, as `viewer` may see it: another team's notes are
@@ -225,10 +277,34 @@ pub async fn page(
             refusal.entry.schema_version, state.season.version
         )
     };
+    let notes = Notes::for_viewer(viewer.team_number, refusal.submitting_team);
+    let hidden_notes = match refusal.submitting_team {
+        Some(team) => format!("Only scouts on team {team} can read these notes."),
+        None => "Saved without a team, so nobody can read these notes.".into(),
+    };
     let draft = draft.unwrap_or_else(|| Draft {
         match_key: refusal.entry.match_key.clone(),
         team_number: refusal.entry.team_number.to_string(),
+        answers: None,
+        errors: FormErrors::default(),
     });
+    let (answers, answer_errors) = match draft.answers {
+        Some(answers) => (answers, draft.errors),
+        None => {
+            let answers = RawAnswers::from_payload(&state.season, &refusal.entry.payload);
+            // On this form, say at once what does not fit it: that is often
+            // why it was refused. On another, the form below holds only
+            // what this one asks, so it would say a lot that is not wrong.
+            let errors = if refusal.entry.schema_version == state.season.version {
+                read_answers(&state.season, &answers)
+                    .err()
+                    .unwrap_or_default()
+            } else {
+                FormErrors::default()
+            };
+            (answers, errors)
+        }
+    };
 
     Some(RefusedPage {
         title: format!("Refused: {}", heading(&refusal, record.as_ref())),
@@ -239,15 +315,17 @@ pub async fn page(
         reason: refusal.reason.clone(),
         resolution,
         observation_href,
-        answers: review::answers(
+        answers: review::answers(&state.season, &refusal.entry.payload, notes),
+        sections: editor(
             &state.season,
-            &refusal.entry.payload,
-            Notes::for_viewer(viewer.team_number, refusal.submitting_team),
+            &answers,
+            &answer_errors,
+            notes,
+            &hidden_notes,
         ),
-        hidden_notes: match refusal.submitting_team {
-            Some(team) => format!("Only scouts on team {team} can read these notes."),
-            None => "Saved without a team, so nobody can read these notes.".into(),
-        },
+        answers_invalid: !answer_errors.is_empty(),
+        answer_errors: answer_errors.form,
+        hidden_notes,
         other_version,
         match_listed: matches.iter().any(|m| m.key == draft.match_key),
         matches: matches.iter().map(choice).collect(),
@@ -272,7 +350,7 @@ pub enum Refused {
     /// Back to it, with why and what was in the form.
     Again {
         errors: Vec<String>,
-        draft: Option<Draft>,
+        draft: Option<Box<Draft>>,
     },
 }
 
@@ -306,8 +384,9 @@ fn lead_page(event_key: Option<&str>, what: &str) -> String {
     }
 }
 
-/// Record a refusal against the posted match and team. `Ok` is where to go
-/// next: the lead-scout page for the event it landed in.
+/// Record a refusal against the posted match and team, with the posted
+/// answers if they differ from the entry's. `Ok` is where to go next: the
+/// lead-scout page for the event it landed in.
 pub async fn record(
     state: &AppState,
     user: &User,
@@ -322,16 +401,23 @@ pub async fn record(
             .map(|(_, v)| v.trim().to_string())
             .unwrap_or_default()
     };
+    let refusal = load(state, id).await?;
+    let notes = Notes::for_viewer(user.team_number, refusal.submitting_team);
+    let sent = RawAnswers::from_payload(&state.season, &refusal.entry.payload);
+    // A post without the form's answers keeps the entry's.
+    let answers =
+        (posted("answers") == "1").then(|| posted_answers(&state.season, pairs, &sent, notes));
     let draft = Draft {
         match_key: posted("match"),
         team_number: posted("team"),
+        answers: answers.clone(),
+        errors: FormErrors::default(),
     };
     let again = |error: String, draft: Draft| Refused::Again {
         errors: vec![error],
-        draft: Some(draft),
+        draft: Some(Box::new(draft)),
     };
 
-    let refusal = load(state, id).await?;
     let Ok(team_number) = draft.team_number.parse::<i32>() else {
         return Err(again(
             "Not recorded: the team must be a number.".into(),
@@ -341,6 +427,23 @@ pub async fn record(
     let mut entry = refusal.entry.clone();
     entry.match_key = draft.match_key.clone();
     entry.team_number = team_number;
+    // Untouched, the answers stay exactly as sent, on whatever version of the
+    // form they were saved on. Changed, they are read as the scouting form
+    // reads a post, and are on this version.
+    if let Some(answers) = answers.filter(|a| !a.same_as(&sent)) {
+        match read_answers(&state.season, &answers) {
+            Ok(payload) => {
+                entry.payload = payload;
+                entry.schema_version = state.season.version;
+            }
+            Err(errors) => {
+                return Err(Refused::Again {
+                    errors: Vec::new(),
+                    draft: Some(Box::new(Draft { errors, ..draft })),
+                });
+            }
+        }
+    }
     let author = Author {
         scouter_id: refusal.scouter_id,
         device_id: refusal.device_id,

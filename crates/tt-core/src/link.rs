@@ -23,7 +23,8 @@ pub enum Link {
     /// The server cannot be reached. `unsent` is what is kept on this device
     /// until it can be -- zero until there is an outbox (C5).
     Offline { unsent: usize },
-    /// Connected, but `count` things need a person to decide.
+    /// Connected, but `count` things need a person to decide: entries the
+    /// server refused (C10), until a lead scout records or dismisses them.
     NeedsReview { count: usize },
 }
 
@@ -82,7 +83,15 @@ impl Link {
                 "This device can't reach the TealTeam server. {unsent} saved here \
                  will send when it reconnects."
             ),
-            Link::NeedsReview { .. } => "Something needs a person to look at it.".into(),
+            Link::NeedsReview { count: 1 } => {
+                "The server refused something saved on a tablet. A lead scout decides \
+                 what happens to it."
+                    .into()
+            }
+            Link::NeedsReview { count } => format!(
+                "The server refused {count} things saved on a tablet. A lead scout \
+                 decides what happens to them."
+            ),
         }
     }
 
