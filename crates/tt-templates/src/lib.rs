@@ -651,6 +651,57 @@ pub struct ReviewPage {
     pub back_href: String,
 }
 
+/// A lead scout reading a tablet's forms off its screen (S13), and what the
+/// Pi made of them.
+#[derive(Template)]
+#[template(path = "pages/scan.html")]
+pub struct ScanPage {
+    pub title: String,
+    pub nav: Nav,
+    /// Why the codes read were not recorded.
+    pub errors: Vec<String>,
+    pub post_href: String,
+    pub back_href: String,
+    /// What came of the last scan; `None` shows the scanner.
+    pub result: Option<HandoffResult>,
+}
+
+#[derive(Debug, Clone)]
+pub struct HandoffResult {
+    /// `"Recorded 3 of 4 forms from Sam's tablet"`.
+    pub heading: String,
+    pub all_recorded: bool,
+    /// The scout's name, for "Show this to Sam".
+    pub scout: String,
+    pub rows: Vec<HandoffRow>,
+    /// The refused list on the lead-scout page.
+    pub refused_href: String,
+    /// The receipt, for the tablet to scan back: one code, or a few shown
+    /// in turn.
+    pub receipt: Vec<QrFrame>,
+    pub again_href: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct HandoffRow {
+    /// `"Q14 · Team 254"`.
+    pub heading: String,
+    pub recorded: bool,
+    /// The refusal's reason; empty when recorded.
+    pub reason: String,
+}
+
+/// One QR code, drawn by `tt_core::qr::symbol`.
+#[derive(Debug, Clone)]
+pub struct QrFrame {
+    /// Modules a side, quiet zone included: the SVG's viewBox.
+    pub size: usize,
+    /// The dark modules, as SVG path data.
+    pub path: String,
+    /// `"Part 1 of 2"`.
+    pub label: String,
+}
+
 /// Outbox entries the Pi refused (C10), for the lead-scout page.
 #[derive(Debug, Clone, Default)]
 pub struct RefusedList {

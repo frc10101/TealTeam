@@ -7,7 +7,8 @@
 // server rendered is put back, with a note saying so and a way to throw it
 // away. The server names the draft to delete once a save is confirmed.
 //
-// Kept simple on purpose: the outbox (C7) will replace this storage.
+// Kept simple on purpose: the outbox (C7) will replace this storage. Until
+// it does, handoff.js reads these drafts to hand them over by QR (S13).
 (function () {
   "use strict";
 
@@ -90,6 +91,10 @@
 
   var discarded = false;
   var timer = null;
+  // The scout pressed Save and no answer came back (S13): this one is
+  // finished, and handoff.js offers it first. A form the server showed
+  // again with errors was answered, so it is not.
+  var tried = false;
   function save() {
     if (discarded) return;
     clearTimeout(timer);
@@ -101,6 +106,7 @@
       // whose answer was lost is not stored twice (D7).
       recordId: form.elements.record_id.value,
       answers: answers(),
+      tried: tried,
     });
   }
   function soon() {
@@ -152,7 +158,14 @@
       if (draft.recordId) form.elements.record_id.value = draft.recordId;
       announce(draft.savedAt);
     }
+    if (ours) tried = !!draft.tried;
   }
+
+  window.ttDraft = { save: save };
+  form.addEventListener("submit", function () {
+    tried = true;
+    save();
+  });
 
   form.addEventListener("input", soon);
   form.addEventListener("change", soon);

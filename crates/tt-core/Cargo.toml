@@ -9,10 +9,16 @@ base64 = { workspace = true }
 chrono = { workspace = true }
 chrono-tz = { workspace = true }
 ed25519-dalek = { workspace = true }
+miniz_oxide = { workspace = true }
+qrcodegen = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 yrs = { workspace = true }
+
+[dev-dependencies]
+# Reads back the codes `qr` draws, with a decoder that shares none of its code.
+rqrr = { version = "0.10", default-features = false }
 
 # NOTE: this crate must never gain sqlx, axum, tokio, reqwest, or chrono's
 # "clock" feature. Functions that need the current time take it as a parameter

@@ -242,6 +242,7 @@ pub fn router(state: AppState) -> Router {
         .route("/lead-scout/rankings", get(handlers::rankings))
         .route("/lead-scout/rankings/enter", get(handlers::rankings_entry))
         .route("/lead-scout/weights", get(handlers::weights))
+        .route("/lead-scout/scan", get(handlers::scan_page))
         .route("/drive-coach", get(handlers::drive_coach))
         .route("/pick-list", get(handlers::pick_list))
         // Forms
@@ -294,6 +295,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/weights/reset", post(handlers::reset_weights))
         .route("/api/refused/{id}/record", post(handlers::record_refused))
         .route("/api/refused/{id}/dismiss", post(handlers::dismiss_refused))
+        .route("/api/handoff", post(handlers::receive_handoff))
         .route(
             "/api/observations/{id}/approve",
             post(handlers::approve_observation),

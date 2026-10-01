@@ -1,0 +1,33 @@
+{# QR handoff (S13): a scout's unsaved forms, shown as codes for a lead scout
+   who can reach the server, and the receipt scanned back. static/js/handoff.js
+   fills it from what draft.js kept (C3) and the token token.js kept (C9), so
+   it names nobody until it runs; without JavaScript it stays hidden. #}
+<details class="card handoff" id="handoff" data-handoff hidden>
+  <summary class="card-header"><h2>Server out of reach?</h2></summary>
+  <div class="card-body stack">
+    <p class="hint">Hand your unsaved forms to a lead scout who can reach the server. They scan them off this screen with <strong>Scan a tablet's forms</strong>, and the server records them as yours.</p>
+    <p class="alert alert-warning" data-handoff-signin hidden>This tablet has no sign-in to send them with. It gets one the next time its scout is signed in on it with the server in reach.</p>
+    <p class="muted" data-handoff-none hidden>Nothing on this tablet is waiting to be sent.</p>
+    <fieldset class="handoff-forms" data-handoff-forms hidden>
+      <legend class="form-label">Forms to send</legend>
+    </fieldset>
+    <p class="actions"><button type="button" class="btn btn-primary" data-handoff-show hidden>Show the code</button></p>
+    <div class="handoff-code" data-handoff-code hidden>
+      <div class="qr-frames" data-handoff-frames></div>
+      <p class="muted" role="status" data-handoff-part></p>
+      <p class="actions">
+        <button type="button" class="btn btn-secondary" data-handoff-pause>Pause</button>
+        <button type="button" class="btn btn-secondary" data-handoff-next>Next part</button>
+        <button type="button" class="btn btn-secondary" data-handoff-hide>Hide the code</button>
+      </p>
+    </div>
+    <h3>Then scan the receipt</h3>
+    <p class="hint">Once the server has your forms, the lead's screen shows a receipt. Scanning it lets this tablet let go of them.</p>
+    <video class="scanner-video" playsinline muted hidden data-handoff-video></video>
+    <p class="actions">
+      <button type="button" class="btn btn-secondary" data-handoff-receipt>Scan the receipt</button>
+      <input type="file" accept="image/*" capture="environment" hidden data-handoff-photo>
+    </p>
+    <p role="status" data-handoff-status></p>
+  </div>
+</details>

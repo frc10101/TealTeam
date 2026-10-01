@@ -21,6 +21,7 @@ pub mod notes;
 pub mod outbox;
 pub mod picklist;
 pub mod profile;
+pub mod qr;
 pub mod ranking;
 pub mod record_id;
 pub mod records;

@@ -77,6 +77,10 @@ wasm-bindgen-futures = "0.4"
 # crypto.subtle (which plain http does not offer). No rand_core: the server
 # makes the key's 32 bytes itself.
 ed25519-dalek = { version = "2", default-features = false, features = ["std", "zeroize", "fast"] }
+# QR transfer (S13): drawing a frame's code, and zlib for what it carries.
+# Both pure Rust and wasm-clean, so a device frames data as the Pi does.
+qrcodegen = "1.8"
+miniz_oxide = { version = "0.8", default-features = false, features = ["with-alloc"] }
 # The pick list's CRDT (L14). Pure Rust and wasm-clean, so a browser replica
 # merges the same way the server does.
 yrs = "0.28"

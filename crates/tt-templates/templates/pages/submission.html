@@ -194,8 +194,13 @@
   </section>
 {% endif %}
 {% if !agenda.is_empty() %}<div id="agenda-keep" data-agenda="{{ agenda }}" hidden></div>{% endif %}
+{% include "handoff.html" %}
 {% endblock %}
 
 {% block scripts %}<script src="/static/js/counter.js" defer></script>
 <script src="/static/js/draft.js" defer></script>
-<script src="/static/js/assignment-watch.js" defer></script>{% endblock %}
+<script src="/static/js/assignment-watch.js" defer></script>
+<script src="/static/vendor/qrcode-generator/qrcode.js" defer></script>
+<script src="/static/js/qr.js" defer></script>
+<script src="/static/js/scan.js" defer></script>
+<script src="/static/js/handoff.js" defer></script>{% endblock %}

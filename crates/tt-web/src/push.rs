@@ -116,8 +116,9 @@ pub async fn push(
 /// One entry, as `scouting::submit` would take it from the form. `Err` only
 /// for storage; everything about the entry itself is an [`Outcome`]. A
 /// refusal is kept for the lead scout (C10) before it is answered, so one
-/// the Pi could not keep is a 503 and the device sends it again.
-async fn record(
+/// the Pi could not keep is a 503 and the device sends it again. A handoff
+/// by QR (S13) records each form through here too.
+pub(crate) async fn record(
     state: &AppState,
     user: &User,
     device: Option<&Device>,

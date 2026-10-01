@@ -24,4 +24,12 @@
 {# C8: agenda.js fills this from the copy the scouting page kept on this
    device, so the page itself still names nobody. #}
 <section class="card narrow" id="offline-agenda" hidden></section>
+{# S13: the same panel as the scouting page's, for forms that never reached
+   the server. It reads who is signed in from the device's token. #}
+<div class="narrow">{% include "handoff.html" %}</div>
 {% endblock %}
+
+{% block scripts %}<script src="/static/vendor/qrcode-generator/qrcode.js" defer></script>
+<script src="/static/js/qr.js" defer></script>
+<script src="/static/js/scan.js" defer></script>
+<script src="/static/js/handoff.js" defer></script>{% endblock %}

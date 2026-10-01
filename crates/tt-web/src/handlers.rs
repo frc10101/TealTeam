@@ -31,6 +31,7 @@ use crate::auth::{
 };
 use crate::coach;
 use crate::events::{self, EventContext, EventParam};
+use crate::handoff;
 use crate::picklist;
 use crate::ranking::{self, RankingParams};
 use crate::refused::{self, ResolvedParam};
@@ -1004,6 +1005,44 @@ pub async fn dismiss_refused(
 ) -> Response {
     let outcome = refused::dismiss(&state, &user, id, requested.as_deref()).await;
     refused_outcome(&state, &user, requested.as_deref(), id, outcome).await
+}
+
+// ── QR handoff (S13) ────────────────────────────────────────────────────────
+
+/// `GET /lead-scout/scan`: the scanner for a tablet's forms.
+pub async fn scan_page(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
+) -> Response {
+    let (nav, _) = event_page(&state, Some(&user), requested.as_deref()).await;
+    html(handoff::page(nav, None, Vec::new()))
+}
+
+/// `POST /api/handoff`: the frames read, one per line. The answer is a
+/// page, not a redirect: its receipt code is made for this scan and kept
+/// nowhere. Posting it again records nothing twice.
+pub async fn receive_handoff(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
+    Form(pairs): Form<Vec<(String, String)>>,
+) -> Response {
+    let frames = pairs
+        .iter()
+        .find(|(name, _)| name == "frames")
+        .map(|(_, value)| value.as_str())
+        .unwrap_or_default();
+    let query = requested
+        .as_deref()
+        .map(|key| format!("?event={key}"))
+        .unwrap_or_default();
+    let outcome = handoff::receive(&state, &user, frames, &query).await;
+    let (nav, _) = event_page(&state, Some(&user), requested.as_deref()).await;
+    match outcome {
+        Ok(result) => html(handoff::page(nav, Some(result), Vec::new())),
+        Err(errors) => html(handoff::page(nav, None, errors)),
+    }
 }
 
 /// Whether the caller is a browser expecting a page, rather than a script

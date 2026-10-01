@@ -10,7 +10,8 @@
 //! the scout who saved all Saturday with no signal and whose 24-hour session
 //! ran out overnight: the outbox still goes as them. The token must verify,
 //! must name this device, and its user must still exist. Pages still need a
-//! session; a token signs no one in.
+//! session; a token signs no one in. [`verify`] checks one without a device,
+//! for a handoff carried by QR (S13).
 
 use axum::Json;
 use axum::extract::State;
@@ -102,11 +103,7 @@ pub async fn sync_user(state: &AppState, headers: &HeaderMap) -> Option<User> {
         .strip_prefix("Bearer ")?
         .trim();
     let device = device_uuid(headers)?;
-    let seed = seed(state)
-        .await
-        .inspect_err(|e| warn!("token key: {e}"))
-        .ok()?;
-    let claims = match token::verify(&token::public_key(&seed), bearer, Utc::now()) {
+    let claims = match verify(state, bearer).await {
         Ok(claims) => claims,
         Err(e) => {
             info!(%device, "refused a token: {e}");
@@ -124,4 +121,15 @@ pub async fn sync_user(state: &AppState, headers: &HeaderMap) -> Option<User> {
         .await
         .inspect_err(|e| warn!("loading a token's user: {e}"))
         .ok()?
+}
+
+/// What a token says, if the Pi signed it and it has not expired. Not tied
+/// to any device: a handoff (S13, `crate::handoff`) brings a scout's token
+/// from their tablet on a lead's screen.
+pub async fn verify(state: &AppState, token: &str) -> Result<Claims, String> {
+    let seed = seed(state).await.map_err(|e| {
+        warn!("token key: {e}");
+        "storage unavailable".to_string()
+    })?;
+    token::verify(&token::public_key(&seed), token, Utc::now()).map_err(|e| e.to_string())
 }

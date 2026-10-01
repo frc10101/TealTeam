@@ -176,6 +176,54 @@ pub fn read_answers(schema: &SeasonSchema, raw: &RawAnswers) -> Result<Payload, 
     Ok(payload)
 }
 
+/// Answers that came by another road than the form's own post -- a tablet's
+/// unsent form, carried by QR (S13) -- typed as far as they go, for the
+/// push's rules to judge. On `schema`, the form it was typed into, a field
+/// reads as the form reads it, and one that does not read is kept as its
+/// text, so a refusal shows a lead what to correct (C10b). With no schema
+/// (another version of the form), and for a name the schema does not have,
+/// the answer is guessed: `on` a ticked box, a whole number a count, the
+/// rest text.
+pub fn read_answers_as_given(schema: Option<&SeasonSchema>, raw: &RawAnswers) -> Payload {
+    if let Some(schema) = schema
+        && let Ok(payload) = read_answers(schema, raw)
+    {
+        return payload;
+    }
+    let guess = |text: &str| {
+        if text.trim().eq_ignore_ascii_case("on") {
+            Value::Flag(true)
+        } else if let Ok(n) = text.trim().parse::<i64>() {
+            Value::Count(n)
+        } else {
+            Value::Text(text.trim().to_string())
+        }
+    };
+    let mut payload = Payload::new();
+    for (key, text) in &raw.0 {
+        let field = schema.and_then(|s| s.field(key));
+        let value = match field.map(|f| read_field(f, Some(text))) {
+            Some(Ok(value)) => value,
+            Some(Err(_)) => Some(Value::Text(text.clone())),
+            None => Some(guess(text)).filter(|v| v != &Value::Text(String::new())),
+        };
+        if let Some(value) = value {
+            payload.insert(key.clone(), value);
+        }
+    }
+    // A box left unticked is not posted, and on this form means no.
+    if let Some(schema) = schema {
+        for field in schema.fields() {
+            if matches!(field.kind, FieldKind::Toggle { .. }) {
+                payload
+                    .entry(field.key.clone())
+                    .or_insert(Value::Flag(false));
+            }
+        }
+    }
+    payload
+}
+
 /// One field's answer: `Ok(None)` when nothing was recorded.
 fn read_field(field: &Field, raw: Option<&str>) -> Result<Option<Value>, String> {
     let given = raw.map(str::trim).filter(|s| !s.is_empty());
@@ -440,6 +488,39 @@ mod tests {
         assert!(!changed.same_as(&shown));
         changed.set("pieces", None);
         assert!(changed.same_as(&shown));
+    }
+
+    #[test]
+    fn answers_from_another_road_are_typed_as_far_as_they_go() {
+        // Every answer fits: just as the form reads them.
+        let good = raw(&[("f.defense", "low"), ("f.pieces", "4")]);
+        assert_eq!(
+            read_answers_as_given(Some(&schema()), &good),
+            read_answers(&schema(), &good).unwrap()
+        );
+
+        // One does not: it is kept as typed, for a lead to correct, and the
+        // rest still read.
+        let bad = raw(&[("f.defense", "low"), ("f.pieces", "7o"), ("f.notes", " ")]);
+        let payload = read_answers_as_given(Some(&schema()), &bad);
+        assert_eq!(payload["pieces"], Value::Text("7o".into()));
+        assert_eq!(payload["defense"], Value::Text("low".into()));
+        assert_eq!(payload["climbed"], Value::Flag(false));
+        assert!(!payload.contains_key("notes"));
+        assert!(schema().validate_payload(&payload).is_err());
+
+        // Another version's form: guessed.
+        let old = raw(&[
+            ("f.climbed", "on"),
+            ("f.cones", "3"),
+            ("f.who", "fast"),
+            ("f.x", ""),
+        ]);
+        let payload = read_answers_as_given(None, &old);
+        assert_eq!(payload["climbed"], Value::Flag(true));
+        assert_eq!(payload["cones"], Value::Count(3));
+        assert_eq!(payload["who"], Value::Text("fast".into()));
+        assert!(!payload.contains_key("x"));
     }
 
     #[test]

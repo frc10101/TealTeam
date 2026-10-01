@@ -1,0 +1,92 @@
+{#
+  A tablet's forms, read off its screen (S13). A scout whose tablet cannot
+  reach the Pi opens "Pi out of reach?" on their scouting page, and it shows
+  their unsent forms as QR codes, in turn. This page reads them with the
+  camera, or from photos where there is no camera to stream (plain http),
+  and posts what it read. The Pi records each form as the scout who saved it
+  and shows a receipt for the tablet to scan back.
+
+  static/js/scan.js reads codes (BarcodeDetector, else zxing-wasm);
+  static/js/receive.js runs this page. Without JavaScript there is no
+  scanner, and the page says so.
+#}
+{% extends "layout.html" %}
+{% block content %}
+{% for error in errors %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endfor %}
+
+{% if let Some(result) = result %}
+  <section class="card handoff-result" id="result">
+    <div class="card-body stack">
+      <p class="alert {% if result.all_recorded %}alert-success{% else %}alert-warning{% endif %} handoff-verdict" role="status">
+        <strong>{{ result.heading }}</strong>
+      </p>
+      <ul class="handoff-rows">
+        {% for row in result.rows %}
+          <li>
+            {% if row.recorded %}<span class="badge badge-teal">Recorded</span>{% else %}<span class="badge badge-red">Refused</span>{% endif %}
+            <strong>{{ row.heading }}</strong>
+            {% if !row.reason.is_empty() %}<span class="muted">{{ row.reason }}</span>{% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+      {% if !result.all_recorded %}
+        <p class="hint">Refused forms wait on the <a href="{{ result.refused_href }}">lead-scout page</a>, to record against the right match or dismiss.</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="card" id="receipt">
+    <div class="card-header"><h2>Show this to {{ result.scout }}</h2></div>
+    <div class="card-body stack">
+      <p class="hint">Their tablet scans it under <strong>Scan the receipt</strong>, and lets go of the forms the server now has.</p>
+      <div class="qr-frames" data-qr-cycle>
+        {% for frame in result.receipt %}
+          <figure class="qr-frame"{% if !loop.first %} hidden{% endif %}>
+            <svg class="qr" viewBox="0 0 {{ frame.size }} {{ frame.size }}" role="img" aria-label="QR code, {{ frame.label }}" shape-rendering="crispEdges">
+              <rect width="{{ frame.size }}" height="{{ frame.size }}" fill="#fff"/>
+              <path d="{{ frame.path }}" fill="#000"/>
+            </svg>
+            {% if result.receipt.len() > 1 %}<figcaption class="muted">{{ frame.label }}</figcaption>{% endif %}
+          </figure>
+        {% endfor %}
+      </div>
+      <p><a class="btn btn-primary" href="{{ result.again_href }}">Scan another tablet</a></p>
+    </div>
+  </section>
+{% else %}
+  <section class="card" id="scan">
+    <div class="card-header"><h1>Scan a tablet's forms</h1></div>
+    <div class="card-body stack">
+      <p>For a scout whose tablet cannot reach the server. On their scouting page they open <strong>Pi out of reach?</strong> and show the code. Hold this camera to it until every part is read; the parts can come in any order.</p>
+      <noscript><p class="alert alert-warning">Scanning needs JavaScript.</p></noscript>
+      <div class="scanner" data-scanner hidden>
+        <video class="scanner-video" playsinline muted hidden></video>
+        <div class="scanner-progress">
+          <svg class="ring" viewBox="0 0 36 36" aria-hidden="true">
+            <circle class="ring-track" cx="18" cy="18" r="16"/>
+            <circle class="ring-done" cx="18" cy="18" r="16" pathLength="100" stroke-dasharray="0 100" data-ring/>
+          </svg>
+          <p class="scanner-count" data-count>0 / ?</p>
+        </div>
+        <p class="scanner-status" role="status" data-status>Starting the camera…</p>
+        <p class="actions">
+          <button type="button" class="btn btn-primary" data-camera hidden>Use the camera</button>
+          <label class="btn btn-secondary file-button">Take a photo of the code
+            <input type="file" accept="image/*" capture="environment" multiple data-photo>
+          </label>
+          <button type="button" class="btn btn-secondary" data-restart hidden>Start over</button>
+        </p>
+        <p class="hint" data-photo-hint hidden>This browser cannot stream the camera here. Photograph each part of the code; the scout can step through them with <strong>Next part</strong>.</p>
+      </div>
+      <form method="post" action="{{ post_href }}" id="handoff-post" hidden>
+        <input type="hidden" name="frames" value="">
+      </form>
+      <p><a class="back" href="{{ back_href }}">Back to the lead-scout page</a></p>
+    </div>
+  </section>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}<script src="/static/js/qr.js" defer></script>
+<script src="/static/js/scan.js" defer></script>
+<script src="/static/js/receive.js" defer></script>{% endblock %}

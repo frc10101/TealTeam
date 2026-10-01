@@ -17,6 +17,7 @@ mod config;
 mod errors;
 mod events;
 mod handlers;
+mod handoff;
 mod picklist;
 mod push;
 mod ranking;
