@@ -26,6 +26,7 @@ pub mod replication;
 pub mod snapshot;
 mod standings;
 pub mod storage;
+mod token_key;
 mod upstream;
 mod users;
 mod weights;

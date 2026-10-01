@@ -5,8 +5,10 @@ edition = "2024"
 description = "Pure TealTeam domain logic. Compiles to wasm32; no I/O, no database, no HTTP."
 
 [dependencies]
+base64 = { workspace = true }
 chrono = { workspace = true }
 chrono-tz = { workspace = true }
+ed25519-dalek = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

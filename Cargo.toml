@@ -72,6 +72,11 @@ trait-variant = "0.1"
 js-sys = "0.3"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
+# Offline auth tokens (C9): PASETO v4.public is Ed25519. Pure Rust, so a
+# token verifies the same in the browser's wasm as on the Pi, with no
+# crypto.subtle (which plain http does not offer). No rand_core: the server
+# makes the key's 32 bytes itself.
+ed25519-dalek = { version = "2", default-features = false, features = ["std", "zeroize", "fast"] }
 # The pick list's CRDT (L14). Pure Rust and wasm-clean, so a browser replica
 # merges the same way the server does.
 yrs = "0.28"

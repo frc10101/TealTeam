@@ -12,9 +12,9 @@
 /// `changes` log (S2), filtered by `sync::visible`.
 pub const REPLICATED: &[&str] = &["observations", "scout_assignments", "pick_list_entries"];
 
-/// Never to leave the server: password hashes, session tokens, and which
-/// person holds which tablet.
-pub const NEVER_REPLICATED: &[&str] = &["users", "sessions", "devices"];
+/// Never to leave the server: password hashes, session tokens, which person
+/// holds which tablet, and the key that signs offline tokens (C9).
+pub const NEVER_REPLICATED: &[&str] = &["users", "sessions", "devices", "token_key"];
 
 /// Derived from FIRST and TBA. Clients get the responses they came from,
 /// through the `upstream` log (S1), and derive the same rows.

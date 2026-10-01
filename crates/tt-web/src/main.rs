@@ -30,6 +30,7 @@ mod standings;
 mod startup;
 mod sync;
 mod teams;
+mod token;
 mod upstream;
 
 use std::path::PathBuf;

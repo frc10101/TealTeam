@@ -67,6 +67,9 @@ impl<T: Template> Page for T {
 #[derive(Debug, Clone, Default)]
 pub struct Nav {
     pub signed_in: bool,
+    /// 0 when signed out. For `static/js/token.js`, to tell whose token the
+    /// device holds (C9).
+    pub user_id: i64,
     pub name: String,
     pub can_lead: bool,
     pub can_coach: bool,
@@ -116,6 +119,7 @@ impl Nav {
         match user {
             Some(u) => Self {
                 signed_in: true,
+                user_id: u.id,
                 name: u.name.clone(),
                 can_lead: u.roles.can_lead(),
                 can_coach: u.roles.can_coach(),

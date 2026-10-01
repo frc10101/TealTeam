@@ -333,6 +333,9 @@ mod tests {
             ),
             format!("INSERT INTO sessions VALUES ('SECRET-SESSION', 1, {t}, {t})"),
             format!(
+                "INSERT INTO token_key VALUES (1, CAST('SECRET-TOKEN-KEY-0123456789abcde' AS BLOB), {t})"
+            ),
+            format!(
                 "INSERT INTO devices (id, device_uuid, created_at, updated_at) VALUES (1, 'SECRET-DEVICE', {t}, {t})"
             ),
             format!(
@@ -413,6 +416,7 @@ mod tests {
             "UNNAMED-PAT",
             "SECRET-SESSION",
             "SECRET-DEVICE",
+            "SECRET-TOKEN-KEY",
             "THEIR-NOTE",
             "THEIR-PICK",
             "2026away_qm1",

@@ -47,6 +47,8 @@ pub struct AppState {
     /// Snapshots made in the last minute (S10), shared by everyone asking for
     /// the same one.
     pub snapshots: Arc<crate::snapshot::Cache>,
+    /// The key offline tokens are signed with (C9), read once.
+    pub tokens: Arc<crate::token::Keys>,
 }
 
 /// Steps 1-3, shared by every command.
@@ -130,6 +132,7 @@ pub async fn run() -> anyhow::Result<()> {
         season: Arc::new(season),
         upstream: Arc::new(upstream),
         snapshots: Default::default(),
+        tokens: Default::default(),
     };
 
     // 6. Only with storage up. When it is down, migrations did not run and a
@@ -244,6 +247,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/auth/login", post(handlers::login))
         .route("/api/auth/signup", post(handlers::signup))
         .route("/api/auth/logout", post(handlers::logout))
+        .route("/api/auth/token", post(crate::token::issue))
         .route(
             "/api/account/change-password",
             post(handlers::change_password),
@@ -385,6 +389,7 @@ mod tests {
             season: Arc::new(season::current_season().expect("embedded schema")),
             upstream: Arc::new(Upstream::disabled()),
             snapshots: Default::default(),
+            tokens: Default::default(),
         }
     }
 
@@ -399,6 +404,7 @@ mod tests {
             season: Arc::new(season::current_season().expect("embedded schema")),
             upstream: Arc::new(Upstream::disabled()),
             snapshots: Default::default(),
+            tokens: Default::default(),
         }
     }
 
@@ -716,10 +722,15 @@ mod flow_tests {
         assert!(signed_in.contains(r#"id="offline-agenda""#));
         assert!(signed_in.contains(r#"src="/static/js/agenda.js""#));
         assert!(js.contains(r#""/static/js/agenda.js""#), "precached");
+        // C9: the shell can read the kept token, and fetches none.
+        assert!(signed_in.contains(r#"<script src="/static/js/token.js" data-user="0""#));
+        assert!(js.contains(r#""/static/js/token.js""#), "precached");
 
         // Every page offers the worker; the script decides whether it may.
         let page = text(get(&state, "/", Some(&cookie)).await).await;
         assert!(page.contains(r#"src="/static/js/shell.js""#));
+        // C9: a signed-in page keeps a token for whoever is signed in.
+        assert!(page.contains(r#"<script src="/static/js/token.js" data-user="1""#));
     }
 
     #[tokio::test]
@@ -4958,6 +4969,7 @@ mod flow_tests {
             season: Arc::new(season::current_season().expect("embedded schema")),
             upstream: Arc::new(Upstream::disabled()),
             snapshots: Default::default(),
+            tokens: Default::default(),
         };
         let lead = signed_up(&state).await; // the first account, an admin
         let kim = with_kim(&state).await;
@@ -5029,6 +5041,7 @@ mod flow_tests {
             season: Arc::new(season::current_season().expect("embedded schema")),
             upstream: Arc::new(Upstream::disabled()),
             snapshots: Default::default(),
+            tokens: Default::default(),
         };
         seed_event(&state, "2026now", "This Weekend", (-1, 1), &[10101, 254]).await;
         seed_match(&state, 2, false).await;

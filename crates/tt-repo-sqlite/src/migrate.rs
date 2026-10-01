@@ -122,6 +122,7 @@ mod tests {
                 "sync_state",
                 "team_event_stats",
                 "teams",
+                "token_key",
                 "upstream",
                 "users",
             ]

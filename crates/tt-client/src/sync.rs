@@ -573,17 +573,25 @@ fn upsert_pick(tx: &Transaction, f: &Fields) -> rusqlite::Result<bool> {
 /// `fetch`, on whatever global this runs in: a page, a worker, or the
 /// service worker. Same-origin, so the session and device cookies go with
 /// it, and redirects are not followed, so a lost session reads as one.
+///
+/// `bearer` is the device's offline token (C9, `static/js/token.js`), sent
+/// as `Authorization: Bearer`, so a sync still goes as the scout once the
+/// session has run out. A worker cannot read `localStorage`; whoever owns
+/// the database is handed it by the page.
 #[cfg(target_arch = "wasm32")]
-pub struct Fetch;
+#[derive(Debug, Clone, Default)]
+pub struct Fetch {
+    pub bearer: Option<String>,
+}
 
 #[cfg(target_arch = "wasm32")]
 impl Transport for Fetch {
     async fn get(&self, path: &str) -> std::result::Result<Reply, String> {
-        fetch(path, "GET", None).await
+        fetch(path, "GET", None, self.bearer.as_deref()).await
     }
 
     async fn post_json(&self, path: &str, body: String) -> std::result::Result<Reply, String> {
-        fetch(path, "POST", Some(body)).await
+        fetch(path, "POST", Some(body), self.bearer.as_deref()).await
     }
 }
 
@@ -592,6 +600,7 @@ async fn fetch(
     path: &str,
     method: &str,
     body: Option<String>,
+    bearer: Option<&str>,
 ) -> std::result::Result<Reply, String> {
     use js_sys::{Object, Reflect};
     use wasm_bindgen::JsValue;
@@ -607,12 +616,15 @@ async fn fetch(
         set(&init, "credentials", "same-origin".into())?;
         set(&init, "redirect", "manual".into())?;
         set(&init, "cache", "no-store".into())?;
+        let headers: JsValue = Object::new().into();
+        if let Some(token) = bearer {
+            set(&headers, "authorization", format!("Bearer {token}").into())?;
+        }
         if let Some(body) = body {
-            let headers: JsValue = Object::new().into();
             set(&headers, "content-type", "application/json".into())?;
-            set(&init, "headers", headers)?;
             set(&init, "body", body.into())?;
         }
+        set(&init, "headers", headers)?;
         Ok::<(), JsValue>(())
     })();
     built.map_err(|e| format!("{e:?}"))?;

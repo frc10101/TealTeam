@@ -433,7 +433,7 @@ The architectural payoff. Phase 2 must be shipping before this starts.
 | C6 | Migrate read-only `/hx/*` routes to wasm, one at a time | RI-O9 | L |  |
 | C7 | Outbox + sync client in `tt-client` | RI-O10 | L | **Done** — `tt_client::{outbox, sync}`, `POST /api/sync/push` (`src/push.rs`), wire format `tt_core::outbox`; nothing loads it in a page yet (C5), see Phase 3 notes |
 | C8 | **Make assignments available offline.** An assignment a scout cannot see when the network drops is worse than no assignment | RI-A5 | M | **Done** — the scouting page's **Your assignments** list, `static/js/agenda.js` (localStorage, works over plain http); see Phase 3 notes |
-| C9 | Offline auth tokens (PASETO) layered onto device identity | RI-O12 | M |  |
+| C9 | Offline auth tokens (PASETO) layered onto device identity | RI-O12 | M | **Done** — `tt_core::token` (PASETO v4.public), `POST /api/auth/token`, `static/js/token.js`; pull and push take a token when the session has lapsed; needs no https, see Phase 3 notes |
 | C10 | Conflict review screen for the lead scout | RI-O13 | M |  |
 | C11 | Repo-trait round-trip tests run against **both** implementations, so server and browser cannot diverge | RS §11 | M | **Done** — `crates/tt-client/tests/round_trip.rs`: every method on both, answers and tables compared; see Phase 3 notes |
 
@@ -745,6 +745,12 @@ A scout's cycle is: open the scouting page, save, load the page the save redirec
 - **A power cut can lose a save the scout was told was made.** Fixed in Q3b, below. The database runs WAL with `synchronous=NORMAL`. SQLite documents that a commit under that setting can roll back on power loss, though not when the process is killed, so this test cannot catch it. The setting was chosen to spare SD and USB storage an fsync per commit, but the database now lives on the SSD (P3). At an event that is about one commit a minute. `synchronous=FULL` is a one-line change in `SqliteRepo::connect`. Measure it on the Pi with `tt-load` before deciding.
 - **A full phone has no offline shell and is not told.** The site works online, and the account page shows how full the device is, but a reload with no server shows the browser's error page.
 
+**A scout whose session ran out overnight still syncs (C9).** A signed-in page runs `static/js/token.js`, which takes a token from `POST /api/auth/token` and keeps it in `localStorage` as `tt-token:v1`, asking again when it is someone else's or half its 72 hours are gone. Signing out deletes it. The token is a PASETO v4.public token (`tt_core::token`, checked against the official test vectors): Ed25519 over JSON claims `sub`, `name`, `team`, `roles`, `dev` (the device UUID), `iat`, `exp`. The Pi's key is a seed made on first use in the new `token_key` table (migration 0008, never replicated, emptied from snapshots). `GET /api/sync/pull` and `POST /api/sync/push` take the session's user, else an `Authorization: Bearer` token that verifies, has not expired, and names the device whose cookie came with it; the user is then loaded again, so roles are the database's and a deleted account is refused. A token signs no one into a page. tt-client's wasm `Fetch` now has a `bearer` to send it; nothing loads tt-client yet (C5), and a worker cannot read `localStorage`, so the page must hand the token over.
+
+- **Open decision 9 does not block this.** The plan's design never verifies on the device: the claims are read as plain JSON (`window.ttToken.claims()`), and the Pi checks every write. Where a device does want to verify, `tt_core::token::verify` is pure Rust and runs in wasm, so `crypto.subtle` is never needed, and `token.js` works over plain http like `agenda.js`.
+- **Not revocable**, as the plan accepts: a stolen token works from its own tablet until it expires. Changing the key (`DELETE FROM token_key`, then a restart) voids every token.
+- Checked by Rust tests (vectors, tampering, the push and pull with a lapsed session, another device's cookie) and `token.js` in node with stubbed storage and fetch. Not checked in a real browser.
+
 **Q3b: `synchronous=FULL`.** `SqliteRepo::connect` now asks for `FULL`, and the WAL test checks for it. Each commit is flushed to the disk before the scout is told "saved". On the desktop's NVMe a commit alone went from 0.01 ms to 0.56 ms. Under `tt-load` (10 minutes, 30 scouts, no faults) a save's p95 went from 0 to 2 ms, and so did the heartbeat's, since it writes too. Both runs passed every verdict. The plan said to measure on the Pi before deciding; two milliseconds against a 500 ms bar did not need the Pi to decide. Read the save row when the Pi run happens. A real pull of the plug on the Pi is still untested.
 
 ---
@@ -761,7 +767,7 @@ These need a human, and several block Phase 2 or 3.
 6. **Off-site backup.** With Render retired the Pi holds the only authoritative copy. Whose laptop receives the between-blocks copy (Q4), and who verifies it ran?
 7. **DB viewer.** Rebuild it guarded (U17), or drop it entirely?
 8. **Rules.** Pending P2 — the E143 answer determines whether the network topology in P6 is legal as planned.
-9. **HTTPS on the event LAN.** Service workers (C1), installing the app and keeping its storage (C2), OPFS (C4), and `crypto.subtle` (C9) all need https; the Pi serves plain http (found in C2, see Phase 3 notes). The options:
+9. **HTTPS on the event LAN.** Service workers (C1), installing the app and keeping its storage (C2), and OPFS (C4) all need https (C9 turned out not to: its tokens verify in pure Rust, see Phase 3 notes); the Pi serves plain http (found in C2, see Phase 3 notes). The options:
    - **A local certificate authority** (e.g. `mkcert`) whose root is installed on every client. It is practical on team tablets and painful on personal phones, so it ties to decision 1.
    - **A real domain with a Let's Encrypt certificate** (DNS-01) whose name points at the Pi's LAN address. It needs internet to renew every 90 days, and a DNS answer at a venue with no internet: the Pi would serve DNS on the wired LAN (P6).
    - **Staying on http**, and accepting that Phase 3's offline work cannot run in a browser.

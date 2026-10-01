@@ -79,12 +79,22 @@ pub(crate) fn schema_mismatch(
 
 /// `GET /api/sync/pull?changes=<cursor>&upstream=<cursor>`. Cursors default to
 /// 0, which is everything.
+///
+/// Signed in, or with this device's offline token (C9); otherwise 401, which
+/// the device reads as signed out, as it did the redirect.
 pub async fn pull(
     State(state): State<AppState>,
-    Auth(viewer): Auth,
+    headers: HeaderMap,
     uri: Uri,
     Query(query): Query<HashMap<String, String>>,
 ) -> Response {
+    let Some(viewer) = crate::token::sync_user(&state, &headers).await else {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "error": "sign in to sync this device" })),
+        )
+            .into_response();
+    };
     let scope = Scope::from_query(uri.query());
     let cursor = |name: &str| {
         query

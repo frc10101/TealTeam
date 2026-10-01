@@ -3,14 +3,15 @@
 //! The body is a [`Push`] as JSON: observations a scout recorded on the
 //! device, likely with no signal. Each one is checked by the same rules as
 //! the scouting form's post, and recorded as the signed-in scout, from the
-//! tablet whose cookie came with it. The answer is a [`Receipt`] per entry:
+//! tablet whose cookie came with it. A scout whose session has lapsed is
+//! still known by the device's offline token (C9, `crate::token`). The answer is a [`Receipt`] per entry:
 //! recorded (now, or already), or refused with a reason a person can read.
 //! The device clears an entry only once it comes back through the change
 //! log (`tt_core::outbox` says why).
 //!
 //! Refusals of the whole push are status codes with a JSON reason, never the
 //! guards' redirect, so the device knows to keep its queue:
-//!   - 401 not signed in,
+//!   - 401 not signed in, and no token from this device,
 //!   - 409 another schema (S11, `?schema=`, as for the pull),
 //!   - 413 more than [`MAX_PER_PUSH`] entries,
 //!   - 422 not a push, with why,
@@ -31,7 +32,7 @@ use tt_core::record_id;
 use tt_core::user::User;
 use tt_repo::{Device, NewObservation, Repo, RepoError};
 
-use crate::auth::{MaybeAuth, device_uuid};
+use crate::auth::device_uuid;
 use crate::startup::AppState;
 
 fn refuse(status: StatusCode, error: impl Into<String>) -> Response {
@@ -40,12 +41,11 @@ fn refuse(status: StatusCode, error: impl Into<String>) -> Response {
 
 pub async fn push(
     State(state): State<AppState>,
-    MaybeAuth(user): MaybeAuth,
     headers: HeaderMap,
     Query(query): Query<HashMap<String, String>>,
     body: Bytes,
 ) -> Response {
-    let Some(user) = user else {
+    let Some(user) = crate::token::sync_user(&state, &headers).await else {
         return refuse(
             StatusCode::UNAUTHORIZED,
             "sign in to send what this device saved",
@@ -207,12 +207,18 @@ mod tests {
     struct Wire {
         state: AppState,
         cookies: Option<String>,
+        /// An offline token (C9), sent as `Authorization: Bearer`.
+        bearer: Option<String>,
     }
 
     impl Wire {
         async fn send(&self, request: axum::http::request::Builder, body: Body) -> Reply {
             let request = match &self.cookies {
                 Some(c) => request.header(header::COOKIE, c),
+                None => request,
+            };
+            let request = match &self.bearer {
+                Some(t) => request.header(header::AUTHORIZATION, format!("Bearer {t}")),
                 None => request,
             };
             let response = router(self.state.clone())
@@ -331,11 +337,13 @@ mod tests {
             season: Arc::new(tt_core::season::current_season().unwrap()),
             upstream: Arc::new(crate::upstream::Upstream::disabled()),
             snapshots: Default::default(),
+            tokens: Default::default(),
         };
         seed(&state).await;
         let anonymous = Wire {
             state: state.clone(),
             cookies: None,
+            bearer: None,
         };
         let signup = "name=Sam&email=sam%40example.com&team_number=10101\
                       &password=longenough1&confirm_password=longenough1";
@@ -358,6 +366,7 @@ mod tests {
         let sam = Wire {
             state: state.clone(),
             cookies: Some(format!("{session}; {DEVICE}")),
+            bearer: None,
         };
         (&sam)
             .post_json("/api/device/heartbeat", String::new())
@@ -500,6 +509,149 @@ mod tests {
             "{reply:?}"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn a_scout_whose_session_ran_out_still_syncs_with_the_tablets_token() {
+        let repo = SqliteRepo::connect("sqlite::memory:").unwrap();
+        tt_repo_sqlite::migrate::apply(repo.pool()).await.unwrap();
+        let state = AppState {
+            repo: Arc::new(repo),
+            season: Arc::new(tt_core::season::current_season().unwrap()),
+            upstream: Arc::new(crate::upstream::Upstream::disabled()),
+            snapshots: Default::default(),
+            tokens: Default::default(),
+        };
+        seed(&state).await;
+        let wire = |cookies: Option<String>, bearer: Option<String>| Wire {
+            state: state.clone(),
+            cookies,
+            bearer,
+        };
+        let signup = "name=Sam&email=sam%40example.com&team_number=10101\
+                      &password=longenough1&confirm_password=longenough1";
+        let response = router(state.clone())
+            .oneshot(
+                Request::post("/api/auth/signup")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from(signup))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let session = response.headers()[header::SET_COOKIE]
+            .to_str()
+            .unwrap()
+            .split(';')
+            .next()
+            .unwrap()
+            .to_string();
+
+        // Friday, signed in: the tablet takes a token.
+        let sam = wire(Some(format!("{session}; {DEVICE}")), None);
+        let issued = (&sam)
+            .post_json("/api/auth/token", String::new())
+            .await
+            .unwrap();
+        assert_eq!(issued.status, 200, "{}", issued.body);
+        let issued: serde_json::Value = serde_json::from_str(&issued.body).unwrap();
+        let token = issued["token"].as_str().unwrap().to_string();
+        let claims = tt_core::token::read_unverified(&token).unwrap();
+        assert_eq!(claims.name, "Sam");
+        assert_eq!(claims.team, Some(10101));
+        assert_eq!(format!("tt_device={}", claims.device), DEVICE);
+        // The device can check it with the key that came with it.
+        use base64::Engine;
+        let key: [u8; 32] = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(issued["public_key"].as_str().unwrap())
+            .unwrap()
+            .try_into()
+            .unwrap();
+        assert_eq!(tt_core::token::verify(&key, &token, Utc::now()), Ok(claims));
+        // Only for someone signed in, on a browser with a device id.
+        let anonymous = wire(Some(DEVICE.into()), None);
+        let refused = (&anonymous)
+            .post_json("/api/auth/token", String::new())
+            .await
+            .unwrap();
+        assert_eq!(refused.status, 303);
+        let deviceless = wire(Some(session.clone()), None);
+        let refused = (&deviceless)
+            .post_json("/api/auth/token", String::new())
+            .await
+            .unwrap();
+        assert_eq!(refused.status, 400);
+
+        // Saturday: the session is gone, and the tablet has a saved match.
+        (&sam)
+            .post_json("/api/auth/logout", String::new())
+            .await
+            .unwrap();
+        let saved = observation(MINE, 254);
+        let push = serde_json::to_string(&Push {
+            observations: vec![QueuedObservation {
+                client_record_id: MINE.into(),
+                match_key: saved.match_key,
+                team_number: saved.team_number,
+                payload: saved.payload,
+                schema_version: saved.schema_version,
+                observed_at: saved.observed_at,
+            }],
+        })
+        .unwrap();
+        for nobody in [&sam, &anonymous] {
+            assert_eq!(
+                nobody
+                    .post_json("/api/sync/push", push.clone())
+                    .await
+                    .unwrap()
+                    .status,
+                401
+            );
+            assert_eq!(nobody.get("/api/sync/pull").await.unwrap().status, 401);
+        }
+
+        // With the token, from the tablet it was issued to: recorded as Sam.
+        let tablet = wire(Some(DEVICE.into()), Some(token.clone()));
+        let reply = (&tablet)
+            .post_json("/api/sync/push", push.clone())
+            .await
+            .unwrap();
+        assert_eq!(reply.status, 200, "{}", reply.body);
+        let reply: PushReply = serde_json::from_str(&reply.body).unwrap();
+        assert_eq!(reply.receipts[0].outcome, Outcome::Recorded);
+        let on_the_pi = state.repo.pending_observations("2026now").await.unwrap();
+        assert_eq!(on_the_pi[0].scouter_name.as_deref(), Some("Sam"));
+        assert_eq!(on_the_pi[0].submitting_team, Some(10101));
+        assert_eq!((&tablet).get("/api/sync/pull").await.unwrap().status, 200);
+        // A token is not a session: pages still want Sam to sign in.
+        assert_eq!((&tablet).get("/account").await.unwrap().status, 303);
+
+        // Copied to another browser, altered, or nonsense: refused.
+        let elsewhere = wire(
+            Some("tt_device=0191f7ac-1234-7000-8000-000000000999".into()),
+            Some(token.clone()),
+        );
+        let mut altered = token.clone();
+        altered.pop();
+        altered.push(if token.ends_with('A') { 'B' } else { 'A' });
+        for refused in [
+            elsewhere,
+            wire(Some(DEVICE.into()), Some(altered)),
+            wire(Some(DEVICE.into()), Some("v4.public.nonsense".into())),
+            wire(None, Some(token)),
+        ] {
+            let refused = &refused;
+            assert_eq!(
+                refused
+                    .post_json("/api/sync/push", push.clone())
+                    .await
+                    .unwrap()
+                    .status,
+                401
+            );
+            assert_eq!(refused.get("/api/sync/pull").await.unwrap().status, 401);
+        }
     }
 
     #[test]
