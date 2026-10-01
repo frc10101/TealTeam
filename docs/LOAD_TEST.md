@@ -159,13 +159,35 @@ nothing was lost, duplicated, or missed, and every stream recovered. They say
 little about the Pi's latency. Run the section above on the Pi before the
 first event.
 
+## `synchronous=FULL` (Q3b)
+
+The server used to run SQLite with `synchronous=NORMAL`, and under that
+setting a power cut can roll back the last commits: a scout told "saved"
+could lose the save. It now runs `synchronous=FULL`, which flushes every
+commit to the disk before answering. The cost is an fsync per commit.
+
+**2026-10-01, the same desktop** (NVMe, btrfs), release build:
+
+| Measure | NORMAL | FULL |
+| --- | ---: | ---: |
+| One commit on its own, 1,000 in a row: median | 0.01 ms | 0.56 ms |
+| the same, p95 / p99 | 0.03 / 0.03 ms | 0.63 / 1.09 ms |
+| `tt-load`, 10 minutes, 30 scouts, no faults: save p50 / p95 / p99 | 0 / 0 / 4 ms | 2 / 2 / 6 ms |
+| the same, heartbeat p50 / p95 (it writes too) | 0 / 0 ms | 2 / 2 ms |
+| the same, every other request p95 | 2 ms or under | 2 ms or under |
+
+Both runs passed every verdict (1,197 and 1,206 saves). A save costs about
+two milliseconds more, against a 500 ms bar, at a hundred times event load.
+The Pi's SSD will be slower to fsync than this desktop's drive. Read the save
+row when running the test on the Pi.
+
 ## What this does not test
 
 - **A real power cut.** SIGKILL loses what the process held, but not data
-  the kernel had yet to write to disk. The database runs WAL with
-  `synchronous=NORMAL`, and under that setting a power cut can roll back the
-  last commits. A scout could be told "saved" and the save could still be
-  lost. See the Q3 notes in ACTION_ITEMS.md.
+  the kernel had yet to write to disk. The database now runs
+  `synchronous=FULL` (above), so a confirmed save should be on the disk
+  before the scout hears about it. Only pulling the plug on the Pi proves it,
+  and only if the SSD honours the flush.
 - Wi-Fi, a phone's CPU, or iOS Safari.
 - More than one lead editing assignments or the pick list. The scouts here
   only save observations.

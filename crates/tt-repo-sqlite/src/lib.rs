@@ -79,9 +79,11 @@ impl SqliteRepo {
             .create_if_missing(true)
             // WAL: concurrent readers alongside the single writer.
             .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
-            // NORMAL is the documented safe pairing with WAL. FULL costs an fsync
-            // per commit, which on a Pi's SD or USB storage is measurable.
-            .synchronous(sqlx::sqlite::SqliteSynchronous::Normal)
+            // FULL: a commit is on the disk before the scout is told "saved".
+            // Under NORMAL a power cut can roll back the last commits (Q3). It
+            // costs an fsync per commit, which the SSD (P3) takes at about one
+            // commit a minute without noticing (Q3b, LOAD_TEST.md).
+            .synchronous(sqlx::sqlite::SqliteSynchronous::Full)
             // Enforce the FK constraints the schema declares. SQLite ignores them
             // unless asked -- an easy and expensive thing to forget.
             .foreign_keys(true)
@@ -516,8 +518,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_file_database_is_wal_with_normal_sync() {
-        // P3. Memory databases cannot be WAL, so this needs a real file.
+    async fn a_file_database_is_wal_with_full_sync() {
+        // P3. Memory databases cannot be WAL, so this needs a real file. FULL,
+        // not NORMAL, so a power cut cannot undo a confirmed save (Q3b).
         let db = TempDb::new("wal");
         let repo = SqliteRepo::connect(&db.url()).expect("connect");
         let mode: String = sqlx::query_scalar("PRAGMA journal_mode")
@@ -529,7 +532,7 @@ mod tests {
             .fetch_one(repo.pool())
             .await
             .unwrap();
-        assert_eq!(sync, 1, "NORMAL");
+        assert_eq!(sync, 2, "FULL");
     }
 
     #[tokio::test]

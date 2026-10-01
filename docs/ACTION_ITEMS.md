@@ -658,6 +658,7 @@ A test fails if a table is in no list or in two, if a listed table does not exis
 | Q1 | `tt-core` unit tests: scoring, mode aggregation, match-status, connectivity classification, match-number normalization, TBA fallback extraction. **Every one of these had a bug** | RS §11 | M | **Done** — gaps filled in `tt-core`; two bugs fixed, see notes |
 | Q2 | Deserialization tests against **recorded** FIRST/TBA payloads, including at least one from a prior season | RS §11 | M | **Done** — `tt-upstream/tests/recorded.rs` over `tests/fixtures/`; six fixes, see notes |
 | Q3 | Load test before the season: 30 simulated clients, two hours, p95 latency and SSE stability — with the cable pulled, the power killed, and a client's storage filled, deliberately | RI §Load Testing · RS §11 | M | **Done** — `crates/tt-load`, `tests/browser/storage-full.mjs`, [LOAD_TEST.md](LOAD_TEST.md); one bug fixed; Pi untested |
+| Q3b | Run SQLite with `synchronous=FULL`, so a power cut cannot lose a save the scout was told was saved (found in Q3) | Q3 notes | S | **Done** — `SqliteRepo::connect`; about 2 ms a save, [LOAD_TEST.md](LOAD_TEST.md#synchronousfull-q3b); Pi untested |
 | Q4 | Backups: timed dump to the SSD (10-minute interval, 24-hour retention), USB copy between match blocks, and **one deliberate restore test** before you need it | RI §Backups | M | **Done** — `tt_repo_sqlite::backup`, `tt-web backup` / `check-backup`, [PI_STORAGE.md](PI_STORAGE.md#backups-q4); USB and Pi steps untested |
 | Q5 | Store everything in UTC; render in the event's IANA zone per `TIMEZONE_HANDLING.md` | RI §Time Sync | S | **Done** — `tt_core::timezone`; see notes |
 
@@ -721,8 +722,11 @@ A scout's cycle is: open the scouting page, save, load the page the save redirec
 
 **Found, not fixed:**
 
-- **A power cut can lose a save the scout was told was made.** The database runs WAL with `synchronous=NORMAL`. SQLite documents that a commit under that setting can roll back on power loss, though not when the process is killed, so this test cannot catch it. The setting was chosen to spare SD and USB storage an fsync per commit, but the database now lives on the SSD (P3). At an event that is about one commit a minute. `synchronous=FULL` is a one-line change in `SqliteRepo::connect`. Measure it on the Pi with `tt-load` before deciding.
+- **A power cut can lose a save the scout was told was made.** Fixed in Q3b, below. The database runs WAL with `synchronous=NORMAL`. SQLite documents that a commit under that setting can roll back on power loss, though not when the process is killed, so this test cannot catch it. The setting was chosen to spare SD and USB storage an fsync per commit, but the database now lives on the SSD (P3). At an event that is about one commit a minute. `synchronous=FULL` is a one-line change in `SqliteRepo::connect`. Measure it on the Pi with `tt-load` before deciding.
 - **A full phone has no offline shell and is not told.** The site works online, and the account page shows how full the device is, but a reload with no server shows the browser's error page.
+
+**Q3b: `synchronous=FULL`.** `SqliteRepo::connect` now asks for `FULL`, and the WAL test checks for it. Each commit is flushed to the disk before the scout is told "saved". On the desktop's NVMe a commit alone went from 0.01 ms to 0.56 ms. Under `tt-load` (10 minutes, 30 scouts, no faults) a save's p95 went from 0 to 2 ms, and so did the heartbeat's, since it writes too. Both runs passed every verdict. The plan said to measure on the Pi before deciding; two milliseconds against a 500 ms bar did not need the Pi to decide. Read the save row when the Pi run happens. A real pull of the plug on the Pi is still untested.
+
 ---
 
 ## Open decisions

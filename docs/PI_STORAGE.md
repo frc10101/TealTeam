@@ -6,7 +6,7 @@ The server keeps everything in one SQLite file. On the Pi it belongs on an NVMe 
 
 ## What the server already does
 
-- **WAL mode, one writer.** The database runs in WAL mode with `synchronous=NORMAL`: readers never wait for the writer, and a commit costs no extra fsync. The server holds **one** connection, so its writes queue up one at a time; a second write waits up to 5 seconds rather than failing. Tests in `tt-repo-sqlite` check both on a real file.
+- **WAL mode, one writer, every commit on the disk.** The database runs in WAL mode, so readers never wait for the writer, with `synchronous=FULL`: each commit is flushed to the SSD before the scout is told "saved", so a power cut cannot take back a save. Under `NORMAL` it could (found in Q3, changed in Q3b). The flush is an fsync per commit, well under a millisecond on an NVMe drive; see [LOAD_TEST.md](LOAD_TEST.md#synchronousfull-q3b). The server holds **one** connection, so its writes queue up one at a time; a second write waits up to 5 seconds rather than failing. Tests in `tt-repo-sqlite` check both on a real file.
 - **Says where the database is.** At startup it logs the full path and the device under it:
 
   ```
@@ -153,7 +153,7 @@ It copies the backup into a fresh database in a temporary folder and opens it th
 
 Tested, on a development machine, not a Pi:
 
-- WAL mode, `synchronous=NORMAL`, the single connection, and a second write waiting for the first (unit tests).
+- WAL mode, `synchronous=FULL`, the single connection, and a second write waiting for the first (unit tests).
 - The log line naming the path and device on a real disk: an encrypted btrfs root reported as `dm-0`, and tmpfs reported as "an unknown device".
 - The SD-card wording, and how device names are classified (unit tests with a made-up `mmcblk0p2`).
 - Backups: a unit test restores a snapshot into a fresh database and reads the users back through the server's own code. One of those users had been written only to the `-wal` file. The snapshot was taken while the server's writer held a transaction open, and it did not wait for it. Pruning keeps 24 hours and never fewer than six.
