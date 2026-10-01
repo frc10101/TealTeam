@@ -8,6 +8,7 @@ description = "axum server binary. The only crate that knows about HTTP."
 tt-core = { workspace = true }
 tt-templates = { workspace = true }
 tt-repo = { workspace = true }
+tt-pages = { workspace = true }
 tt-repo-sqlite = { workspace = true }
 tt-upstream = { workspace = true }
 

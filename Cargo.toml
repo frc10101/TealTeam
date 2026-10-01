@@ -10,6 +10,9 @@ members = ["crates/*"]
 #   tt-core, tt-templates  -- pure. MUST compile to wasm32-unknown-unknown.
 #                             No sqlx, no axum, no tokio net/fs/time-driver.
 #   tt-repo                -- the Repo trait. Abstract; also wasm-clean.
+#   tt-pages               -- pages built from a Repo, run by tt-web and, with
+#                             no server, by tt-client in the service worker
+#                             (C5). Also wasm-clean.
 #   tt-upstream            -- the FIRST/TBA clients also compile to wasm32, so a
 #                             browser with signal fetches upstream itself (S4).
 #                             The sync loop and the journal are native-only.
@@ -29,6 +32,7 @@ tt-repo = { path = "crates/tt-repo" }
 tt-repo-sqlite = { path = "crates/tt-repo-sqlite" }
 tt-upstream = { path = "crates/tt-upstream" }
 tt-client = { path = "crates/tt-client" }
+tt-pages = { path = "crates/tt-pages" }
 
 anyhow = "1"
 askama = "0.16"
@@ -37,6 +41,9 @@ argon2 = "0.5"
 axum = "0.8"
 axum-extra = { version = "0.10", features = ["cookie"] }
 futures-util = { version = "0.3", default-features = false }
+# Reading a query string in the service worker's pages (C5), as axum's
+# `Query` does on the server.
+form_urlencoded = "1"
 base64 = "0.22"
 rand = "0.9"
 # rustls, never OpenSSL: the release binary must have no system TLS dependency

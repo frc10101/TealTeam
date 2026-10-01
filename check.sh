@@ -25,20 +25,21 @@ step "Binary"
 cargo build --workspace
 
 if [[ "$fast" == false ]]; then
-  step "wasm32 boundary (tt-core, tt-templates)"
+  step "wasm32 boundary (tt-core, tt-templates, tt-pages)"
   if ! rustup target list --installed | grep -qx wasm32-unknown-unknown; then
     echo "installing wasm32-unknown-unknown..."
     rustup target add wasm32-unknown-unknown
   fi
-  cargo build -p tt-core -p tt-templates --target wasm32-unknown-unknown
+  cargo build -p tt-core -p tt-templates -p tt-pages --target wasm32-unknown-unknown
 
   # Its own run: cargo unifies features across one build, and tt-upstream's
   # chrono "clock" would hide that same leak into tt-core.
   step "wasm32 upstream clients (tt-upstream)"
   cargo build -p tt-upstream --target wasm32-unknown-unknown
 
-  # The browser's repo (C4). Its SQLite is C, which sqlite-wasm-rs builds
-  # with clang for wasm32.
+  # The browser's repo (C4) and the service worker's pages (C5). Its SQLite
+  # is C, which sqlite-wasm-rs builds with clang for wasm32. Bundling it for
+  # the worker is deploy/build-client.sh, which needs wasm-bindgen's CLI.
   step "wasm32 browser repo (tt-client)"
   cargo build -p tt-client --target wasm32-unknown-unknown
 fi

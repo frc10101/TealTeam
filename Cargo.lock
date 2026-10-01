@@ -2388,6 +2388,7 @@ name = "tt-client"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "form_urlencoded",
  "js-sys",
  "rusqlite",
  "serde",
@@ -2395,8 +2396,10 @@ dependencies = [
  "tokio",
  "tracing",
  "tt-core",
+ "tt-pages",
  "tt-repo",
  "tt-repo-sqlite",
+ "tt-templates",
  "wasm-bindgen",
  "wasm-bindgen-futures",
 ]
@@ -2426,6 +2429,17 @@ dependencies = [
  "tt-core",
  "tt-repo",
  "tt-repo-sqlite",
+]
+
+[[package]]
+name = "tt-pages"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "tracing",
+ "tt-core",
+ "tt-repo",
+ "tt-templates",
 ]
 
 [[package]]
@@ -2504,6 +2518,7 @@ dependencies = [
  "tracing-subscriber",
  "tt-client",
  "tt-core",
+ "tt-pages",
  "tt-repo",
  "tt-repo-sqlite",
  "tt-templates",

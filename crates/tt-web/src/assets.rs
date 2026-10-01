@@ -40,6 +40,8 @@ fn content_type(path: &str) -> &'static str {
         Some("png") => "image/png",
         Some("ico") => "image/x-icon",
         Some("woff2") => "font/woff2",
+        // The service worker's module (C5). Streaming compilation insists.
+        Some("wasm") => "application/wasm",
         Some("txt") => "text/plain; charset=utf-8",
         _ => "application/octet-stream",
     }

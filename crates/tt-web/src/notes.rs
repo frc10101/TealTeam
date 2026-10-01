@@ -21,11 +21,6 @@ use tt_templates::{FilterOption, Nav, NoteEntry, NotesPage, team_href};
 use crate::events::EventContext;
 use crate::startup::AppState;
 
-/// `/notes` for `event_key`, narrowed to `team`.
-pub fn href(event_key: &str, team: i32) -> String {
-    format!("/notes?event={event_key}&team={team}")
-}
-
 pub async fn page(
     state: &AppState,
     nav: Nav,
@@ -201,7 +196,7 @@ pub async fn page(
                 ago: recorded
                     .map(|at| describe_age(now - at))
                     .unwrap_or_default(),
-                filter_href: href(&event.key, o.team_number),
+                filter_href: tt_pages::notes_href(&event.key, o.team_number),
                 profile_href: team_href(&event.key, o.team_number),
             });
         }

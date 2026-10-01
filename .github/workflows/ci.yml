@@ -44,8 +44,9 @@ jobs:
         with:
           key: wasm32
 
+      # tt-pages: the pages the service worker makes with no server (C5).
       - name: Build pure crates for wasm32
-        run: cargo build -p tt-core -p tt-templates --target wasm32-unknown-unknown --locked
+        run: cargo build -p tt-core -p tt-templates -p tt-pages --target wasm32-unknown-unknown --locked
 
       # The FIRST/TBA clients run in a browser too (S4). A separate build:
       # cargo unifies features within one, and tt-upstream's chrono "clock"

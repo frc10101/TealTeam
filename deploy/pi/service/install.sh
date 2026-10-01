@@ -4,6 +4,9 @@
 #   sudo ./install.sh path/to/tt-web             install or upgrade
 #   sudo ./install.sh path/to/tt-web --dry-run   say what it would change
 #
+# Build the binary after deploy/build-client.sh, so it carries the service
+# worker's wasm module and devices can make pages offline (C5).
+#
 # Idempotent: rerun it with each new build. Do the SSD (docs/PI_STORAGE.md)
 # first; the service will not start until /srv/tealteam is mounted.
 #

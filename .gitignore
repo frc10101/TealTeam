@@ -31,3 +31,6 @@ temp/
 
 # Rust build output
 target/
+
+# The service worker's wasm module, made by deploy/build-client.sh (C5)
+crates/tt-web/static/client/

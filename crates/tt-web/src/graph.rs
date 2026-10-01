@@ -25,11 +25,6 @@ use tt_templates::{Chip, GraphPage, Nav, TableRow, TeamTable};
 use crate::events::EventContext;
 use crate::startup::AppState;
 
-/// `/graph` for `event_key`, showing `team`.
-pub fn href(event_key: &str, team: i32) -> String {
-    format!("/graph?event={event_key}&chosen=1&team={team}&metric={POINTS}")
-}
-
 /// What one event contributes.
 struct Loaded {
     event: Event,

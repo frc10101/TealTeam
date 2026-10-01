@@ -1,0 +1,14 @@
+[package]
+name = "tt-pages"
+version = "0.1.0"
+edition = "2024"
+description = "Pages built from a Repo, the same on the server and in the service worker (C5)."
+
+# Compiles to wasm32: tt-client runs these in the service worker. No axum, no
+# sqlx, no chrono "clock": the caller passes `now`.
+[dependencies]
+tt-core = { workspace = true }
+tt-repo = { workspace = true }
+tt-templates = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }

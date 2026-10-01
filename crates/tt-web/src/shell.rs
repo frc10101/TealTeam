@@ -7,6 +7,10 @@
 //! worker itself does, and a changed `/sw.js` is what makes a browser install
 //! the new worker and drop the old cache.
 //!
+//! With the wasm module built in (`deploy/build-client.sh`), the worker also
+//! makes the pages it can from the device's copy when the server is gone
+//! (C5); see `src/sw.js`.
+//!
 //! S11's version handshake builds on the same number: `/health` reports it,
 //! so a page (or later the wasm client) can tell a new binary is running.
 
@@ -35,11 +39,26 @@ pub fn precache() -> Vec<String> {
         .collect()
 }
 
+/// The wasm module's script, if this binary was built with one
+/// (`deploy/build-client.sh`): the worker makes pages from the device's
+/// copy with it (C5).
+pub fn client() -> Option<String> {
+    crate::assets::find(CLIENT).map(|a| format!("/static/{}", a.path))
+}
+
+const CLIENT: &str = "client/tt_client.js";
+
 pub fn script() -> String {
-    SOURCE.replace("__BUILD__", BUILD_VERSION).replace(
-        "__PRECACHE__",
-        &serde_json::to_string(&precache()).expect("strings serialise"),
-    )
+    SOURCE
+        .replace("__BUILD__", BUILD_VERSION)
+        .replace(
+            "__PRECACHE__",
+            &serde_json::to_string(&precache()).expect("strings serialise"),
+        )
+        .replace(
+            "__CLIENT__",
+            &serde_json::to_string(&client()).expect("strings serialise"),
+        )
 }
 
 /// `GET /sw.js`. From the root, so the worker's scope is the whole site.
@@ -74,7 +93,9 @@ mod tests {
     fn the_worker_carries_its_build_and_the_whole_shell() {
         let js = script();
         assert!(js.contains(&format!("const BUILD = \"{BUILD_VERSION}\";")));
-        assert!(!js.contains("__PRECACHE__") && !js.contains("__BUILD__"));
+        assert!(
+            !js.contains("__PRECACHE__") && !js.contains("__BUILD__") && !js.contains("__CLIENT__")
+        );
         let list = precache();
         assert_eq!(list[0], "/offline");
         for asset in ASSETS {
@@ -86,6 +107,22 @@ mod tests {
         }
         assert!(!list.iter().any(|u| u == "/sw.js"), "never itself");
         assert_eq!(BUILD_VERSION.len(), 16);
+    }
+
+    #[test]
+    fn the_worker_imports_the_wasm_module_only_when_it_was_built() {
+        let js = script();
+        match client() {
+            // Built with deploy/build-client.sh: imported, and its .wasm
+            // precached beside it, so a page can be made with no server.
+            Some(url) => {
+                assert_eq!(url, "/static/client/tt_client.js");
+                assert!(js.contains(r#"const CLIENT = "/static/client/tt_client.js";"#));
+                assert!(precache().contains(&"/static/client/tt_client_bg.wasm".to_string()));
+            }
+            // Without it: no import that would fail the worker's install.
+            None => assert!(js.contains("const CLIENT = null;")),
+        }
     }
 
     #[test]

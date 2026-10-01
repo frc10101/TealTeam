@@ -1,5 +1,5 @@
 // TealTeam's service worker (C1). Served at /sw.js by src/shell.rs, which
-// fills in the two placeholders below.
+// fills in the three placeholders below.
 //
 // What it does, and only this:
 //
@@ -7,13 +7,18 @@
 //     into a cache named for this build. A new binary is a new worker with a
 //     new cache; the old cache is deleted when it takes over.
 //   * Pages (navigations): the network, always. Only when the network fails,
-//     the cached /offline page -- at the address that was asked for, so it
-//     can reload itself there once the server answers.
+//     the device makes the page itself (C5): tt-client's wasm module runs the
+//     server's own page code over the device's copy in OPFS. For an address
+//     it cannot make, or with no copy yet, the cached /offline page -- at the
+//     address that was asked for, so it can reload itself there once the
+//     server answers. A page made here says so, and reloads the same way.
 //   * Static files: the network first, so a page and its stylesheet always
 //     come from the same build; the cache only when the network fails.
 //   * Everything else passes straight through: POSTs, /health, /api, and the
 //     live regions' fetches. Nothing a person sees is ever cached for them,
-//     and nothing is written to the cache after install.
+//     and nothing is written to the cache after install. A live region is
+//     not made on the device: what it shows came from the server, and the
+//     device's copy is no newer until the sync client (C7) keeps it current.
 //
 // Registered by static/js/shell.js, and only in a secure context.
 
@@ -23,6 +28,56 @@ const BUILD = "__BUILD__";
 const CACHE = "tealteam-shell-" + BUILD;
 const SHELL = "/offline";
 const PRECACHE = __PRECACHE__;
+// The wasm module's script, or null in a binary built without it
+// (deploy/build-client.sh). Its .wasm is beside it, and in PRECACHE.
+const CLIENT = __CLIENT__;
+
+if (CLIENT) {
+  try {
+    importScripts(CLIENT);
+  } catch (e) {
+    // Without it every page is the shell, as before C5.
+    console.warn("TealTeam: no device pages:", e);
+  }
+}
+
+// Compiled once per worker, from this build's cache, so it works with no
+// server. A failure is not kept: the next page tries again.
+let compiled = null;
+function client() {
+  if (!compiled) {
+    compiled = caches
+      .open(CACHE)
+      .then((cache) => cache.match(CLIENT.replace(/\.js$/, "_bg.wasm")))
+      .then((module) => {
+        if (!module) throw new Error("the wasm module is not in the cache");
+        return wasm_bindgen({ module_or_path: module });
+      })
+      .catch((e) => {
+        compiled = null;
+        throw e;
+      });
+  }
+  return compiled;
+}
+
+// The page at `url`, made on this device, or null when it cannot be.
+function fromDevice(url) {
+  if (typeof wasm_bindgen === "undefined") return Promise.resolve(null);
+  return client()
+    .then(() => wasm_bindgen.render(url.pathname, url.search.slice(1)))
+    .then((html) =>
+      html === null
+        ? null
+        : new Response(html, {
+            headers: { "content-type": "text/html; charset=utf-8", "x-tealteam-source": "device" },
+          }),
+    )
+    .catch((e) => {
+      console.warn("TealTeam: making " + url.pathname + " on this device:", e);
+      return null;
+    });
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -61,7 +116,11 @@ self.addEventListener("fetch", (event) => {
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request).catch(() =>
-        caches.open(CACHE).then((cache) => cache.match(SHELL)).then((shell) => shell || Response.error()),
+        fromDevice(url).then(
+          (page) =>
+            page ||
+            caches.open(CACHE).then((cache) => cache.match(SHELL)).then((shell) => shell || Response.error()),
+        ),
       ),
     );
     return;

@@ -83,6 +83,11 @@ pub struct Nav {
     /// The offline shell (C1), which cannot know who is looking: no account
     /// links at all, rather than a "Sign in" to someone who is signed in.
     pub offline_shell: bool,
+    /// Made on this device by the service worker, from its own copy, because
+    /// the server did not answer (C5). Says so on the page, has no account
+    /// links for the same reason as the shell, and reloads into the server's
+    /// page once it answers.
+    pub from_device: bool,
     /// What this page was built by (S11), for `static/js/link.js` to compare
     /// with `/health`. Empty build: not stamped, nothing compared.
     pub version: PageVersion,
@@ -120,6 +125,7 @@ impl Nav {
                 event: EventSwitcher::default(),
                 link: LinkChips::default(),
                 offline_shell: false,
+                from_device: false,
                 version: PageVersion::default(),
             },
             None => Self::anonymous(storage_ready),

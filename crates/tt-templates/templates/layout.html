@@ -84,7 +84,7 @@
             <form method="post" action="/api/auth/logout" class="inline">
               <button type="submit" class="btn btn-secondary">Sign out</button>
             </form>
-          {% else if !nav.offline_shell %}
+          {% else if !nav.offline_shell && !nav.from_device %}
             <a href="/sign-in" class="btn btn-secondary">Sign in</a>
           {% endif %}
         </div>
@@ -111,6 +111,16 @@
     </div>
 
     <main id="main" class="page">
+      {# C5: the service worker made this page from the device's copy, since
+         the server did not answer. static/js/link.js sees #device-page and
+         reloads into the server's page once it does. #}
+      {% if nav.from_device %}
+        <p class="alert alert-warning" id="device-page" role="status">
+          The server can't be reached, so this page was made on this device from
+          its own copy of the data, which may be behind. It reloads from the server
+          as soon as the server answers.
+        </p>
+      {% endif %}
       {% block content %}{% endblock %}
     </main>
 

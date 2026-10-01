@@ -11,6 +11,7 @@ use tt_core::connectivity::Freshness;
 use tt_core::ranking::{self, RankingRow, Scored, SortKey, WeightErrors};
 use tt_core::review::ReviewState;
 use tt_core::user::User;
+use tt_pages::teams::latest_scouted;
 use tt_repo::{Repo, StoredObservation};
 use tt_templates::{
     Nav, RankingView, RankingsPage, SortLink, THIN_BELOW, WeightGroup, WeightInput, WeightsPage,
@@ -18,7 +19,6 @@ use tt_templates::{
 
 use crate::events::EventContext;
 use crate::startup::AppState;
-use crate::teams::latest_scouted;
 
 /// `?sort=`, and `?saved=` after a weights save. Never rejects: an unknown
 /// sort is the default one.

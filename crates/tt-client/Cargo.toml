@@ -6,9 +6,18 @@ description = "The browser's Repo: the server's schema over SQLite-WASM, kept in
 
 # Compiles to wasm32 (C4), and natively for its tests. Build it for wasm on
 # its own, like tt-upstream: cargo unifies features within one build.
+#
+# A cdylib too: deploy/build-client.sh runs wasm-bindgen over it to make the
+# service worker's module (C5).
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 tt-core = { workspace = true }
 tt-repo = { workspace = true }
+tt-pages = { workspace = true }
+tt-templates = { workspace = true }
+form_urlencoded = { workspace = true }
 # Formatting the server's timestamps; not "clock": the caller passes `now`.
 chrono = { workspace = true, features = ["alloc"] }
 rusqlite = { workspace = true }
@@ -26,4 +35,5 @@ wasm-bindgen-futures = { workspace = true }
 
 [dev-dependencies]
 tt-repo-sqlite = { workspace = true }
+serde_json = { workspace = true }
 tokio = { workspace = true }

@@ -22,11 +22,13 @@
 
   // The page itself just came from the server -- unless it is the offline
   // shell (C1), which the service worker served from its cache because the
-  // server did not answer. That one checks at once, and reloads the moment
-  // the server is back, so the scout gets the page they asked for. At
-  // /offline itself there is nothing better to reload into, and doing so
-  // would reload forever.
-  var shell = !!document.getElementById("offline-shell") && location.pathname !== "/offline";
+  // server did not answer, or a page the worker made from the device's copy
+  // (C5). Those check at once, and reload the moment the server is back, so
+  // the scout gets the server's page. At /offline itself there is nothing
+  // better to reload into, and doing so would reload forever.
+  var shell =
+    (!!document.getElementById("offline-shell") || !!document.getElementById("device-page")) &&
+    location.pathname !== "/offline";
   var reachable = !shell;
   var sending = false;
   var timer = null;
