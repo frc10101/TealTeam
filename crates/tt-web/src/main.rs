@@ -23,6 +23,7 @@ mod ranking;
 mod review;
 mod scouting;
 mod shell;
+mod snapshot;
 mod standings;
 mod startup;
 mod sync;

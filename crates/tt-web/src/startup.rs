@@ -44,6 +44,9 @@ pub struct AppState {
     /// Shared with the background sync, so a manual sync and the loop agree on
     /// the uplink's state and never run two event syncs at once.
     pub upstream: Arc<Upstream>,
+    /// Snapshots made in the last minute (S10), shared by everyone asking for
+    /// the same one.
+    pub snapshots: Arc<crate::snapshot::Cache>,
 }
 
 /// Steps 1-3, shared by every command.
@@ -126,6 +129,7 @@ pub async fn run() -> anyhow::Result<()> {
         repo,
         season: Arc::new(season),
         upstream: Arc::new(upstream),
+        snapshots: Default::default(),
     };
 
     // 6. Only with storage up. When it is down, migrations did not run and a
@@ -272,6 +276,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/sync/pull", get(crate::sync::pull))
         .route("/api/sync/stream", get(crate::sync::stream))
+        .route("/api/sync/snapshot", get(crate::snapshot::download))
         .route(
             "/api/sync/bundle",
             post(crate::bundle::push).layer(axum::extract::DefaultBodyLimit::max(
@@ -377,6 +382,7 @@ mod tests {
             repo: Arc::new(SqliteRepo::connect(url).expect("lazy connect")),
             season: Arc::new(season::current_season().expect("embedded schema")),
             upstream: Arc::new(Upstream::disabled()),
+            snapshots: Default::default(),
         }
     }
 
@@ -390,6 +396,7 @@ mod tests {
             repo: Arc::new(repo),
             season: Arc::new(season::current_season().expect("embedded schema")),
             upstream: Arc::new(Upstream::disabled()),
+            snapshots: Default::default(),
         }
     }
 
@@ -4661,6 +4668,7 @@ mod flow_tests {
             repo: Arc::new(repo),
             season: Arc::new(season::current_season().expect("embedded schema")),
             upstream: Arc::new(Upstream::disabled()),
+            snapshots: Default::default(),
         };
         let lead = signed_up(&state).await; // the first account, an admin
         let kim = with_kim(&state).await;
@@ -4714,6 +4722,81 @@ mod flow_tests {
         let page = text(get(&state, "/lead-scout", Some(&lead)).await).await;
         assert!(page.contains("<dt>Last bundle</dt>"), "{page}");
         assert!(page.contains("Sam, just now: nothing new"), "{page}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn a_fresh_device_downloads_a_database_of_what_it_may_see_and_where_to_pull_from() {
+        // S10. A file, not memory: VACUUM INTO from an in-memory database
+        // writes to memory too. Sam (10101) notes on 254; Kim is on 254.
+        let dir = std::env::temp_dir().join(format!("tt-web-snapshot-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let repo =
+            SqliteRepo::connect(&format!("sqlite://{}", dir.join("pi.db").display())).unwrap();
+        tt_repo_sqlite::migrate::apply(repo.pool()).await.unwrap();
+        let state = AppState {
+            repo: Arc::new(repo),
+            season: Arc::new(season::current_season().expect("embedded schema")),
+            upstream: Arc::new(Upstream::disabled()),
+            snapshots: Default::default(),
+        };
+        seed_event(&state, "2026now", "This Weekend", (-1, 1), &[10101, 254]).await;
+        seed_match(&state, 2, false).await;
+        let sam = format!("{}; {DEVICE}", signed_up(&state).await);
+        post(&state, "/api/device/heartbeat", "", Some(&sam)).await;
+        post(
+            &state,
+            "/api/submission?event=2026now",
+            &observation_form(254, RECORD_ID, GOOD_ANSWERS),
+            Some(&sam),
+        )
+        .await;
+        let response = post(
+            &state,
+            "/api/auth/signup",
+            "name=Kim&email=kim%40example.com&team_number=254&password=longenough1&confirm_password=longenough1",
+            None,
+        )
+        .await;
+        let kim = session_cookie_from(&response).expect("kim");
+        let (changes, upstream) = state.repo.log_heads().await.unwrap();
+        assert!(changes > 0, "the observation is in the log");
+
+        let uri = "/api/sync/snapshot?event=2026now";
+        let response = get(&state, uri, Some(&kim)).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let header = |name: &str| response.headers()[name].to_str().unwrap().to_string();
+        assert_eq!(header("content-type"), "application/vnd.sqlite3");
+        assert_eq!(header("cache-control"), "private, no-store");
+        assert_eq!(header("x-sync-cursor"), format!("{changes}-{upstream}"));
+        let file = bytes(response).await;
+        assert!(file.starts_with(b"SQLite format 3\0"));
+        let has = |file: &[u8], text: &str| file.windows(text.len()).any(|w| w == text.as_bytes());
+        assert!(has(&file, RECORD_ID), "Sam's observation is in it");
+        assert!(
+            !has(&file, "tippy on the ramp"),
+            "but not Sam's team's notes"
+        );
+        assert!(!has(&file, "sam@example.com"), "and no accounts");
+
+        let ours = bytes(get(&state, uri, Some(&sam)).await).await;
+        assert!(
+            has(&ours, "tippy on the ramp"),
+            "Sam's team reads its notes"
+        );
+        assert_eq!(
+            bytes(get(&state, uri, Some(&kim)).await).await,
+            file,
+            "the same viewer and events within a minute get the same file"
+        );
+
+        let ahead = format!("{uri}&schema={}", tt_repo_sqlite::migrate::latest() + 1);
+        assert_eq!(
+            get(&state, &ahead, Some(&kim)).await.status(),
+            StatusCode::CONFLICT
+        );
+        assert_ne!(get(&state, uri, None).await.status(), StatusCode::OK);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -185,7 +185,7 @@ impl Scope {
         }
     }
 
-    fn has_event(&self, event_key: &str) -> bool {
+    pub fn has_event(&self, event_key: &str) -> bool {
         self.events
             .as_ref()
             .is_none_or(|events| events.iter().any(|e| e == event_key))

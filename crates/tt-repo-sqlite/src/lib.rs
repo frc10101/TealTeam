@@ -23,6 +23,7 @@ pub mod migrate;
 mod observations;
 mod picklist;
 pub mod replication;
+pub mod snapshot;
 mod standings;
 pub mod storage;
 mod upstream;

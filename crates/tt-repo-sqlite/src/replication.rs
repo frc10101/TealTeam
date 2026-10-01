@@ -4,6 +4,9 @@
 //! one is not, or if a table outside [`REPLICATED`] gets a trigger writing to
 //! `changes`. Replicating a table is a decision made here, by name, never a
 //! side effect of a migration.
+//!
+//! A fresh device's snapshot (S10, [`crate::snapshot`]) is cut by the same
+//! lists: what is not [`REPLICATED`] or [`FROM_UPSTREAM`] is emptied.
 
 /// Written by scouts and leads; every change goes to clients through the
 /// `changes` log (S2), filtered by `sync::visible`.
