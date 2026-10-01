@@ -19,6 +19,10 @@
 //     and nothing is written to the cache after install. A live region is
 //     not made on the device: what it shows came from the server, and the
 //     device's copy is no newer until the sync client (C7) keeps it current.
+//   * A lead scout's page may ask for a courier tick (S7, static/js/courier.js):
+//     the wasm module fetches from TBA with this device's signal and hands
+//     the Pi what it fetched. One at a time, since it writes the device's
+//     copy, and the asker gets the same answer as a tick already running.
 //
 // Registered by static/js/shell.js, and only in a secure context.
 
@@ -78,6 +82,36 @@ function fromDevice(url) {
       return null;
     });
 }
+
+// The tick under way, if any.
+let ticking = null;
+function courierTick(bearer) {
+  if (typeof wasm_bindgen === "undefined") return Promise.resolve(null);
+  if (!ticking) {
+    ticking = client()
+      .then(() => wasm_bindgen.courier(bearer || null))
+      .then((report) => (report === null ? null : JSON.parse(report)))
+      .catch((e) => {
+        console.warn("TealTeam: fetching upstream on this device:", e);
+        return null;
+      })
+      .finally(() => {
+        ticking = null;
+      });
+  }
+  return ticking;
+}
+
+self.addEventListener("message", (event) => {
+  const data = event.data || {};
+  if (data.type !== "tt-courier") return;
+  const port = event.ports && event.ports[0];
+  event.waitUntil(
+    courierTick(data.bearer).then((report) => {
+      if (port) port.postMessage(report);
+    }),
+  );
+});
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

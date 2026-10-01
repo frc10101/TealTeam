@@ -12,6 +12,9 @@
 //! is the role, the audit row that names who pushed, and the Pi's next fetch
 //! of its own (RefurbishInstructions.md, "About the API keys"). No signing.
 //!
+//! The pusher is the session's user, or an offline token's (C9), as for the
+//! pull: a lead scout back from the lobby may find the session ran out.
+//!
 //! Refusals are status codes with a JSON reason, never a redirect: a client
 //! must be able to tell that its bundle did not land, and keep it.
 //!   - 401 not signed in, 403 not a lead scout,
@@ -19,6 +22,12 @@
 //!   - 413 bigger than [`MAX_BUNDLE_BYTES`],
 //!   - 422 not a bundle, with why,
 //!   - 503 storage down.
+//!
+//! `GET /api/upstream/key` is where a lead scout's device gets the TBA key to
+//! fetch with (S7, `tt_client::courier`). The key is a read-only credential
+//! for public data, given to the role that may push and to no one else
+//! (REFURBISH_PLAN.md, "About the API keys"). The answer also says whether
+//! the Pi's own uplink is answering, so a device leaves fetching to it.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -27,18 +36,19 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use axum::Json;
 use axum::body::Bytes;
 use axum::extract::{Query, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use chrono::{DateTime, Utc};
 use serde_json::json;
 use tracing::{info, warn};
-use tt_core::connectivity;
+use tt_core::connectivity::{self, UplinkState};
 use tt_repo::RepoError;
 use tt_repo_sqlite::bundle::{BundleImport, Pusher};
 use tt_upstream::project;
 
-use crate::auth::{MaybeAuth, device_uuid};
+use crate::auth::device_uuid;
 use crate::startup::AppState;
+use crate::token::sync_user;
 
 /// The largest bundle accepted. A whole event's responses are a few MB, the
 /// biggest being playoff matches with score breakdowns.
@@ -70,12 +80,11 @@ impl Drop for Scratch {
 
 pub async fn push(
     State(state): State<AppState>,
-    MaybeAuth(user): MaybeAuth,
     headers: HeaderMap,
     Query(query): Query<HashMap<String, String>>,
     body: Bytes,
 ) -> Response {
-    let Some(user) = user else {
+    let Some(user) = sync_user(&state, &headers).await else {
         return refuse(StatusCode::UNAUTHORIZED, "sign in to push a bundle");
     };
     if !user.roles.can_lead() {
@@ -147,6 +156,33 @@ pub async fn push(
         "problems": projected.report.problems,
     }))
     .into_response()
+}
+
+/// `GET /api/upstream/key`: the TBA key, to a lead scout's device only.
+///
+/// `{"tba": key or null, "base": where to send it, "uplink_online": bool}`.
+/// `null` when the Pi has no key, which tells a device to forget its own.
+pub async fn key(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let Some(user) = sync_user(&state, &headers).await else {
+        return refuse(StatusCode::UNAUTHORIZED, "sign in to fetch upstream data");
+    };
+    if !user.roles.can_lead() {
+        return refuse(
+            StatusCode::FORBIDDEN,
+            "only a lead scout may fetch upstream data",
+        );
+    }
+    let tba = state.upstream.tba.as_ref();
+    let online = state.upstream.uplink.snapshot().classify(Utc::now()) == UplinkState::Online;
+    (
+        [(header::CACHE_CONTROL, "no-store")],
+        Json(json!({
+            "tba": tba.map(|c| c.auth_key()),
+            "base": tba.map(|c| c.base_url()),
+            "uplink_online": online,
+        })),
+    )
+        .into_response()
 }
 
 /// [`describe`] for the newest import in storage.

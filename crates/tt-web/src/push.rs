@@ -290,6 +290,11 @@ mod tests {
             let request = Request::post(path).header(header::CONTENT_TYPE, "application/json");
             Ok(self.send(request, Body::from(body)).await)
         }
+        async fn post_file(&self, path: &str, body: Vec<u8>) -> Result<Reply, String> {
+            let request =
+                Request::post(path).header(header::CONTENT_TYPE, "application/vnd.sqlite3");
+            Ok(self.send(request, Body::from(body)).await)
+        }
     }
 
     fn observation(id: &str, team: i32) -> NewObservation {
@@ -1035,6 +1040,170 @@ mod tests {
             );
             assert_eq!(refused.get("/api/sync/pull").await.unwrap().status, 401);
         }
+    }
+
+    /// TBA for 2026now, on localhost: Q2 played, and an OPR for 254.
+    async fn tba_stub() -> String {
+        use axum::extract::Path;
+        use axum::routing::get;
+
+        async fn resource(Path((event, what)): Path<(String, String)>) -> Response {
+            let body = match (event.as_str(), what.as_str()) {
+                ("2026now", "matches") => {
+                    r#"[{"key":"2026now_qm2","comp_level":"qm","set_number":1,"match_number":2,
+                    "alliances":{"red":{"score":88,"team_keys":["frc10101","frc254","frc1"]},
+                    "blue":{"score":74,"team_keys":["frc2","frc3","frc4"]}},
+                    "winning_alliance":"red"}]"#
+                }
+                ("2026now", "oprs") => r#"{"oprs":{"frc254":51.5},"dprs":{},"ccwms":{}}"#,
+                ("2026now", "rankings") => r#"{"rankings":[],"sort_order_info":[]}"#,
+                ("2026now", "coprs") => "{}",
+                _ => return StatusCode::NOT_FOUND.into_response(),
+            };
+            ([(header::ETAG, format!("W/\"{what}\""))], body).into_response()
+        }
+        let app = axum::Router::new().route("/event/{event}/{what}", get(resource));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        format!("http://{addr}")
+    }
+
+    #[tokio::test]
+    async fn a_lead_scouts_tablet_hands_the_pi_what_it_fetched_with_its_own_signal() {
+        // S7. A file: the snapshot is VACUUM INTO, and a bundle is ATTACHed.
+        let dir = std::env::temp_dir().join(format!("tt-web-courier-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let repo =
+            SqliteRepo::connect(&format!("sqlite://{}", dir.join("pi.db").display())).unwrap();
+        tt_repo_sqlite::migrate::apply(repo.pool()).await.unwrap();
+        let tba_base = tba_stub().await;
+        // The Pi's own key, and no internet of its own today.
+        let uplink = tt_upstream::Uplink::new();
+        let tba = tt_upstream::tba::TbaClient::new("the-key", uplink.clone())
+            .unwrap()
+            .with_base_url(&tba_base);
+        let state = AppState {
+            repo: Arc::new(repo),
+            season: Arc::new(tt_core::season::current_season().unwrap()),
+            upstream: Arc::new(crate::upstream::Upstream::new(
+                None,
+                Some(tba),
+                tt_upstream::first::EventFilters::all(),
+                uplink,
+            )),
+            snapshots: Default::default(),
+            tokens: Default::default(),
+        };
+        seed(&state).await;
+        let wire = |cookies: Option<String>, bearer: Option<String>| Wire {
+            state: state.clone(),
+            cookies,
+            bearer,
+        };
+        let sign_up = |name: &'static str| {
+            let form = format!(
+                "name={name}&email={name}%40example.com&team_number=10101\
+                 &password=longenough1&confirm_password=longenough1"
+            );
+            let app = router(state.clone());
+            async move {
+                let response = app
+                    .oneshot(
+                        Request::post("/api/auth/signup")
+                            .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                            .body(Body::from(form))
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                response.headers()[header::SET_COOKIE]
+                    .to_str()
+                    .unwrap()
+                    .split(';')
+                    .next()
+                    .unwrap()
+                    .to_string()
+            }
+        };
+        // Sam made the first account, so may act as lead; Kim scouts.
+        let sam = wire(Some(format!("{}; {DEVICE}", sign_up("Sam").await)), None);
+        let kim = wire(Some(sign_up("Kim").await), None);
+        (&sam)
+            .post_json("/api/device/heartbeat", String::new())
+            .await
+            .unwrap();
+
+        // The key goes to a lead scout, and to no one else.
+        let anonymous = wire(Some(DEVICE.into()), None);
+        assert_eq!(
+            (&anonymous).get("/api/upstream/key").await.unwrap().status,
+            401
+        );
+        let refused = (&kim).get("/api/upstream/key").await.unwrap();
+        assert_eq!(refused.status, 403, "{}", refused.body);
+        let given = (&sam).get("/api/upstream/key").await.unwrap();
+        assert_eq!(given.status, 200, "{}", given.body);
+        let given: serde_json::Value = serde_json::from_str(&given.body).unwrap();
+        assert_eq!(given["tba"], "the-key");
+        assert_eq!(given["base"], tba_base.as_str());
+        assert_eq!(given["uplink_online"], false);
+
+        // Friday: the tablet's copy and its token. Saturday the session is
+        // gone, and the tablet found signal in the lobby.
+        let snapshot = router(state.clone())
+            .oneshot(
+                Request::get("/api/sync/snapshot?event=2026now")
+                    .header(header::COOKIE, sam.cookies.as_deref().unwrap())
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let bytes = axum::body::to_bytes(snapshot.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let device = ClientRepo::from_bytes(&bytes).unwrap();
+        let issued = (&sam)
+            .post_json("/api/auth/token", String::new())
+            .await
+            .unwrap();
+        let issued: serde_json::Value = serde_json::from_str(&issued.body).unwrap();
+        let token = issued["token"].as_str().unwrap().to_string();
+        (&sam)
+            .post_json("/api/auth/logout", String::new())
+            .await
+            .unwrap();
+        let tablet = wire(Some(DEVICE.into()), Some(token));
+
+        let courier = tt_client::courier::Courier::new(&tablet, vec!["2026now".into()]);
+        let tick = courier
+            .tick(&device, Utc::now(), || "tablet-log".into())
+            .await
+            .unwrap();
+        assert!(tick.pi && tick.key, "{tick:?}");
+        assert_eq!(tick.stopped, None, "{tick:?}");
+        assert_eq!(
+            (tick.fetched, tick.pushed, tick.waiting),
+            (4, 4, 0),
+            "{tick:?}"
+        );
+
+        // On the Pi, in its tables, as if it had fetched them itself.
+        let played = state
+            .repo
+            .match_by_key("2026now_qm2")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!((played.red_score, played.blue_score), (Some(88), Some(74)));
+        let last = state.repo.bundle_imports(1).await.unwrap();
+        assert_eq!(last[0].user.as_deref(), Some("Sam"));
+        assert_eq!(last[0].appended, 4);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

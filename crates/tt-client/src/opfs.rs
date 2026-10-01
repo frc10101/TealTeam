@@ -40,6 +40,26 @@ pub async fn open() -> Result<ClientRepo> {
     })))
 }
 
+/// Beside it, the cursors and the events `snapshot.js` asked for, as
+/// `ttSnapshot.META` has it.
+pub const META: &str = "tealteam-sync.json";
+
+/// The events this device's copy was cut for. None when it named none, or
+/// there is no copy: the caller decides what that means.
+pub async fn snapshot_events() -> Vec<String> {
+    let text = async {
+        let dir = root().await.ok()?;
+        let file = call(&dir, "getFileHandle", &[META.into()]).await.ok()?;
+        let blob = call(&file, "getFile", &[]).await.ok()?;
+        call(&blob, "text", &[]).await.ok()?.as_string()
+    };
+    text.await
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+        .and_then(|meta| meta.get("events").cloned())
+        .and_then(|events| serde_json::from_value(events).ok())
+        .unwrap_or_default()
+}
+
 async fn root() -> Result<JsValue> {
     let global = js_sys::global();
     let secure = get(&global, "isSecureContext").is_ok_and(|v| v.is_truthy());

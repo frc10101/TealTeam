@@ -290,6 +290,7 @@ pub fn router(state: AppState) -> Router {
                 crate::bundle::MAX_BUNDLE_BYTES,
             )),
         )
+        .route("/api/upstream/key", get(crate::bundle::key))
         .route("/api/weights/reset", post(handlers::reset_weights))
         .route("/api/refused/{id}/record", post(handlers::record_refused))
         .route("/api/refused/{id}/dismiss", post(handlers::dismiss_refused))

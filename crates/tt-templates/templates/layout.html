@@ -149,6 +149,7 @@
     {% if nav.signed_in %}<script src="/static/js/persist.js" defer></script>{% endif %}
     {% if nav.signed_in || nav.offline_shell || nav.from_device %}<script src="/static/js/agenda.js" defer></script>{% endif %}
     {% if nav.signed_in || nav.offline_shell %}<script src="/static/js/token.js" data-user="{{ nav.user_id }}" defer></script>{% endif %}
+    {% if nav.signed_in || nav.offline_shell %}<script src="/static/js/courier.js" data-lead="{{ nav.can_lead }}" defer></script>{% endif %}
     {% block scripts %}{% endblock %}
   </body>
 </html>

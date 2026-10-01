@@ -36,6 +36,7 @@
 
 mod assignments;
 mod competition;
+pub mod courier;
 mod observations;
 #[cfg(target_arch = "wasm32")]
 pub mod opfs;

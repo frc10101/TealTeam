@@ -133,11 +133,31 @@ impl TbaClient {
         self
     }
 
+    /// The key this client sends. The Pi hands it to a lead scout's device,
+    /// which fetches with its own signal (S7).
+    pub fn auth_key(&self) -> &str {
+        &self.auth_key
+    }
+
+    /// Where requests go: TBA, or a test's stub.
+    pub fn base_url(&self) -> &str {
+        &self.base_url
+    }
+
     /// Read `TBA_AUTH_KEY`. Absent means the whole TBA sync is disabled, which
     /// is a supported configuration rather than an error.
+    ///
+    /// `TBA_BASE_URL` points it somewhere else, such as a browser test's stub
+    /// (S7). Unset or blank is TBA.
     pub fn from_env(uplink: Uplink) -> Option<Self> {
         let key = std::env::var("TBA_AUTH_KEY").ok()?;
-        Self::new(key.trim(), uplink).ok()
+        let client = Self::new(key.trim(), uplink).ok()?;
+        match std::env::var("TBA_BASE_URL") {
+            Ok(base) if !base.trim().is_empty() => {
+                Some(client.with_base_url(base.trim().trim_end_matches('/')))
+            }
+            _ => Some(client),
+        }
     }
 
     /// Hold `body` as what `path` last returned under `etag`, so the next

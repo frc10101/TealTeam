@@ -17,6 +17,10 @@ tt-core = { workspace = true }
 tt-repo = { workspace = true }
 tt-pages = { workspace = true }
 tt-templates = { workspace = true }
+# The FIRST and TBA clients (S4), for fetching with the device's own signal
+# (S7). They bring chrono's "clock" into this build; the tt-core boundary is
+# checked in a build of its own (check.sh).
+tt-upstream = { workspace = true }
 form_urlencoded = { workspace = true }
 # Formatting the server's timestamps; not "clock": the caller passes `now`.
 chrono = { workspace = true, features = ["alloc"] }
@@ -35,5 +39,7 @@ wasm-bindgen-futures = { workspace = true }
 
 [dev-dependencies]
 tt-repo-sqlite = { workspace = true }
+# A stub TBA for the courier's tests (S7).
+axum = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

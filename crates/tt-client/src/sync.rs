@@ -55,6 +55,8 @@ pub struct Reply {
 pub trait Transport {
     async fn get(&self, path: &str) -> std::result::Result<Reply, String>;
     async fn post_json(&self, path: &str, body: String) -> std::result::Result<Reply, String>;
+    /// A SQLite file, as `application/vnd.sqlite3`: an upstream bundle (S7).
+    async fn post_file(&self, path: &str, body: Vec<u8>) -> std::result::Result<Reply, String>;
 }
 
 /// Why a sync stopped before it was done.
@@ -240,7 +242,7 @@ impl<T: Transport> SyncClient<T> {
 }
 
 /// Why a reply other than 200 stops the sync.
-fn stopped(reply: &Reply) -> Stop {
+pub(crate) fn stopped(reply: &Reply) -> Stop {
     let error = || {
         serde_json::from_str::<JsonValue>(&reply.body)
             .ok()
@@ -578,29 +580,40 @@ fn upsert_pick(tx: &Transaction, f: &Fields) -> rusqlite::Result<bool> {
 /// as `Authorization: Bearer`, so a sync still goes as the scout once the
 /// session has run out. A worker cannot read `localStorage`; whoever owns
 /// the database is handed it by the page.
+///
+/// `timeout_ms` gives up on a request that long unanswered, as no answer: a
+/// tablet off the Pi's network can otherwise wait on its address for a
+/// minute or more.
 #[cfg(target_arch = "wasm32")]
 #[derive(Debug, Clone, Default)]
 pub struct Fetch {
     pub bearer: Option<String>,
+    pub timeout_ms: Option<u32>,
 }
 
 #[cfg(target_arch = "wasm32")]
 impl Transport for Fetch {
     async fn get(&self, path: &str) -> std::result::Result<Reply, String> {
-        fetch(path, "GET", None, self.bearer.as_deref()).await
+        fetch(self, path, "GET", None).await
     }
 
     async fn post_json(&self, path: &str, body: String) -> std::result::Result<Reply, String> {
-        fetch(path, "POST", Some(body), self.bearer.as_deref()).await
+        let body = (wasm_bindgen::JsValue::from(body), "application/json");
+        fetch(self, path, "POST", Some(body)).await
+    }
+
+    async fn post_file(&self, path: &str, body: Vec<u8>) -> std::result::Result<Reply, String> {
+        let body = js_sys::Uint8Array::from(body.as_slice()).into();
+        fetch(self, path, "POST", Some((body, "application/vnd.sqlite3"))).await
     }
 }
 
 #[cfg(target_arch = "wasm32")]
 async fn fetch(
+    options: &Fetch,
     path: &str,
     method: &str,
-    body: Option<String>,
-    bearer: Option<&str>,
+    body: Option<(wasm_bindgen::JsValue, &str)>,
 ) -> std::result::Result<Reply, String> {
     use js_sys::{Object, Reflect};
     use wasm_bindgen::JsValue;
@@ -617,12 +630,12 @@ async fn fetch(
         set(&init, "redirect", "manual".into())?;
         set(&init, "cache", "no-store".into())?;
         let headers: JsValue = Object::new().into();
-        if let Some(token) = bearer {
+        if let Some(token) = &options.bearer {
             set(&headers, "authorization", format!("Bearer {token}").into())?;
         }
-        if let Some(body) = body {
-            set(&headers, "content-type", "application/json".into())?;
-            set(&init, "body", body.into())?;
+        if let Some((body, kind)) = body {
+            set(&headers, "content-type", kind.into())?;
+            set(&init, "body", body)?;
         }
         set(&init, "headers", headers)?;
         Ok::<(), JsValue>(())
@@ -630,6 +643,14 @@ async fn fetch(
     built.map_err(|e| format!("{e:?}"))?;
 
     let global = js_sys::global();
+    // `AbortSignal.timeout`, where there is one; without it, the browser's
+    // own patience.
+    if let Some(ms) = options.timeout_ms
+        && let Ok(signal) = get(&global, "AbortSignal")
+        && let Ok(signal) = call(&signal, "timeout", &[ms.into()]).await
+    {
+        let _ = set(&init, "signal", signal);
+    }
     // A rejected fetch is the network, not the server: offline.
     let response = call(&global, "fetch", &[path.into(), init])
         .await

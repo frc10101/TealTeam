@@ -173,6 +173,9 @@ impl Transport for &Pi {
     async fn post_json(&self, path: &str, body: String) -> Result<Reply, String> {
         self.reply(path, Some(body))
     }
+    async fn post_file(&self, path: &str, _: Vec<u8>) -> Result<Reply, String> {
+        self.reply(path, Some("<a bundle>".into()))
+    }
 }
 
 fn recorded(schema: i64, ids: &[&str]) -> Result<(u16, JsonValue), &'static str> {
