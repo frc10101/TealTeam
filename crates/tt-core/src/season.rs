@@ -25,7 +25,7 @@
 //! (L11/L12) without touching the schema.
 
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 
 use crate::error::{DomainError, Result};
 
@@ -429,9 +429,12 @@ fn leak(key: &str) -> &'static str {
 // ── Weight overrides ────────────────────────────────────────────────────────
 
 /// Runtime point-value overrides, keyed by `(field_key, option_key)`.
+///
+/// A `BTreeMap`, so two equal sets of overrides print and iterate alike: the
+/// round-trip tests compare the server's answer with the device's (C11).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct WeightOverrides {
-    values: HashMap<(String, String), i64>,
+    values: BTreeMap<(String, String), i64>,
 }
 
 impl WeightOverrides {

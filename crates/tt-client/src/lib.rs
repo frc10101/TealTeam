@@ -7,8 +7,9 @@
 //! to what this viewer may see, written to OPFS as `tealteam.sqlite3` by
 //! `static/js/snapshot.js`. It is this build's schema, migrations table and
 //! triggers included, so nothing here creates or migrates a table. The SQL in
-//! each module is `tt_repo_sqlite`'s, statement for statement, and the
-//! round-trip tests run both against one snapshot (C11 widens them).
+//! each module is `tt_repo_sqlite`'s, statement for statement. The tests in
+//! `tests/round_trip.rs` (C11) hold them to it: every trait method runs on
+//! both, from one database, and every answer and every table must match.
 //!
 //! # Why the whole file is held in memory
 //!
