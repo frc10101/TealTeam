@@ -16,6 +16,7 @@ mod coach;
 mod config;
 mod errors;
 mod events;
+mod graph;
 mod handlers;
 mod notes;
 mod picklist;

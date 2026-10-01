@@ -15,6 +15,8 @@ use askama::Template;
 
 mod coach;
 pub use coach::{AllianceView, CoachCard, CoachTeam, DriveCoachPage};
+mod graph;
+pub use graph::{Chip, GraphPage, TableRow, TeamTable};
 mod notes;
 pub use notes::{FilterOption, NoteEntry, NotesPage};
 mod picklist;

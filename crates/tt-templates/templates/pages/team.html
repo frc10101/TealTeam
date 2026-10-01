@@ -65,6 +65,7 @@
             {% for line in section.fields %}<dt>{{ line.label }}</dt><dd>{{ line.text }}</dd>{% endfor %}
           </dl>
         {% endfor %}
+        <p><a href="{{ here.graph_href }}">Match by match, on Graph</a></p>
       {% endif %}
     </div>
   </section>

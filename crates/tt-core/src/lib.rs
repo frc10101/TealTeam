@@ -14,6 +14,7 @@ pub mod coach;
 pub mod connectivity;
 pub mod error;
 pub mod form;
+pub mod graph;
 pub mod link;
 pub mod matches;
 pub mod notes;

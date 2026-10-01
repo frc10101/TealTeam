@@ -400,6 +400,68 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
 .plain-links { margin: 0; padding-left: 1.25rem; display: grid; gap: 0.25rem; }
 .plain-links a { display: inline-flex; min-height: var(--tap); align-items: center; }
 
+/* ── Graph (U21) ─────────────────────────────────────────────────────────── */
+
+/* One colour per team, in this order and never cycled: eight hues checked
+   for colour-blind separation and 3:1 contrast on the card's --gray-900. A
+   ninth team would need a colour nobody can tell apart, hence the limit. */
+:root {
+  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+  --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
+}
+[data-slot="1"] { --series: var(--series-1); } [data-slot="2"] { --series: var(--series-2); }
+[data-slot="3"] { --series: var(--series-3); } [data-slot="4"] { --series: var(--series-4); }
+[data-slot="5"] { --series: var(--series-5); } [data-slot="6"] { --series: var(--series-6); }
+[data-slot="7"] { --series: var(--series-7); } [data-slot="8"] { --series: var(--series-8); }
+
+/* A chip is a checkbox you tap: lit when on. The box itself is kept for the
+   keyboard and screen readers, out of sight. */
+.graph-form { display: grid; gap: 1rem; }
+.chips { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: 0.5rem; }
+.chips legend { padding: 0; margin-bottom: 0.5rem; font-weight: 600; }
+.chips legend .hint { font-weight: 400; margin-left: 0.25rem; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.chip {
+  position: relative; display: inline-flex; align-items: center; gap: 0.5rem;
+  min-height: var(--tap); padding: 0 0.875rem; border: 1px solid var(--gray-700);
+  border-radius: 999px; color: var(--gray-300); cursor: pointer; user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.chip input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+.chip:has(input:checked) { border-color: var(--teal-500); background: var(--gray-800); color: var(--gray-100); }
+.chip:has(input:focus-visible) { outline: 2px solid var(--teal-300); outline-offset: 2px; }
+.more-chips summary { min-height: var(--tap); display: flex; align-items: center; cursor: pointer; color: var(--teal-300); }
+.more-chips .chip-row { padding-top: 0.25rem; }
+
+/* The chips are the legend: a team's swatch is its line's colour, a metric's
+   is its line's style. Shown only when on, since only then is it drawn. */
+.swatch { display: none; flex: none; }
+.chip:has(input:checked) .swatch, .graph-tables .swatch, .graph-readout .swatch { display: inline-block; }
+[data-kind="team"] .swatch, .graph-tables .swatch, .graph-readout .swatch {
+  width: 0.875rem; height: 0.875rem; border-radius: 50%; background: var(--series, currentColor);
+}
+.graph-tables .swatch { margin-right: 0.5rem; vertical-align: -0.0625rem; }
+[data-kind="metric"] .swatch { width: 1.5rem; border-top: 3px solid currentColor; }
+[data-kind="metric"] [data-slot="2"] .swatch { border-top-style: dashed; }
+[data-kind="metric"] [data-slot="3"] .swatch { border-top-style: dotted; }
+
+.graph-figure { margin: 0; display: grid; gap: 0.5rem; min-width: 0; }
+.graph-plot { min-height: 2rem; min-width: 0; }
+.graph-readout { overflow-x: auto; }
+.graph-readout tbody th { white-space: nowrap; }
+#graph-status:empty { display: none; }
+.graph-readout .data-table th, .graph-readout .data-table td { padding: 0.375rem 0.5rem; }
+.graph-readout caption { text-align: left; font-size: 0.875rem; color: var(--gray-300); padding-bottom: 0.25rem; }
+.graph-readout .swatch { margin-right: 0.375rem; }
+.graph-readout .line-swatch { display: inline-block; width: 1.25rem; margin-right: 0.375rem; vertical-align: middle; border-top: 2px solid currentColor; }
+.graph-readout [data-slot="2"].line-swatch { border-top-style: dashed; }
+.graph-readout [data-slot="3"].line-swatch { border-top-style: dotted; }
+.graph-tables summary { min-height: var(--tap); display: flex; align-items: center; cursor: pointer; color: var(--teal-300); }
+.graph-tables #graph-tables { overflow-x: auto; }
+.graph-tables .data-table { margin-bottom: 1rem; }
+.graph-tables caption { text-align: left; font-weight: 600; padding: 0.5rem 0; }
+.graph-source { margin: 0; }
+
 /* ── Notes (U22) ─────────────────────────────────────────────────────────── */
 
 .note-filters { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); }

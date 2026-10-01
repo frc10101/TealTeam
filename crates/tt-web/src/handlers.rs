@@ -31,6 +31,7 @@ use crate::auth::{
 };
 use crate::coach;
 use crate::events::{self, EventContext, EventParam};
+use crate::graph;
 use crate::notes;
 use crate::picklist;
 use crate::ranking::{self, RankingParams};
@@ -636,6 +637,20 @@ pub async fn notes(
 ) -> Response {
     let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
     html(notes::page(&state, nav, &user, &context, &query).await)
+}
+
+// ── Graph (U21) ─────────────────────────────────────────────────────────────
+
+/// `GET /graph`: chosen teams' matches, one line per metric. The query is a
+/// list, not a map: `team` and `metric` repeat.
+pub async fn graph(
+    State(state): State<AppState>,
+    Auth(user): Auth,
+    EventParam(requested): EventParam,
+    Query(query): Query<Vec<(String, String)>>,
+) -> Response {
+    let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
+    html(graph::page(&state, nav, &context, &query).await)
 }
 
 // ── Pick list (U20) ─────────────────────────────────────────────────────────

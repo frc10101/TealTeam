@@ -1,0 +1,103 @@
+{#
+  The graph view (U21). Teams and metrics are chips: tap one to put it on the
+  chart or take it off. Tap, not drag: drag-to-add is a desktop metaphor, and
+  native drag and drop is dead on a phone (RI 2B). Each chip is a checkbox in a
+  GET form, so a chart is a URL, and without JavaScript the Show button draws
+  it as tables. static/js/graph.js redraws in place instead, from data-graph,
+  which holds every team on offer.
+
+  A team chip's swatch is its line's colour and a metric chip's is its line's
+  style, so the chips are the legend.
+#}
+{% extends "layout.html" %}
+{% block content %}
+{% for error in errors %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endfor %}
+
+<section class="card">
+  <div class="card-header">
+    <h1>Graph{% if !event_name.is_empty() %} · {{ event_name }}{% endif %}</h1>
+  </div>
+  <div class="card-body stack">
+    {% if !unavailable.is_empty() %}
+      <p>{{ unavailable }}</p>
+    {% else %}
+      <form method="get" class="graph-form" id="graph-form">
+        {% if !nav.event.selected.is_empty() %}<input type="hidden" name="event" value="{{ nav.event.selected }}">{% endif %}
+        <input type="hidden" name="chosen" value="1">
+
+        <fieldset class="chips" data-kind="team" data-max="{{ max_teams }}">
+          <legend>Teams <span class="hint">tap to show or hide, up to {{ max_teams }}</span></legend>
+          <div class="chip-row">
+            {% for chip in teams %}{% call chip_input(chip, "team") %}{% endcall %}{% endfor %}
+          </div>
+          {% if !more_teams.is_empty() %}
+            <details class="more-chips">
+              <summary>More teams ({{ more_teams.len() }})</summary>
+              <div class="chip-row">
+                {% for chip in more_teams %}{% call chip_input(chip, "team") %}{% endcall %}{% endfor %}
+              </div>
+            </details>
+          {% endif %}
+        </fieldset>
+
+        {# The chart sits between the teams and the metrics, so on a phone it
+           is on screen while either is tapped. #}
+        {% for notice in notices %}<p class="hint" role="status">{{ notice }}</p>{% endfor %}
+        <p class="hint" id="graph-status" role="status" aria-live="polite">{{ prompt }}</p>
+        <figure class="graph-figure">
+          <div id="graph" class="graph-plot" data-graph="{{ data }}"></div>
+          <div id="graph-readout" class="graph-readout" hidden></div>
+          <figcaption class="hint">Across: each team's scouted matches in order, first to last. Tap the chart to read a match.</figcaption>
+        </figure>
+
+        <fieldset class="chips" data-kind="metric" data-max="{{ max_metrics }}">
+          <legend>Metrics <span class="hint">up to {{ max_metrics }}, on one scale</span></legend>
+          <div class="chip-row">
+            {% for chip in metrics %}{% call chip_input(chip, "metric") %}{% endcall %}{% endfor %}
+          </div>
+        </fieldset>
+
+        <div class="chip-row">
+          <label class="chip">
+            <input type="checkbox" name="span" value="season"{% if season %} checked{% endif %}>
+            <span>Every event this season</span>
+          </label>
+          <button type="submit" class="btn btn-secondary" data-graph-show>Show</button>
+        </div>
+      </form>
+
+      <details class="graph-tables"{% if tables.is_empty() %} hidden{% endif %}>
+        <summary>The numbers</summary>
+        <div id="graph-tables">
+          {% for table in tables %}
+            <table class="data-table">
+              <caption><span class="swatch" data-slot="{{ table.slot }}"></span>{{ table.number }}{% if !table.name.is_empty() %} · {{ table.name }}{% endif %}</caption>
+              <thead><tr><th scope="col">Match</th>{% for heading in headings %}<th scope="col" class="num">{{ heading }}</th>{% endfor %}</tr></thead>
+              <tbody>
+                {% for row in table.rows %}
+                  <tr><th scope="row">{{ row.label }}</th>{% for value in row.values %}<td class="num">{{ value }}</td>{% endfor %}</tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% endfor %}
+        </div>
+      </details>
+
+      <p class="muted graph-source">{{ source }}</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
+
+{% macro chip_input(chip, name) %}
+<label class="chip" data-slot="{{ chip.slot }}" title="{{ chip.title }}">
+  <input type="checkbox" name="{{ name }}" value="{{ chip.value }}"{% if chip.on %} checked{% endif %}>
+  <span class="swatch" aria-hidden="true"></span><span>{{ chip.label }}</span>
+</label>
+{% endmacro %}
+
+{% block scripts %}{% if unavailable.is_empty() %}
+<link rel="stylesheet" href="/static/vendor/uplot/uPlot.min.css">
+<script src="/static/vendor/uplot/uPlot.iife.min.js" defer></script>
+<script src="/static/js/graph.js" defer></script>
+{% endif %}{% endblock %}

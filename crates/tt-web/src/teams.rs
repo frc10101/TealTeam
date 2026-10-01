@@ -191,6 +191,7 @@ pub async fn page(
         notes: note_lines(state, viewer, &observed, &matches),
         notes_team: viewer.team_number,
         notes_href: crate::notes::href(&event.key, number),
+        graph_href: crate::graph::href(&event.key, number),
         matches: matches
             .iter()
             .filter_map(|m| TeamMatchLine::new(m, number))

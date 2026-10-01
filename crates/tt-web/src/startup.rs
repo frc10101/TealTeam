@@ -231,6 +231,7 @@ pub fn router(state: AppState) -> Router {
         .route("/submission", get(handlers::submission))
         .route("/teams", get(handlers::team))
         .route("/notes", get(handlers::notes))
+        .route("/graph", get(handlers::graph))
         .route("/lead-scout", get(handlers::lead_scout))
         .route("/lead-scout/assignments", get(handlers::assignments))
         .route("/lead-scout/submissions/{id}", get(handlers::review_page))
@@ -3960,6 +3961,213 @@ mod flow_tests {
 
         let signed_out = get(&state, "/notes", None).await;
         assert_eq!(signed_out.status(), StatusCode::SEE_OTHER);
+    }
+
+    // ── Graph view (U21) ────────────────────────────────────────────────────
+
+    /// `ranked`, with Kim's observation of 254 moved to Q1: 254 has a point in
+    /// each match, 9 pieces in teleop in Q2 and 1 in Q1.
+    async fn graphed() -> (AppState, String) {
+        let (state, sam) = ranked().await;
+        sqlx::query("UPDATE observations SET match_key = '2026now_qm1' WHERE id = 3")
+            .execute(state.repo.pool())
+            .await
+            .expect("into Q1");
+        (state, sam)
+    }
+
+    /// The `data-graph` JSON, unescaped.
+    fn graph_data(body: &str) -> serde_json::Value {
+        let start = body.find("data-graph=\"").expect("data-graph") + "data-graph=\"".len();
+        let end = start + body[start..].find('"').expect("closed");
+        serde_json::from_str(
+            &body[start..end]
+                .replace("&#34;", "\"")
+                .replace("&#38;", "&"),
+        )
+        .expect("json")
+    }
+
+    #[tokio::test]
+    async fn the_graph_starts_with_the_best_scouted_teams_points_and_says_its_sources() {
+        let (state, sam) = graphed().await;
+        let body = text(get(&state, "/graph?event=2026now", Some(&sam)).await).await;
+        assert!(
+            body.contains(r#"<a href="/graph?event=2026now">Graph</a>"#),
+            "in the nav"
+        );
+        assert!(body.contains("Showing the team with the most scouting points here."));
+        assert!(
+            body.contains(r#"<label class="chip" data-slot="1" title="254 · Team 254">"#),
+            "{body}"
+        );
+        assert!(body.contains(r#"name="team" value="254" checked>"#));
+        assert!(body.contains(r#"name="metric" value="points" checked>"#));
+        assert!(
+            body.contains(r#"name="metric" value="f.teleop_scored">"#),
+            "offered, not on"
+        );
+        assert!(
+            !body.contains(r#"value="f.starting_position""#)
+                && !body.contains(r#"value="f.notes""#),
+            "no points, no numbers"
+        );
+        assert!(
+            !body.contains(r#"value="opr""#),
+            "nothing synced from TBA, so no TBA chip"
+        );
+        assert!(body.contains(
+            "Scouting: 2 approved observations at this event. 1 more is waiting for review. \
+             Nothing from The Blue Alliance has been synced yet."
+        ));
+        assert!(body.contains(r#"<script src="/static/js/graph.js" defer></script>"#));
+        assert!(
+            body.contains(
+                r#"<script src="/static/vendor/uplot/uPlot.iife.min.js" defer></script>"#
+            )
+        );
+
+        // The table, for reading without the chart: Q1 then Q2.
+        let none = tt_core::season::WeightOverrides::new();
+        let q1 = scored(&state, FEW_ANSWERS, &none);
+        let q2 = scored(&state, GOOD_ANSWERS, &none);
+        assert!(body.contains(&format!(
+            r#"<tr><th scope="row">Q1</th><td class="num">{q1}</td></tr>"#
+        )));
+        assert!(body.contains(&format!(
+            r#"<tr><th scope="row">Q2</th><td class="num">{q2}</td></tr>"#
+        )));
+
+        // The script's data holds every metric for 254, in match order.
+        let data = graph_data(&body);
+        let teams = data["teams"].as_array().unwrap();
+        assert_eq!(teams.len(), 1, "10101's only observation is pending");
+        assert_eq!(teams[0]["number"], 254);
+        let keys: Vec<&str> = data["metrics"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| m["key"].as_str().unwrap())
+            .collect();
+        let teleop = keys.iter().position(|k| *k == "f.teleop_scored").unwrap();
+        let points = teams[0]["points"].as_array().unwrap();
+        assert_eq!(points[0]["match"], "Q1");
+        assert_eq!(points[0]["v"][teleop], 1.0);
+        assert_eq!(points[1]["match"], "Q2");
+        assert_eq!(points[1]["v"][teleop], 9.0);
+        assert_eq!(points[1]["n"], 1);
+
+        let signed_out = get(&state, "/graph", None).await;
+        assert_eq!(signed_out.status(), StatusCode::SEE_OTHER);
+    }
+
+    #[tokio::test]
+    async fn the_graph_draws_what_the_url_chose_up_to_its_limits() {
+        let (state, sam) = graphed().await;
+        let stats = tt_core::records::TeamEventStats {
+            team_number: 254,
+            event_key: "2026now".into(),
+            opr: Some(41.256),
+            synced_at: Some(chrono::Utc::now()),
+            ..Default::default()
+        };
+        state
+            .repo
+            .upsert_team_stats(&stats, chrono::Utc::now())
+            .await
+            .expect("stats");
+
+        // An unknown team is ignored; OPR is per event, so flat.
+        let page = "/graph?event=2026now&chosen=1&team=9999&team=254\
+                    &metric=f.teleop_scored&metric=opr";
+        let body = text(get(&state, page, Some(&sam)).await).await;
+        assert!(!body.contains("Showing the team"), "the URL chose");
+        assert!(
+            body.contains(r#"<label class="chip" data-slot="2" title="OPR (TBA, per event)">"#)
+        );
+        assert!(body.contains(
+            r#"<th scope="col" class="num">Pieces scored in teleop</th><th scope="col" class="num">OPR (TBA, per event)</th>"#
+        ));
+        assert!(body.contains(
+            r#"<tr><th scope="row">Q1</th><td class="num">1</td><td class="num">41.26</td></tr>"#
+        ));
+        assert!(body.contains(
+            r#"<tr><th scope="row">Q2</th><td class="num">9</td><td class="num">41.26</td></tr>"#
+        ));
+        assert!(body.contains("OPR, DPR, and CCWM: The Blue Alliance, synced just now."));
+
+        let four = "/graph?event=2026now&chosen=1&team=254&metric=points\
+                    &metric=f.auto_scored&metric=f.teleop_scored&metric=f.penalties";
+        let body = text(get(&state, four, Some(&sam)).await).await;
+        assert!(body.contains("Only 3 metrics fit on one chart, so 1 more was left off."));
+        assert!(!body.contains(r#"name="metric" value="f.penalties" checked>"#));
+
+        // Everything tapped off: an empty chart that says what to tap, not
+        // the defaults back again.
+        let body = text(
+            get(
+                &state,
+                "/graph?event=2026now&chosen=1&metric=points",
+                Some(&sam),
+            )
+            .await,
+        )
+        .await;
+        assert!(body.contains(">Tap a team to draw it.</p>"), "{body}");
+        assert!(body.contains(r#"<label class="chip" data-slot="0" title="254 · Team 254">"#));
+        assert!(body.contains(r#"<details class="graph-tables" hidden>"#));
+    }
+
+    #[tokio::test]
+    async fn the_graph_runs_a_team_on_across_the_seasons_events() {
+        use tt_core::matches::CompLevel;
+        use tt_core::records::MatchRecord;
+        let (state, sam) = graphed().await;
+        seed_event(&state, "2026early", "Earlier", (-30, -28), &[254]).await;
+        let record = MatchRecord {
+            key: "2026early_qm7".into(),
+            event_key: "2026early".into(),
+            comp_level: CompLevel::Qualification,
+            set_number: 1,
+            match_number: 7,
+            red: [Some(254), None, None],
+            blue: [None, None, None],
+            red_score: None,
+            blue_score: None,
+            winner: None,
+            played: true,
+            scheduled_at: None,
+            actual_at: None,
+        };
+        state
+            .repo
+            .upsert_match(&record, chrono::Utc::now())
+            .await
+            .expect("match");
+        sqlx::query(
+            "INSERT INTO observations (client_record_id, match_key, team_number, event_key, \
+             alliance, payload, schema_version, review_state, observed_at, created_at, updated_at) \
+             VALUES ('early-1', '2026early_qm7', 254, '2026early', 'red', \
+             '{\"teleop_scored\":20}', 1, 'approved', 'x', 'x', 'x')",
+        )
+        .execute(state.repo.pool())
+        .await
+        .expect("an earlier observation");
+
+        let page = "/graph?event=2026now&chosen=1&team=254&metric=f.teleop_scored";
+        let one = text(get(&state, page, Some(&sam)).await).await;
+        assert!(!one.contains("20</td>"), "this event only");
+
+        let body = text(get(&state, &format!("{page}&span=season"), Some(&sam)).await).await;
+        assert!(body.contains(r#"name="span" value="season" checked>"#));
+        let early = body
+            .find(r#"<tr><th scope="row">EARLY Q7</th><td class="num">20</td></tr>"#)
+            .expect("the earlier event, first");
+        let now = body
+            .find(r#"<tr><th scope="row">NOW Q1</th><td class="num">1</td></tr>"#)
+            .expect("then this one");
+        assert!(early < now);
+        assert!(body.contains("Scouting: 3 approved observations at 2 events."));
     }
 
     #[tokio::test]

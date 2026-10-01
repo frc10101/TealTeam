@@ -106,6 +106,8 @@ pub struct TeamAtEvent {
     pub notes_team: Option<i32>,
     /// The notes view narrowed to this team (U22).
     pub notes_href: String,
+    /// The graph view showing this team (U21).
+    pub graph_href: String,
     pub matches: Vec<TeamMatchLine>,
 }
 
