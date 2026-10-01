@@ -216,6 +216,29 @@
     </div>
   </section>
 {% endif %}
+
+{# C8: every robot still to come, so a scout whose network drops still knows
+   where to look. static/js/agenda.js keeps data-agenda on the device and
+   draws the same rows on the offline page. #}
+{% if !upcoming.is_empty() %}
+  <section class="card" id="my-assignments">
+    <div class="card-header"><h2>Your assignments</h2></div>
+    <div class="card-body stack">
+      <p class="hint">Assigned to you or this tablet, in playing order. If the network drops, this list stays here.</p>
+      <ol class="duties">
+        {% for duty in upcoming %}
+          <li>
+            <a class="duty" href="{{ duty.href }}"{% if duty.current %} aria-current="true"{% endif %}>
+              <span class="duty-when"><strong>{{ duty.label }} · {{ duty.station }}</strong>{% if !duty.time.is_empty() %}<small>{{ duty.time }}</small>{% endif %}</span>
+              <span class="duty-team"><strong>{{ duty.team }}</strong>{% if !duty.team_name.is_empty() %}<small>{{ duty.team_name }}</small>{% endif %}</span>
+            </a>
+          </li>
+        {% endfor %}
+      </ol>
+    </div>
+  </section>
+{% endif %}
+{% if !agenda.is_empty() %}<div id="agenda-keep" data-agenda="{{ agenda }}" hidden></div>{% endif %}
 {% endblock %}
 
 {% block scripts %}<script src="/static/js/counter.js" defer></script>

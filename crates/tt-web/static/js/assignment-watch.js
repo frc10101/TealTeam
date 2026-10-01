@@ -82,6 +82,8 @@
       return;
     }
     if (change.entity !== "assignment") return;
+    // agenda.js marks the copy kept for the offline page out of date (C8).
+    document.dispatchEvent(new CustomEvent("tt:assignment-change", { detail: change }));
     var ours = change.op === "upsert" && mine(change.row);
     if (change.entity_pk === watch.current) {
       if (!ours) lost = change.entity_pk;

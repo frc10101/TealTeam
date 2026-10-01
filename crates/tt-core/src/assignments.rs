@@ -243,6 +243,10 @@ pub struct Agenda {
     /// order -- a match can end mid-form, and an unrecorded robot is a hole
     /// in the data.
     pub missed: Vec<(String, i32)>,
+    /// Every assignment in an unplayed match the scout has not recorded, in
+    /// playing order, `next` first. The whole list goes onto the page so a
+    /// scout who loses the network still knows where to look (C8).
+    pub upcoming: Vec<(String, i32)>,
 }
 
 impl Agenda {
@@ -284,8 +288,9 @@ pub fn agenda(
             let duty = (a.match_key.clone(), a.team_number);
             if m.played {
                 agenda.missed.push(duty);
-            } else if agenda.next.is_none() {
-                agenda.next = Some(duty);
+            } else {
+                agenda.next.get_or_insert_with(|| duty.clone());
+                agenda.upcoming.push(duty);
             }
         }
     }
@@ -967,8 +972,11 @@ mod tests {
             "Q3 before Q4; Q2 is someone else's tablet"
         );
 
+        assert_eq!(agenda.upcoming, [key(3, 2), key(4, 5)], "the whole list");
+
         let agenda = super::agenda(&schedule(), &assignments, &[scout(1)], &[key(3, 2)]);
         assert_eq!(agenda.next, Some(key(4, 5)), "once Q3 is recorded, Q4");
+        assert_eq!(agenda.upcoming, [key(4, 5)]);
     }
 
     #[test]
@@ -987,6 +995,7 @@ mod tests {
         let agenda = agenda(&schedule(), &assignments, &[scout(1)], &[]);
         assert_eq!(agenda.next, Some(key(2, 1)));
         assert_eq!(agenda.missed, [key(1, 4)]);
+        assert_eq!(agenda.upcoming, [key(2, 1)], "missed is not upcoming");
         assert_eq!(agenda.open_in("2026mabil_qm1"), Some(4));
         assert_eq!(agenda.open_in("2026mabil_qm3"), None);
 

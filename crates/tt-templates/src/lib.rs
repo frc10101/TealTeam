@@ -1105,6 +1105,12 @@ pub struct SubmissionPage {
     pub next_duty: Option<MatchLink>,
     /// Assigned robots in played matches the scout has not recorded.
     pub missed: Vec<MatchLink>,
+    /// Every robot the scout is assigned in a match still to come (C8), so
+    /// the list is on the page when the network is not.
+    pub upcoming: Vec<DutyRow>,
+    /// The same list and the missed ones, as JSON, for `agenda.js` to keep on
+    /// the device and show on the offline page. Empty with no event to scout.
+    pub agenda: String,
     /// The escape hatch (L3): type a team number instead of finding it.
     pub keypad: Option<Keypad>,
     /// Records of this scout's the lead scout declined, not yet redone (L10).
@@ -1120,6 +1126,22 @@ pub struct AssignedCard {
     pub where_: String,
     /// The same match with the robot picker open.
     pub choose_href: String,
+}
+
+/// One robot on a scout's list (C8): "Q14 · Red 2 · 1678 · 1:30 PM CDT".
+#[derive(Debug, Clone)]
+pub struct DutyRow {
+    /// `"Q14"`.
+    pub label: String,
+    /// `"Red 2"`.
+    pub station: String,
+    pub team: i32,
+    pub team_name: String,
+    /// When the match is scheduled, on the event's clock; empty when unknown.
+    pub time: String,
+    pub href: String,
+    /// The robot this page is showing.
+    pub current: bool,
 }
 
 /// A team-number field. The event's roster feeds a `<datalist>`, which gives
@@ -1773,6 +1795,8 @@ mod tests {
             off_assignment: String::new(),
             next_duty: None,
             missed: Vec::new(),
+            upcoming: Vec::new(),
+            agenda: String::new(),
             keypad: None,
             declined: Vec::new(),
         }

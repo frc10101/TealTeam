@@ -23,7 +23,7 @@ use tt_core::records::MatchRecord;
 use tt_core::user::User;
 use tt_repo::{NewObservation, Recorded, Repo, RepoError};
 use tt_templates::{
-    AssignedCard, Draft, Keypad, MatchLink, MatchPicker, Nav, RosterEntry, ScoutForm,
+    AssignedCard, Draft, DutyRow, Keypad, MatchLink, MatchPicker, Nav, RosterEntry, ScoutForm,
     SubmissionPage, choose_href, draft_key, scout_href,
 };
 
@@ -131,6 +131,8 @@ pub async fn page(
         off_assignment: String::new(),
         next_duty: None,
         missed: Vec::new(),
+        upcoming: Vec::new(),
+        agenda: String::new(),
         keypad: None,
         declined: Vec::new(),
     };
@@ -313,18 +315,61 @@ pub async fn page(
             .find(|t| t.number == number)
             .map(|t| t.name.clone())
     };
-    if following && let Some(team) = team {
-        let station = [("Red", &record.red), ("Blue", &record.blue)]
-            .into_iter()
-            .find_map(|(side, slots)| {
-                let i = slots.iter().position(|s| *s == Some(team))?;
-                Some(format!("{side} {}", i + 1))
+    // C8: the whole list, on the page and kept on the device, so a scout
+    // whose network drops still knows which robot is next.
+    let zone = event.zone();
+    let duty_row = |(key, duty_team): &(String, i32)| {
+        let m = matches.iter().find(|m| m.key == *key)?;
+        Some(DutyRow {
+            label: m.label(),
+            station: station(m, *duty_team),
+            team: *duty_team,
+            team_name: team_name(*duty_team).unwrap_or_default(),
+            time: m
+                .scheduled_at
+                .map(|at| tt_core::timezone::clock_time(zone, at))
+                .unwrap_or_default(),
+            href: scout_href(&event.key, key, Some(*duty_team)),
+            current: *key == record.key && team == Some(*duty_team),
+        })
+    };
+    page.upcoming = agenda.upcoming.iter().filter_map(duty_row).collect();
+    let kept = |rows: &[DutyRow]| -> Vec<serde_json::Value> {
+        rows.iter()
+            .map(|d| {
+                serde_json::json!({
+                    "label": d.label,
+                    "station": d.station,
+                    "team": d.team,
+                    "name": d.team_name,
+                    "time": d.time,
+                })
             })
-            .unwrap_or_default();
+            .collect()
+    };
+    let missed_rows: Vec<DutyRow> = agenda.missed.iter().filter_map(duty_row).collect();
+    page.agenda = serde_json::json!({
+        "user": user.id,
+        "scout": user.name,
+        "device": device_id,
+        "event": event.key,
+        "event_name": event.name,
+        "pks": agenda
+            .upcoming
+            .iter()
+            .chain(&agenda.missed)
+            .map(|(key, team)| format!("{key}:{team}"))
+            .collect::<Vec<_>>(),
+        "upcoming": kept(&page.upcoming),
+        "missed": kept(&missed_rows),
+    })
+    .to_string();
+
+    if following && let Some(team) = team {
         page.assigned = Some(AssignedCard {
             team,
             team_name: team_name(team).unwrap_or_default(),
-            where_: format!("{label} · {station}"),
+            where_: format!("{label} · {}", station(record, team)),
             choose_href: choose_href(&event.key, &record.key),
         });
     } else {
@@ -396,6 +441,17 @@ pub async fn page(
 
     page.errors = errors;
     page
+}
+
+/// `"Red 2"`: where `team` stands in `record`, or empty when it is not in it.
+fn station(record: &MatchRecord, team: i32) -> String {
+    [("Red", &record.red), ("Blue", &record.blue)]
+        .into_iter()
+        .find_map(|(side, slots)| {
+            let i = slots.iter().position(|s| *s == Some(team))?;
+            Some(format!("{side} {}", i + 1))
+        })
+        .unwrap_or_default()
 }
 
 /// The match a scout most likely wants: the first not yet played, or the last

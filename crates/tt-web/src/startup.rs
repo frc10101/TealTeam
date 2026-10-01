@@ -711,6 +711,10 @@ mod flow_tests {
         let signed_in = text(get(&state, "/offline", Some(&cookie)).await).await;
         assert_eq!(anonymous, signed_in);
         assert!(!signed_in.contains("Sam"));
+        // C8: where agenda.js draws the scout's kept list, from this device.
+        assert!(signed_in.contains(r#"id="offline-agenda""#));
+        assert!(signed_in.contains(r#"src="/static/js/agenda.js""#));
+        assert!(js.contains(r#""/static/js/agenda.js""#), "precached");
 
         // Every page offers the worker; the script decides whether it may.
         let page = text(get(&state, "/", Some(&cookie)).await).await;
@@ -1788,6 +1792,82 @@ mod flow_tests {
         assert_eq!(watch["user"], 1);
         assert_eq!(watch["labels"]["2026now_qm2"], "Q2");
         assert!(scout.contains("/static/js/assignment-watch.js"));
+    }
+
+    #[tokio::test]
+    async fn the_scouts_whole_list_is_on_the_page_and_ready_to_keep_on_the_device() {
+        // C8. Sam (user 1) has 254 in Q2 and 10101 in Q3 to come, and 254 in
+        // Q1, which was played without them recording it.
+        let (state, sam) = scouting().await;
+        seed_match(&state, 3, false).await;
+        for (number, team) in [(1, 254), (2, 254), (3, 10101)] {
+            sqlx::query(
+                "INSERT INTO scout_assignments (match_key, team_number, event_key, scouter_id, \
+                 created_at, updated_at) VALUES (?, ?, '2026now', 1, 'x', 'x')",
+            )
+            .bind(format!("2026now_qm{number}"))
+            .bind(team)
+            .execute(state.repo.pool())
+            .await
+            .unwrap();
+        }
+
+        let scout = text(get(&state, "/submission?event=2026now", Some(&sam)).await).await;
+        let list = scout
+            .split(r#"id="my-assignments""#)
+            .nth(1)
+            .expect("the list")
+            .split("</section>")
+            .next()
+            .unwrap();
+        let q2 = list.find("Q2 · Red 2").expect("Q2");
+        let q3 = list.find("Q3 · Red 1").expect("Q3");
+        assert!(q2 < q3, "in playing order: {list}");
+        assert!(
+            list.contains(
+                r#"href="/submission?event=2026now&#38;match=2026now_qm3&#38;team=10101""#
+            ),
+            "each row opens its robot: {list}"
+        );
+        assert_eq!(
+            list.matches(r#"aria-current="true""#).count(),
+            1,
+            "Q2 is on screen"
+        );
+        assert!(!list.contains("Q1"), "played: under Still to record");
+
+        let kept = scout
+            .split(r#"data-agenda=""#)
+            .nth(1)
+            .and_then(|rest| rest.split('"').next())
+            .expect("data to keep")
+            .replace("&#34;", "\"")
+            .replace("&quot;", "\"")
+            .replace("&#38;", "&")
+            .replace("&amp;", "&")
+            .replace("&#39;", "'");
+        let kept: serde_json::Value = serde_json::from_str(&kept).expect(&kept);
+        assert_eq!(kept["user"], 1);
+        assert_eq!(kept["scout"], "Sam");
+        assert_eq!(kept["event"], "2026now");
+        assert_eq!(kept["upcoming"][0]["label"], "Q2");
+        assert_eq!(kept["upcoming"][0]["team"], 254);
+        assert_eq!(kept["upcoming"][1]["station"], "Red 1");
+        assert_eq!(kept["missed"][0]["label"], "Q1");
+        assert_eq!(
+            kept["pks"],
+            serde_json::json!(["2026now_qm2:254", "2026now_qm3:10101", "2026now_qm1:254"])
+        );
+        assert!(scout.contains(r#"src="/static/js/agenda.js""#));
+
+        // Nothing assigned: an empty list to keep, replacing an older one.
+        sqlx::query("DELETE FROM scout_assignments")
+            .execute(state.repo.pool())
+            .await
+            .unwrap();
+        let scout = text(get(&state, "/submission?event=2026now", Some(&sam)).await).await;
+        assert!(!scout.contains(r#"id="my-assignments""#));
+        assert!(scout.contains("data-agenda="));
     }
 
     #[tokio::test]
