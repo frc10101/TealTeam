@@ -16,6 +16,7 @@ mod config;
 mod errors;
 mod events;
 mod handlers;
+mod notes;
 mod picklist;
 mod ranking;
 mod review;

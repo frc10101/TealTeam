@@ -52,6 +52,11 @@ impl Event {
         crate::timezone::clock_time(self.zone(), at)
     }
 
+    /// `"Sat 1:30 PM CDT"`: `at` on the event's clock and calendar.
+    pub fn day_and_time(&self, at: DateTime<Utc>) -> String {
+        crate::timezone::day_and_time(self.zone(), at)
+    }
+
     /// Whether `date` falls within the event, inclusive of both ends.
     pub fn is_active_on(&self, date: NaiveDate) -> bool {
         match (self.start_date, self.end_date) {

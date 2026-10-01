@@ -566,7 +566,7 @@ A test fails if a table is in no list or in two, if a listed table does not exis
 | # | Action | Source | Effort | Status |
 | --- | --- | --- | --- | --- |
 | U21 | **Graph view**: uPlot + tap-to-toggle metric chips + team chips. Tap, not drag — drag is a desktop metaphor | RI-U5 | L |  |
-| U22 | Notes panel as a separate, filterable, timestamped view | RI-U6 | M |  |
+| U22 | Notes panel as a separate, filterable, timestamped view | RI-U6 | M | **Done** — `/notes`, a **Notes** tab for everyone signed in; filters in `tt_core::notes::Filter` |
 | L13 | Rotation fairness — track matches scouted per person and suggest rotation, instead of making the lead scout remember | RI-A4 | M | **Done** — `tt_core::assignments::{distribute, rotation}`; see notes |
 | L14 | `yrs`-backed collaborative pick list. The one place in this app where a CRDT genuinely earns its keep — two leads reordering currently clobber each other silently | RI-O14 · RS §5.8 | M |  |
 | X1 | `messages` table, `POST /api/messages`, history endpoint with cursor paging | RI-M1 | M |  |
@@ -586,6 +586,12 @@ A test fails if a table is in no list or in two, if a listed table does not exis
 - **Who can take over:** scouts online now, and scouts with a match still to come, so nobody who went home is suggested. **Tablets are not rotated.** A tablet does not tire, and who will be holding it is not known in advance.
 - **A fix found on the way:** the match save checked "two robots in one match" only among the robots the post named. A post naming one robot, which is what a suggestion sends, could put someone on a second robot. It now counts the robots the post leaves alone.
 - **Checked:** core tests for the history, the limit, a latecomer, a past run, nobody free, the margin, and two suggestions sharing a reliever. Router tests for the suggestion's words and its one-tap move, and for the doubling refusal. Not checked: in a browser.
+
+**The notes view (U22).** `/notes` lists every note the viewer's team wrote on approved observations at the selected event, in one place. A **Notes** tab is in the nav for everyone signed in. Each note shows the robot (tap it to see only that team's notes), the match, the scout, and when it was recorded: "Sat 2:14 PM CDT · 12 minutes ago", on the event's clock and calendar (`tt_core::timezone::day_and_time`), since an event runs several days. The list is newest first, or in match order. It narrows by team, by scout, and by words, with every word having to appear, ignoring case, so "defen" finds "Defended". The filters are a GET form, and the selects apply as they change, so a narrowed view is a URL. The team profile's Notes card links to its team's. Which notes show is still U13's rule and nothing else: other teams' notes are neither listed nor counted, and a viewer with no team is told why there are none. Pending observations are not listed, the same as on the profile, but the page says how many with notes are waiting for review.
+- **Times are the tablet's.** A note's time is `observed_at`, which the tablet stamps, so a tablet with a wrong clock (S12 flags it) misorders its notes. The server's `created_at` is used only when `observed_at` is missing.
+- **Notes from older forms show** when their text sits under a key the current form still has as a text field. Anything else is left out. (The profile reads only the current form version.)
+- **The tab bar now has seven tabs** for an admin who is also a lead and a coach. At 360 px that is about 51 px each, and the longer labels take two lines. Still not under 44 px.
+- **Checked:** router tests for the order, each filter, the waiting count, another team's view, a teamless view, and the profile link. Not checked: in a browser.
 
 ---
 

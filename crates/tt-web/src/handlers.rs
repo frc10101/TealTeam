@@ -30,6 +30,7 @@ use crate::auth::{
 };
 use crate::coach;
 use crate::events::{self, EventContext, EventParam};
+use crate::notes;
 use crate::picklist;
 use crate::ranking::{self, RankingParams};
 use crate::review::{self, ReviewedParam};
@@ -619,6 +620,19 @@ pub async fn team(
 ) -> Response {
     let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
     html(teams::page(&state, nav, &user, &context, &team).await)
+}
+
+// ── Notes (U22) ─────────────────────────────────────────────────────────────
+
+/// `GET /notes`: the viewer's team's notes at the selected event, filtered.
+pub async fn notes(
+    State(state): State<AppState>,
+    Auth(user): Auth,
+    EventParam(requested): EventParam,
+    Query(query): Query<HashMap<String, String>>,
+) -> Response {
+    let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
+    html(notes::page(&state, nav, &user, &context, &query).await)
 }
 
 // ── Pick list (U20) ─────────────────────────────────────────────────────────

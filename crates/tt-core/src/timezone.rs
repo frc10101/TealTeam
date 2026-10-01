@@ -11,7 +11,7 @@
 //! and state first wherever those settle the question, and the Windows name
 //! only where they do not.
 
-use chrono::{DateTime, NaiveDate, Timelike, Utc};
+use chrono::{DateTime, Datelike, NaiveDate, Timelike, Utc};
 use chrono_tz::{OffsetName, Tz};
 
 /// The IANA zone for an event, from FIRST's `timezone`, `country`, and
@@ -112,6 +112,14 @@ pub fn clock_time(zone: Option<Tz>, at: DateTime<Utc>) -> String {
         local.minute(),
         if pm { "PM" } else { "AM" }
     )
+}
+
+/// `"Sat 1:30 PM CDT"`: [`clock_time`] with the weekday on the same clock,
+/// for times an event's several days would otherwise make ambiguous.
+pub fn day_and_time(zone: Option<Tz>, at: DateTime<Utc>) -> String {
+    const DAYS: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    let day = local_date(zone, at).weekday().num_days_from_monday() as usize;
+    format!("{} {}", DAYS[day], clock_time(zone, at))
 }
 
 #[cfg(test)]
@@ -249,5 +257,14 @@ mod tests {
         let phoenix = event_zone("Mountain Standard Time", "USA", "AZ");
         assert_eq!(clock_time(phoenix, summer), "11:30 AM MST");
         assert_eq!(clock_time(None, summer), "18:30 UTC");
+    }
+
+    #[test]
+    fn the_weekday_is_the_events_not_utcs() {
+        let chicago = event_zone("America/Chicago", "", "");
+        // Saturday 8 PM in Chicago is already Sunday in UTC.
+        let evening = Utc.with_ymd_and_hms(2026, 3, 22, 1, 0, 0).unwrap();
+        assert_eq!(day_and_time(chicago, evening), "Sat 8:00 PM CDT");
+        assert_eq!(day_and_time(None, evening), "Sun 01:00 UTC");
     }
 }

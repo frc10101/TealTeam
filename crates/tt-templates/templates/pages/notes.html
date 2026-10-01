@@ -1,0 +1,87 @@
+{#
+  The notes view (U22): everything the viewer's team has written about robots
+  at this event, in one place, each note with when it was recorded. Only the
+  team's own notes, as on the team profile (U13). The filters are a GET form,
+  so a narrowed view is a URL: bookmarkable, and linked from the profile.
+#}
+{% extends "layout.html" %}
+{% block content %}
+{% for error in errors %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endfor %}
+
+<section class="card">
+  <div class="card-header">
+    <h1>Notes{% if !event_name.is_empty() %} · {{ event_name }}{% endif %}</h1>
+  </div>
+  <div class="card-body stack">
+    {% if !unavailable.is_empty() %}
+      <p>{{ unavailable }}</p>
+    {% else %}
+      <p class="hint">
+        What scouts on team {{ own_team }} wrote in approved observations, with
+        when each was recorded, on the event's clock. Other teams keep theirs.
+        {% if waiting > 0 %}{{ waiting }} more with notes {% if waiting == 1 %}is{% else %}are{% endif %} waiting for review.{% endif %}
+      </p>
+      <form method="get" class="note-filters">
+        {% if !nav.event.selected.is_empty() %}<input type="hidden" name="event" value="{{ nav.event.selected }}">{% endif %}
+        <div class="field">
+          <label class="form-label" for="notes-team">Team</label>
+          <select class="form-select" id="notes-team" name="team" data-autosubmit>
+            <option value="">Every team</option>
+            {% for option in teams %}<option value="{{ option.value }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label class="form-label" for="notes-scout">Scout</label>
+          <select class="form-select" id="notes-scout" name="scout" data-autosubmit>
+            <option value="">Every scout</option>
+            {% for option in scouts %}<option value="{{ option.value }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label class="form-label" for="notes-order">Order</label>
+          <select class="form-select" id="notes-order" name="order" data-autosubmit>
+            <option value="newest"{% if order == "newest" %} selected{% endif %}>Newest first</option>
+            <option value="schedule"{% if order == "schedule" %} selected{% endif %}>Match order</option>
+          </select>
+        </div>
+        <div class="field note-search">
+          <label class="form-label" for="notes-q">Words in the note</label>
+          <div class="inline-field">
+            <input class="form-input" id="notes-q" name="q" type="search" value="{{ query }}"
+                   autocomplete="off" placeholder="e.g. defense">
+            <button class="btn btn-secondary" type="submit">Filter</button>
+          </div>
+        </div>
+      </form>
+
+      <p class="muted" role="status">
+        {% if total == 0 %}
+          No notes from team {{ own_team }} here yet.
+        {% else if filtered %}
+          {{ notes.len() }} of {{ total }} note{% if total != 1 %}s{% endif %} match. <a href="{{ clear_href }}">Show all</a>
+        {% else %}
+          {{ total }} note{% if total != 1 %}s{% endif %}.
+        {% endif %}
+      </p>
+
+      {% if !notes.is_empty() %}
+        <ul class="note-list">
+          {% for note in notes %}
+            <li>
+              <p class="note-head">
+                <a href="{{ note.filter_href }}" title="Only notes on {{ note.team }}"><strong>{{ note.team }}</strong>{% if !note.team_name.is_empty() %}&nbsp;{{ note.team_name }}{% endif %}</a>
+                <span>{{ note.match_label }} · {{ note.scout }}{% if !note.label.is_empty() %} · {{ note.label }}{% endif %}</span>
+              </p>
+              <p class="text-answer">{{ note.text }}</p>
+              <p class="note-foot">
+                {% if note.when.is_empty() %}<span class="muted">Time not recorded</span>{% else %}<span class="muted">{{ note.when }} · {{ note.ago }}</span>{% endif %}
+                <a href="{{ note.profile_href }}">Profile</a>
+              </p>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

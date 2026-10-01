@@ -8,6 +8,9 @@
 //! saved with no team; there is no team for them to belong to.
 //!
 //! The numbers are shared. Only the prose is held back.
+//!
+//! The notes view (U22) lists every note a team may read at an event, newest
+//! first or in schedule order, narrowed by [`Filter`].
 
 use crate::season::{FieldKind, Payload, SeasonSchema, Value};
 
@@ -58,6 +61,70 @@ pub fn redact(schema: &SeasonSchema, payload: &mut Payload) {
             .any(|f| f.key == *key && matches!(f.kind, FieldKind::Select { .. })),
         Value::Count(_) | Value::Flag(_) => true,
     });
+}
+
+/// How the notes view lists what it shows (U22).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Order {
+    /// The latest recorded first: what scouts have just seen.
+    #[default]
+    Newest,
+    /// In match order, as the schedule runs.
+    Schedule,
+}
+
+impl Order {
+    /// From `?order=`. Anything but `schedule` is the default.
+    pub fn parse(raw: &str) -> Self {
+        match raw.trim() {
+            "schedule" => Self::Schedule,
+            _ => Self::Newest,
+        }
+    }
+
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Newest => "newest",
+            Self::Schedule => "schedule",
+        }
+    }
+}
+
+/// What the notes view is narrowed to (U22). Every part is optional, and a
+/// note is kept only when all the parts that are set hold.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Filter {
+    /// The robot the note is about.
+    pub team: Option<i32>,
+    /// The scout who wrote it, by user id.
+    pub scout: Option<i64>,
+    /// Lowercased words, each of which must appear in the note.
+    pub words: Vec<String>,
+}
+
+impl Filter {
+    /// `?q=`, split into the words a note must contain.
+    pub fn words(raw: &str) -> Vec<String> {
+        raw.split_whitespace().map(str::to_lowercase).collect()
+    }
+
+    /// Whether nothing is set, so every note is kept.
+    pub fn is_empty(&self) -> bool {
+        self.team.is_none() && self.scout.is_none() && self.words.is_empty()
+    }
+
+    /// Whether a note by `scout` on `team` reading `text` is kept. Words match
+    /// anywhere, ignoring case, so "defen" finds "defense" and "Defended".
+    pub fn keeps(&self, team: i32, scout: Option<i64>, text: &str) -> bool {
+        if self.team.is_some_and(|t| t != team) {
+            return false;
+        }
+        if self.scout.is_some() && self.scout != scout {
+            return false;
+        }
+        let text = text.to_lowercase();
+        self.words.iter().all(|w| text.contains(w.as_str()))
+    }
 }
 
 #[cfg(test)]
@@ -121,5 +188,52 @@ mod tests {
         redact(&schema, &mut payload);
         let kept: Vec<&str> = payload.keys().map(String::as_str).collect();
         assert_eq!(kept, ["broke_down", "starting_position", "teleop_scored"]);
+    }
+
+    #[test]
+    fn an_order_is_newest_first_unless_the_schedule_is_asked_for() {
+        assert_eq!(Order::parse("schedule"), Order::Schedule);
+        assert_eq!(Order::parse(""), Order::Newest);
+        assert_eq!(Order::parse("sideways"), Order::Newest);
+        assert_eq!(Order::parse(Order::Schedule.key()), Order::Schedule);
+    }
+
+    #[test]
+    fn a_filter_keeps_a_note_only_when_every_part_set_holds() {
+        let text = "Defended hard, tippy on the ramp";
+        assert!(Filter::default().keeps(254, None, text), "nothing set");
+
+        let team = Filter {
+            team: Some(254),
+            ..Filter::default()
+        };
+        assert!(team.keeps(254, Some(7), text));
+        assert!(!team.keeps(1678, Some(7), text));
+
+        let scout = Filter {
+            scout: Some(7),
+            ..Filter::default()
+        };
+        assert!(scout.keeps(1678, Some(7), text));
+        assert!(!scout.keeps(1678, Some(8), text));
+        assert!(!scout.keeps(1678, None, text), "a gone account is nobody's");
+
+        let words = Filter {
+            words: Filter::words("  TIPPY  defen "),
+            ..Filter::default()
+        };
+        assert_eq!(words.words, ["tippy", "defen"]);
+        assert!(words.keeps(1, None, text), "any case, part of a word");
+        assert!(!words.keeps(1, None, "tippy on the ramp"), "every word");
+        assert!(Filter::words("   ").is_empty());
+
+        let all = Filter {
+            team: Some(254),
+            scout: Some(7),
+            words: Filter::words("ramp"),
+        };
+        assert!(all.keeps(254, Some(7), text));
+        assert!(!all.keeps(254, Some(7), "fast cycles"));
+        assert!(!all.is_empty() && Filter::default().is_empty());
     }
 }

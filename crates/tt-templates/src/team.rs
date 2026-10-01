@@ -104,6 +104,8 @@ pub struct TeamAtEvent {
     /// Whose notes are shown: the viewer's team. `None` when the viewer has
     /// no team, and so reads none.
     pub notes_team: Option<i32>,
+    /// The notes view narrowed to this team (U22).
+    pub notes_href: String,
     pub matches: Vec<TeamMatchLine>,
 }
 

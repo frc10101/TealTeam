@@ -400,6 +400,20 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
 .plain-links { margin: 0; padding-left: 1.25rem; display: grid; gap: 0.25rem; }
 .plain-links a { display: inline-flex; min-height: var(--tap); align-items: center; }
 
+/* ── Notes (U22) ─────────────────────────────────────────────────────────── */
+
+.note-filters { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); }
+.note-filters .note-search { grid-column: 1 / -1; }
+.note-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem; }
+.note-list li { display: grid; gap: 0.25rem; padding: 0.5rem 0.75rem; border: 1px solid var(--gray-700); border-radius: var(--radius); }
+.note-list p { margin: 0; }
+.note-list .text-answer { white-space: pre-wrap; overflow-wrap: anywhere; }
+.note-head, .note-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 0 0.75rem; }
+.note-head span { color: var(--gray-300); font-size: 0.875rem; }
+.note-foot { font-size: 0.8125rem; }
+.note-head a, .note-foot a { display: inline-flex; align-items: center; min-height: var(--tap); min-width: var(--tap); }
+.note-foot a { margin-left: auto; }
+
 /* ── Drive coach (U18) ───────────────────────────────────────────────────── */
 
 .coach-card { display: grid; gap: 0.5rem; padding: 0.75rem; border: 1px solid var(--gray-700); border-radius: var(--radius); }

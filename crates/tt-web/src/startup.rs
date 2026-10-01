@@ -226,6 +226,7 @@ pub fn router(state: AppState) -> Router {
         .route("/account", get(handlers::account))
         .route("/submission", get(handlers::submission))
         .route("/teams", get(handlers::team))
+        .route("/notes", get(handlers::notes))
         .route("/lead-scout", get(handlers::lead_scout))
         .route("/lead-scout/assignments", get(handlers::assignments))
         .route("/lead-scout/submissions/{id}", get(handlers::review_page))
@@ -3661,6 +3662,185 @@ mod flow_tests {
         let teamless = text(get(&state, "/teams?team=254", Some(&ada)).await).await;
         assert!(teamless.contains("Your account has no team, so none are shown."));
         assert!(!teamless.contains("tippy"));
+    }
+
+    // ── Notes view (U22) ────────────────────────────────────────────────────
+
+    /// `ranked`, with a second note from Sam: on 10101, in observation 2, at
+    /// first still pending. Sam's note on 254 is set an hour earlier.
+    async fn two_notes() -> (AppState, String) {
+        let (state, sam) = ranked().await;
+        let hour_ago = (chrono::Utc::now() - chrono::TimeDelta::hours(1))
+            .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        sqlx::query("UPDATE observations SET observed_at = ? WHERE id = 1")
+            .bind(hour_ago)
+            .execute(state.repo.pool())
+            .await
+            .expect("an hour ago");
+        sqlx::query(
+            "UPDATE observations SET payload = json_set(payload, '$.notes', 'Plays DEFENSE well') \
+             WHERE id = 2",
+        )
+        .execute(state.repo.pool())
+        .await
+        .expect("a second note");
+        (state, sam)
+    }
+
+    #[tokio::test]
+    async fn the_notes_view_lists_a_teams_own_notes_newest_first_with_times() {
+        let (state, sam) = two_notes().await;
+        let page = "/notes?event=2026now";
+
+        let body = text(get(&state, page, Some(&sam)).await).await;
+        assert!(
+            body.contains(r#"<a href="/notes?event=2026now">Notes</a>"#),
+            "in the nav"
+        );
+        assert!(body.contains("1 note."), "{body}");
+        assert!(body.contains("1 more with notes is waiting for review."));
+        assert!(body.contains("tippy on the ramp"));
+        assert!(!body.contains("DEFENSE"), "not until it is approved");
+        assert!(body.contains("<span>Q2 · Sam</span>"));
+        assert!(body.contains(" · 1 hour ago</span>"), "timestamped");
+        assert!(
+            body.contains(r#"href="/notes?event=2026now&#38;team=254""#),
+            "tap to narrow"
+        );
+        assert!(body.contains(r#"href="/teams?event=2026now&#38;team=254">Profile</a>"#));
+
+        let kim = session_cookie_from(
+            &post(
+                &state,
+                "/api/auth/login",
+                "email=kim%40example.com&password=longenough1",
+                None,
+            )
+            .await,
+        )
+        .expect("kim");
+        post(&state, "/api/observations/2/approve", "", Some(&kim)).await;
+        let body = text(get(&state, page, Some(&sam)).await).await;
+        assert!(body.contains("2 notes."));
+        assert!(!body.contains("waiting for review"));
+        let newest = body.find("Plays DEFENSE well").expect("listed");
+        let older = body.find("tippy on the ramp").expect("listed");
+        assert!(newest < older, "newest first");
+
+        let by_match =
+            text(get(&state, "/notes?event=2026now&order=schedule", Some(&sam)).await).await;
+        let first = by_match.find("tippy on the ramp").expect("listed");
+        let second = by_match.find("Plays DEFENSE well").expect("listed");
+        assert!(first < second, "same match, team order");
+        assert!(by_match.contains(r#"<option value="schedule" selected>"#));
+    }
+
+    #[tokio::test]
+    async fn the_notes_view_narrows_by_team_scout_and_words() {
+        let (state, sam) = two_notes().await;
+        let kim = session_cookie_from(
+            &post(
+                &state,
+                "/api/auth/login",
+                "email=kim%40example.com&password=longenough1",
+                None,
+            )
+            .await,
+        )
+        .expect("kim");
+        post(&state, "/api/observations/2/approve", "", Some(&kim)).await;
+        let view = |query: &'static str| {
+            let state = state.clone();
+            let sam = sam.clone();
+            async move {
+                text(get(&state, &format!("/notes?event=2026now&{query}"), Some(&sam)).await).await
+            }
+        };
+
+        let team = view("team=254").await;
+        assert!(team.contains("tippy on the ramp") && !team.contains("DEFENSE"));
+        assert!(team.contains("1 of 2 notes match."), "{team}");
+        assert!(team.contains(r#"<option value="254" selected>254 · Team 254</option>"#));
+        assert!(team.contains(r#"<a href="/notes?event=2026now&#38;order=newest">Show all</a>"#));
+
+        let words = view("q=defense+PLAYS").await;
+        assert!(words.contains("Plays DEFENSE well") && !words.contains("tippy"));
+        assert!(
+            words.contains(r#"value="defense PLAYS""#),
+            "the search stays typed"
+        );
+
+        assert!(
+            view("q=ramp&team=10101")
+                .await
+                .contains("0 of 2 notes match.")
+        );
+        let sam_id: i64 = sqlx::query_scalar("SELECT id FROM users WHERE name = 'Sam'")
+            .fetch_one(state.repo.pool())
+            .await
+            .expect("sam");
+        let scout = text(
+            get(
+                &state,
+                &format!("/notes?event=2026now&scout={sam_id}"),
+                Some(&sam),
+            )
+            .await,
+        )
+        .await;
+        assert!(scout.contains("2 of 2 notes match."));
+        assert!(scout.contains(&format!(
+            r#"<option value="{sam_id}" selected>Sam</option>"#
+        )));
+        assert!(view("scout=999").await.contains("0 of 2 notes match."));
+    }
+
+    #[tokio::test]
+    async fn the_notes_view_shows_no_one_another_teams_notes() {
+        let (state, _) = two_notes().await;
+        let lee = session_cookie_from(
+            &post(
+                &state,
+                "/api/auth/signup",
+                "name=Lee&email=lee%40example.com&team_number=254&password=longenough1&confirm_password=longenough1",
+                None,
+            )
+            .await,
+        )
+        .expect("session");
+        let other = text(get(&state, "/notes?event=2026now&team=254", Some(&lee)).await).await;
+        assert!(
+            other.contains("No notes from team 254 here yet."),
+            "{other}"
+        );
+        assert!(!other.contains("tippy") && !other.contains("DEFENSE"));
+        assert!(!other.contains("waiting for review"), "nor a count of them");
+
+        let ada = session_cookie_from(
+            &post(
+                &state,
+                "/api/auth/signup",
+                "name=Ada&email=ada%40example.com&password=longenough1&confirm_password=longenough1",
+                None,
+            )
+            .await,
+        )
+        .expect("session");
+        let teamless = text(get(&state, "/notes?event=2026now", Some(&ada)).await).await;
+        assert!(teamless.contains("Your account has no team, so none are shown."));
+        assert!(!teamless.contains("tippy"));
+
+        let signed_out = get(&state, "/notes", None).await;
+        assert_eq!(signed_out.status(), StatusCode::SEE_OTHER);
+    }
+
+    #[tokio::test]
+    async fn a_team_pages_notes_link_to_the_notes_view() {
+        let (state, sam) = ranked().await;
+        let body = text(get(&state, "/teams?team=254", Some(&sam)).await).await;
+        assert!(body.contains(
+            r#"<a href="/notes?event=2026now&#38;team=254">With times, and searchable, on Notes</a>"#
+        ));
     }
 
     #[tokio::test]
