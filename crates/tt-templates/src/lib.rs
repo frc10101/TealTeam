@@ -22,7 +22,9 @@ pub use team::{
     EventLink, NoteLine, StatLine, SummaryLine, SummarySection, TeamAtEvent, TeamCard,
     TeamMatchLine, TeamPage, stat_lines, summary_sections, team_href,
 };
-use tt_core::assignments::{self, AssigneeKey, Assignment, Sighting, SlotState};
+use tt_core::assignments::{
+    self, AssigneeKey, Assignment, Reason, Sighting, SlotState, Suggestion,
+};
 use tt_core::form::{FormErrors, RawAnswers, input_name, is_on};
 use tt_core::link::Link;
 use tt_core::records::{Event, MatchRecord, Team};
@@ -674,6 +676,8 @@ pub struct AssignmentsPage {
     pub devices: Vec<DeviceRow>,
     /// How each assignee is doing (L6).
     pub coverage: Vec<TallyRow>,
+    /// Robots to move so the rota stays fair (L13).
+    pub rotation: Vec<RotationRow>,
     /// The grid's own address, which its live regions refresh from.
     pub live_href: String,
     /// The live stream from now on (S9): `/api/sync/stream?changes=..`.
@@ -906,6 +910,61 @@ pub struct TallyRow {
     pub recorded: usize,
     pub missed: usize,
     pub to_come: usize,
+}
+
+/// A rotation suggestion (L13), in words, with the one-tap form that takes it.
+#[derive(Debug, Clone)]
+pub struct RotationRow {
+    /// Why: "Sam is on 8 matches in a row, Q1 to Q8."
+    pub why: String,
+    /// What to do: "Give Q7 · 254 to Jo", or, with nobody free, "Nobody is
+    /// free to take Q7 · 254".
+    pub action: String,
+    pub match_key: String,
+    /// The editor's field for the robot, `a.<team>`, and who to set it to.
+    /// `value` is empty when nobody is free, and there is no button.
+    pub field: String,
+    pub value: String,
+    /// The match's editor, to choose somebody else.
+    pub edit_href: String,
+}
+
+impl RotationRow {
+    pub fn new(event_key: &str, matches: &[MatchRecord], s: &Suggestion) -> Self {
+        let label = |key: &str| {
+            matches
+                .iter()
+                .find(|m| m.key == key)
+                .map(MatchRecord::label)
+                .unwrap_or_else(|| key.to_string())
+        };
+        let robot = format!("{} · {}", label(&s.match_key), s.team_number);
+        let why = match &s.reason {
+            Reason::LongRun { first, last, len } => format!(
+                "{} is on {len} matches in a row, {} to {}.",
+                s.from_name,
+                label(first),
+                label(last)
+            ),
+            Reason::Uneven { from_load, to_load } => format!(
+                "{} has {from_load} matches at this event; {} has {to_load}.",
+                s.from_name,
+                s.to.as_ref().map_or("somebody", |(_, name)| name.as_str())
+            ),
+        };
+        let (action, value) = match &s.to {
+            Some((key, name)) => (format!("Give {robot} to {name}"), key.to_string()),
+            None => (format!("Nobody is free to take {robot}"), String::new()),
+        };
+        Self {
+            why,
+            action,
+            match_key: s.match_key.clone(),
+            field: format!("a.{}", s.team_number),
+            value,
+            edit_href: assignments_href(event_key, Some(&s.match_key)),
+        }
+    }
 }
 
 fn state_words(state: SlotState) -> (&'static str, String) {
@@ -1925,6 +1984,7 @@ mod tests {
             pool: Vec::new(),
             devices: Vec::new(),
             coverage: Vec::new(),
+            rotation: Vec::new(),
             live_href: "/lead-scout/assignments?event=2026mabil".into(),
             stream_href: String::new(),
         }
@@ -2147,6 +2207,7 @@ mod tests {
                 missed: 1,
                 to_come: 4,
             }],
+            rotation: Vec::new(),
             live_href: "/lead-scout/assignments?event=2026mabil".into(),
             stream_href: String::new(),
         };
@@ -2162,6 +2223,77 @@ mod tests {
         page.coverage.clear();
         let html = page.render_html().expect("render");
         assert!(html.contains("Nobody has been assigned anything yet."));
+    }
+
+    #[test]
+    fn a_rotation_suggestion_reads_as_words_and_one_button() {
+        let matches = [scheduled(1, false), scheduled(2, false)];
+        let suggestion = Suggestion {
+            match_key: "2026mabil_qm2".into(),
+            team_number: 254,
+            from: AssigneeKey::Scout(1),
+            from_name: "Sam".into(),
+            to: Some((AssigneeKey::Scout(2), "Jo".into())),
+            reason: Reason::LongRun {
+                first: "2026mabil_qm1".into(),
+                last: "2026mabil_qm2".into(),
+                len: 8,
+            },
+        };
+        let row = RotationRow::new("2026mabil", &matches, &suggestion);
+        assert_eq!(row.why, "Sam is on 8 matches in a row, Q1 to Q2.");
+        assert_eq!(row.action, "Give Q2 · 254 to Jo");
+        assert_eq!((row.field.as_str(), row.value.as_str()), ("a.254", "u:2"));
+
+        let nobody = Suggestion {
+            to: None,
+            reason: Reason::Uneven {
+                from_load: 9,
+                to_load: 2,
+            },
+            ..suggestion
+        };
+        let lonely = RotationRow::new("2026mabil", &matches, &nobody);
+        assert_eq!(
+            lonely.why,
+            "Sam has 9 matches at this event; somebody has 2."
+        );
+        assert_eq!(lonely.action, "Nobody is free to take Q2 · 254");
+
+        let mut page = AssignmentsPage {
+            title: "Assignments".into(),
+            nav: nav(Roles::SCOUT),
+            event_name: "Boston".into(),
+            unavailable: String::new(),
+            errors: Vec::new(),
+            notice: String::new(),
+            grid: Some(grid(&[])),
+            editor: None,
+            pool: Vec::new(),
+            devices: Vec::new(),
+            coverage: Vec::new(),
+            rotation: vec![row, lonely],
+            live_href: "/lead-scout/assignments?event=2026mabil".into(),
+            stream_href: String::new(),
+        };
+        let html = page.render_html().expect("render");
+        assert!(
+            html.contains(r#"<input type="hidden" name="a.254" value="u:2">"#),
+            "{html}"
+        );
+        assert!(html.contains("Give Q2 · 254 to Jo</button>"));
+        let rotation = &html[html.find(r#"id="rotation""#).unwrap()..];
+        let rotation = &rotation[..rotation.find("</ul>").unwrap()];
+        assert_eq!(
+            rotation.matches("<button").count(),
+            1,
+            "nobody free, no button"
+        );
+        assert!(html.contains("Nobody is free to take Q2 · 254"));
+
+        page.rotation.clear();
+        let html = page.render_html().expect("render");
+        assert!(!html.contains("id=\"rotation\""));
     }
 
     #[test]

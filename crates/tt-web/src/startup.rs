@@ -2577,6 +2577,70 @@ mod flow_tests {
     }
 
     #[tokio::test]
+    async fn rotation_suggests_a_lighter_scout_and_one_tap_moves_the_robot() {
+        // L13. Sam has 254 in all five matches; Kim has one robot, in Q5.
+        let (state, admin) = scouting().await;
+        with_kim(&state).await;
+        for n in 3..=5 {
+            seed_match(&state, n, false).await;
+        }
+        for n in 1..=5 {
+            assign(&state, n, 254, Some(1), None).await;
+        }
+        assign(&state, 5, 10101, Some(2), None).await;
+
+        let body = text(
+            get(
+                &state,
+                "/lead-scout/assignments?event=2026now",
+                Some(&admin),
+            )
+            .await,
+        )
+        .await;
+        assert!(
+            body.contains("Sam has 5 matches at this event; Kim has 1."),
+            "{body}"
+        );
+        assert!(body.contains(r#"<input type="hidden" name="match" value="2026now_qm2">"#));
+        assert!(body.contains(r#"<input type="hidden" name="a.254" value="u:2">"#));
+        assert!(body.contains("Give Q2 · 254 to Kim</button>"));
+
+        // The button posts the one robot; the rest of Q2 is left as it was.
+        let response = post(
+            &state,
+            "/api/assignments/match?event=2026now",
+            "match=2026now_qm2&a.254=u%3A2",
+            Some(&admin),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        let stored = stored_assignments(&state).await;
+        assert!(stored.contains(&("2026now_qm2".into(), 254, Some(2), None)));
+        assert_eq!(stored.len(), 6);
+    }
+
+    #[tokio::test]
+    async fn a_one_robot_post_cannot_double_up_someone_already_in_the_match() {
+        let (state, admin) = scouting().await;
+        with_kim(&state).await;
+        assign(&state, 2, 10101, Some(2), None).await;
+
+        let body = text(
+            post(
+                &state,
+                "/api/assignments/match?event=2026now",
+                "match=2026now_qm2&a.254=u%3A2",
+                Some(&admin),
+            )
+            .await,
+        )
+        .await;
+        assert!(body.contains("Kim is down for two robots in Q2."), "{body}");
+        assert_eq!(stored_assignments(&state).await.len(), 1);
+    }
+
+    #[tokio::test]
     async fn auto_distribute_needs_somebody_ticked_and_a_sensible_count() {
         let (state, admin) = scouting().await;
         for (form, says) in [

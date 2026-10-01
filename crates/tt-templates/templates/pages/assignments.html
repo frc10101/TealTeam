@@ -104,6 +104,31 @@
             </table>
           </div>
         {% endif %}
+        {# Rotation (L13): who has been on too long, or has far more of the
+           event than somebody free. Each button posts the one robot to the
+           match save, which grid-live.js does in place. #}
+        {% if !rotation.is_empty() %}
+          <div class="stack" id="rotation">
+            <h2>Rotation</h2>
+            <ul class="rotation">
+              {% for r in rotation %}
+                <li>
+                  <p>{{ r.why }}</p>
+                  {% if r.value.is_empty() %}
+                    <p><span class="muted">{{ r.action }}.</span> <a href="{{ r.edit_href }}">Open the match</a></p>
+                  {% else %}
+                    <form method="post" action="/api/assignments/match{{ nav.event.query() }}" class="inline-field" data-inplace>
+                      <input type="hidden" name="match" value="{{ r.match_key }}">
+                      <input type="hidden" name="{{ r.field }}" value="{{ r.value }}">
+                      <button class="btn btn-secondary btn-sm" type="submit">{{ r.action }}</button>
+                      <a href="{{ r.edit_href }}">or choose someone else</a>
+                    </form>
+                  {% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+          </div>
+        {% endif %}
       </div>
       <p class="hint">Tap a match to choose who watches each of its robots.</p>
     {% endif %}

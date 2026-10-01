@@ -23,7 +23,7 @@ use tt_core::user::User;
 use tt_repo::{DEVICE_ONLINE_WINDOW, Device, NewAssignment, Repo, Scout};
 use tt_templates::{
     AssigneeChoice, AssignmentGrid, AssignmentsPage, DeviceRow, MatchEditor, Nav, PoolEntry,
-    TallyRow, assignments_href,
+    RotationRow, TallyRow, assignments_href,
 };
 
 use crate::events::EventContext;
@@ -244,6 +244,28 @@ impl People {
             .collect()
     }
 
+    /// Who rotation can suggest taking over a robot (L13): scouts online now,
+    /// and scouts with a match still to come, so somebody who went home is
+    /// never suggested. Tablets are not people to rest.
+    fn relief(
+        &self,
+        matches: &[MatchRecord],
+        assignments: &[assignments::Assignment],
+        now: DateTime<Utc>,
+    ) -> Vec<(AssigneeKey, String)> {
+        let to_come = |id: i64| {
+            assignments.iter().any(|a| {
+                a.assignee.key() == AssigneeKey::Scout(id)
+                    && matches.iter().any(|m| m.key == a.match_key && !m.played)
+            })
+        };
+        self.scouts
+            .iter()
+            .filter(|s| s.is_online(now, DEVICE_ONLINE_WINDOW) || to_come(s.id))
+            .map(|s| (AssigneeKey::Scout(s.id), s.name.clone()))
+            .collect()
+    }
+
     fn device_rows(&self, now: DateTime<Utc>) -> Vec<DeviceRow> {
         self.devices
             .iter()
@@ -299,6 +321,7 @@ pub async fn page(
         pool: Vec::new(),
         devices: Vec::new(),
         coverage: Vec::new(),
+        rotation: Vec::new(),
         live_href: String::new(),
         stream_href: String::new(),
     };
@@ -405,6 +428,14 @@ pub async fn page(
             to_come: t.to_come,
         })
         .collect();
+    page.rotation = assignments::rotation(
+        &matches,
+        &assignments,
+        &people.relief(&matches, &assignments, now),
+    )
+    .iter()
+    .map(|s| RotationRow::new(&event.key, &matches, s))
+    .collect();
     page.pool = people.pool(now);
     page.devices = people.device_rows(now);
     page.live_href = assignments_href(&event.key, None);
@@ -505,7 +536,22 @@ pub async fn save_match(state: &AppState, user: &User, pairs: &[(String, String)
             _ => chosen.push((team, key)),
         }
     }
-    let picked: Vec<AssigneeKey> = chosen.iter().filter_map(|c| c.1).collect();
+    // A post can name one robot -- a rotation suggestion does (L13) -- so the
+    // robots it leaves alone count too.
+    let existing = state.repo.event_assignments(event).await.map_err(|e| {
+        warn!("assignments for {event}: {e}");
+        Refused::because(Some(event), NOT_SAVED)
+    })?;
+    let kept = existing.iter().filter(|a| {
+        a.match_key == record.key
+            && record.alliance_of(a.team_number).is_some()
+            && !chosen.iter().any(|(team, _)| *team == a.team_number)
+    });
+    let picked: Vec<AssigneeKey> = chosen
+        .iter()
+        .filter_map(|c| c.1)
+        .chain(kept.map(|a| a.assignee.key()))
+        .collect();
     for key in assignments::doubled(&picked) {
         errors.push(format!(
             "{} is down for two robots in {}. Nobody can watch two at once.",
@@ -543,10 +589,7 @@ pub async fn save_match(state: &AppState, user: &User, pairs: &[(String, String)
         }
         // Saving a match leaves it holding what the form showed, so an
         // assignment to a robot the schedule has since moved out goes too.
-        for stale in state
-            .repo
-            .event_assignments(event)
-            .await?
+        for stale in existing
             .iter()
             .filter(|a| a.match_key == record.key && record.alliance_of(a.team_number).is_none())
         {
@@ -705,13 +748,7 @@ pub async fn distribute(
         warn!("loading {event} for auto-distribute: {e}");
         refuse(NOT_SAVED)
     })?;
-    let upcoming: Vec<MatchRecord> = matches
-        .into_iter()
-        .filter(|m| !m.played)
-        .take(limit.unwrap_or(usize::MAX))
-        .collect();
-
-    let picks = assignments::distribute(&upcoming, &existing, &pool);
+    let picks = assignments::distribute(&matches, &existing, &pool, limit);
     let set: Vec<NewAssignment> = picks
         .into_iter()
         .map(|p| NewAssignment {

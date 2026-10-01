@@ -4,6 +4,8 @@
 //! tablet -- so that a scout is handed a robot rather than asked to pick one out
 //! of a list of fifty. This is the backbone of the whole scouting flow.
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::records::MatchRecord;
@@ -94,53 +96,120 @@ pub struct Pick {
     pub assignee: AssigneeKey,
 }
 
-/// Hand every open robot in `matches` to someone in `pool` (L2).
+/// The most matches in a row anyone is handed while somebody else is free
+/// (L13). A qualification match comes round every seven or eight minutes, so
+/// six is the better part of an hour without looking away.
+pub const LONGEST_RUN: usize = 6;
+
+/// How far apart two scouts' loads can drift before the lighter one is
+/// suggested for one of the heavier one's robots (L13). With more scouts than
+/// robots a fair rota keeps everyone within one match of each other, so three
+/// is a real imbalance, not rounding.
+pub const UNEVEN: usize = 3;
+
+/// Who is on duty in each match of the schedule, in playing order: every
+/// assignment to a robot still in its match. Assignments elsewhere and stale
+/// ones are left out, as everywhere else.
+fn duties(schedule: &[MatchRecord], assignments: &[Assignment]) -> Vec<Vec<(i32, AssigneeKey)>> {
+    schedule
+        .iter()
+        .map(|m| {
+            assignments
+                .iter()
+                .filter(|a| a.match_key == m.key && m.alliance_of(a.team_number).is_some())
+                .map(|a| (a.team_number, a.assignee.key()))
+                .collect()
+        })
+        .collect()
+}
+
+/// Matches each assignee is on duty for, played or to come.
+fn loads(duties: &[Vec<(i32, AssigneeKey)>]) -> HashMap<AssigneeKey, usize> {
+    let mut loads = HashMap::new();
+    for (_, key) in duties.iter().flatten() {
+        *loads.entry(*key).or_insert(0) += 1;
+    }
+    loads
+}
+
+fn on_duty(duties: &[Vec<(i32, AssigneeKey)>], i: usize, key: AssigneeKey) -> bool {
+    duties[i].iter().any(|(_, k)| *k == key)
+}
+
+/// How long a run `key` would be in if they also had match `i`: the matches
+/// in a row on duty just before it, it, and just after.
+fn run_through(duties: &[Vec<(i32, AssigneeKey)>], i: usize, key: AssigneeKey) -> usize {
+    let before = (0..i)
+        .rev()
+        .take_while(|&j| on_duty(duties, j, key))
+        .count();
+    let after = (i + 1..duties.len())
+        .take_while(|&j| on_duty(duties, j, key))
+        .count();
+    before + 1 + after
+}
+
+/// Hand every open robot in the next `limit` unplayed matches of `schedule`
+/// (all of them when `None`) to someone in `pool` (L2, L13).
 ///
-/// `matches` are the ones to fill, in playing order; `existing` is what is
-/// already assigned, which is left alone. The pool is walked round-robin, and
-/// the walk carries on from match to match, so with eight scouts the two who
-/// sat out one match start the next.
+/// `schedule` is the whole event in playing order, played matches included:
+/// they are the history the rota is kept fair against. `existing` is what is
+/// already assigned, which is left alone.
 ///
 /// **Nobody gets two robots in one match.** The retired auto-distribute was
 /// `pool[i % pool.len()]` over every open slot, so with four scouts one of them
 /// was handed two robots in the same match -- which nobody can watch. With
 /// fewer assignees than robots, the rest of the match stays open, and the grid
 /// shows it.
+///
+/// **Each robot goes to whoever has had the fewest matches** at the event so
+/// far, counting what is already assigned and what this call has handed out,
+/// ties in pool order -- so a scout who sat one out starts the next, and one
+/// who joins at lunch catches up. **But nobody is handed a match that would
+/// make more than [`LONGEST_RUN`] in a row while somebody else is free**, so
+/// catching up never means an afternoon without a break. When there are no
+/// more people than robots there is no one to rest, and they are handed it
+/// anyway.
 pub fn distribute(
-    matches: &[MatchRecord],
+    schedule: &[MatchRecord],
     existing: &[Assignment],
     pool: &[AssigneeKey],
+    limit: Option<usize>,
 ) -> Vec<Pick> {
+    let mut duties = duties(schedule, existing);
+    let mut loads = loads(&duties);
+    let fill: Vec<usize> = (0..schedule.len())
+        .filter(|&i| !schedule[i].played)
+        .take(limit.unwrap_or(usize::MAX))
+        .collect();
+
     let mut picks = Vec::new();
-    let mut cursor = 0;
-    for m in matches {
-        let current: Vec<&Assignment> = existing
-            .iter()
-            .filter(|a| a.match_key == m.key && m.alliance_of(a.team_number).is_some())
-            .collect();
-        let mut busy: Vec<AssigneeKey> = current.iter().map(|a| a.assignee.key()).collect();
+    for i in fill {
+        let m = &schedule[i];
         let open: Vec<i32> = m
             .teams()
-            .filter(|t| !current.iter().any(|a| a.team_number == *t))
+            .filter(|t| !duties[i].iter().any(|(team, _)| team == t))
             .collect();
-
-        let mut open = open.into_iter().peekable();
-        let mut tried = 0;
-        while open.peek().is_some() && tried < pool.len() {
-            let candidate = pool[(cursor + tried) % pool.len()];
-            tried += 1;
-            if busy.contains(&candidate) {
-                continue;
-            }
-            busy.push(candidate);
+        let mut free: Vec<AssigneeKey> = pool
+            .iter()
+            .copied()
+            .filter(|key| !on_duty(&duties, i, *key))
+            .collect();
+        // A stable sort, so ties keep pool order.
+        free.sort_by_key(|key| {
+            (
+                run_through(&duties, i, *key) > LONGEST_RUN,
+                loads.get(key).copied().unwrap_or(0),
+            )
+        });
+        for (team, key) in open.into_iter().zip(free) {
+            duties[i].push((team, key));
+            *loads.entry(key).or_insert(0) += 1;
             picks.push(Pick {
                 match_key: m.key.clone(),
-                team_number: open.next().expect("peeked"),
-                assignee: candidate,
+                team_number: team,
+                assignee: key,
             });
-        }
-        if !pool.is_empty() {
-            cursor = (cursor + tried) % pool.len();
         }
     }
     picks
@@ -368,6 +437,169 @@ pub fn stale<'a>(matches: &[MatchRecord], assignments: &'a [Assignment]) -> Vec<
         .collect()
 }
 
+// ── Rotation (L13) ──────────────────────────────────────────────────────────
+
+/// One robot the lead scout could move to somebody else, and why.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Suggestion {
+    pub match_key: String,
+    pub team_number: i32,
+    /// The scout who has it now.
+    pub from: AssigneeKey,
+    pub from_name: String,
+    /// Who could take it: free in that match, and not pushed past
+    /// [`LONGEST_RUN`] in a row by it. `None` when nobody is.
+    pub to: Option<(AssigneeKey, String)>,
+    pub reason: Reason,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Reason {
+    /// `from` is on duty for `len` matches in a row, `first` to `last`
+    /// (match keys); the suggestion is the first to come past
+    /// [`LONGEST_RUN`].
+    LongRun {
+        first: String,
+        last: String,
+        len: usize,
+    },
+    /// `from` has `from_load` matches at the event and `to` has `to_load`,
+    /// [`UNEVEN`] or more fewer.
+    Uneven { from_load: usize, to_load: usize },
+}
+
+/// Robots to move so that nobody scouts too long without a break or ends up
+/// with far more of the event than anyone else (L13), instead of the lead
+/// scout keeping count in their head.
+///
+/// Only scouts are rotated. A tablet does not tire, and who will be holding
+/// it in an hour is not known in advance; when tablets are assigned, the
+/// people holding them swap among themselves.
+///
+/// `relief` is who could take over, in order of preference: the web passes
+/// scouts online now and scouts with something still to come, so nobody who
+/// went home is suggested. A scout's load is every match they are on duty for
+/// at the event, played or to come, whether or not they recorded it -- it is
+/// the time they were asked to give.
+///
+/// At most one suggestion per scout, the long run first. The suggestions are
+/// worked out one after another as though each were taken, so two of them
+/// never hand the same person two robots in one match, or both lean on the
+/// one person sitting out. Taking one and reloading shows the next.
+pub fn rotation(
+    schedule: &[MatchRecord],
+    assignments: &[Assignment],
+    relief: &[(AssigneeKey, String)],
+) -> Vec<Suggestion> {
+    let mut duties = duties(schedule, assignments);
+    let mut loads = loads(&duties);
+
+    let mut scouts: Vec<(AssigneeKey, String)> = Vec::new();
+    for m in schedule {
+        for a in assignments.iter().filter(|a| {
+            a.match_key == m.key
+                && !a.assignee.is_device()
+                && m.alliance_of(a.team_number).is_some()
+        }) {
+            if !scouts.iter().any(|(key, _)| *key == a.assignee.key()) {
+                scouts.push((a.assignee.key(), a.assignee.name().to_string()));
+            }
+        }
+    }
+
+    // Who could take match `i` off `from`, the lightest first.
+    let reliever = |duties: &[Vec<(i32, AssigneeKey)>],
+                    loads: &HashMap<AssigneeKey, usize>,
+                    i: usize,
+                    from: AssigneeKey| {
+        relief
+            .iter()
+            .filter(|(key, _)| {
+                *key != from
+                    && !on_duty(duties, i, *key)
+                    && run_through(duties, i, *key) <= LONGEST_RUN
+            })
+            .min_by_key(|(key, _)| loads.get(key).copied().unwrap_or(0))
+            .cloned()
+    };
+
+    let mut suggestions = Vec::new();
+    for (from, from_name) in scouts {
+        let found = long_run(schedule, &duties, from)
+            .map(|(first, last, at)| {
+                let to = reliever(&duties, &loads, at, from);
+                let reason = Reason::LongRun {
+                    first: schedule[first].key.clone(),
+                    last: schedule[last].key.clone(),
+                    len: last - first + 1,
+                };
+                (at, to, reason)
+            })
+            .or_else(|| {
+                let from_load = loads.get(&from).copied().unwrap_or(0);
+                (0..schedule.len())
+                    .filter(|&i| !schedule[i].played && on_duty(&duties, i, from))
+                    .find_map(|i| {
+                        let to = reliever(&duties, &loads, i, from)?;
+                        let to_load = loads.get(&to.0).copied().unwrap_or(0);
+                        (from_load >= to_load + UNEVEN).then_some((
+                            i,
+                            Some(to),
+                            Reason::Uneven { from_load, to_load },
+                        ))
+                    })
+            });
+        let Some((i, to, reason)) = found else {
+            continue;
+        };
+        let slot = duties[i]
+            .iter()
+            .position(|(_, key)| *key == from)
+            .expect("on duty");
+        let team_number = duties[i][slot].0;
+        if let Some((key, _)) = &to {
+            duties[i][slot].1 = *key;
+            *loads.entry(*key).or_insert(0) += 1;
+            *loads.entry(from).or_insert(0) -= 1;
+        }
+        suggestions.push(Suggestion {
+            match_key: schedule[i].key.clone(),
+            team_number,
+            from,
+            from_name,
+            to,
+            reason,
+        });
+    }
+    suggestions
+}
+
+/// `key`'s first run of more than [`LONGEST_RUN`] matches in a row that still
+/// has a match to come past the limit: `(first, last, the match to give
+/// away)`, as schedule indexes. A long run entirely in the past is history.
+fn long_run(
+    schedule: &[MatchRecord],
+    duties: &[Vec<(i32, AssigneeKey)>],
+    key: AssigneeKey,
+) -> Option<(usize, usize, usize)> {
+    let mut i = 0;
+    while i < duties.len() {
+        if !on_duty(duties, i, key) {
+            i += 1;
+            continue;
+        }
+        let first = i;
+        while i < duties.len() && on_duty(duties, i, key) {
+            i += 1;
+        }
+        let last = i - 1;
+        if let Some(at) = (first + LONGEST_RUN..=last).find(|&j| !schedule[j].played) {
+            return Some((first, last, at));
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -434,7 +666,7 @@ mod tests {
             scheduled(2, [7, 8, 9], [10, 11, 12]),
         ];
         let pool: Vec<_> = (1..=8).map(scout).collect();
-        let picks = distribute(&matches, &[], &pool);
+        let picks = distribute(&matches, &[], &pool, None);
 
         assert_eq!(picks.len(), 12);
         let first: Vec<_> = picked(&picks, 1).iter().map(|p| p.1).collect();
@@ -448,7 +680,7 @@ mod tests {
     fn nobody_is_handed_two_robots_in_one_match() {
         let matches = [scheduled(1, [1, 2, 3], [4, 5, 6])];
         let pool = [scout(1), scout(2), scout(3), scout(4)];
-        let picks = distribute(&matches, &[], &pool);
+        let picks = distribute(&matches, &[], &pool, None);
 
         assert_eq!(
             picked(&picks, 1),
@@ -462,7 +694,7 @@ mod tests {
         let matches = [scheduled(1, [1, 2, 3], [4, 5, 6])];
         // Sam (scout 1) already has team 5.
         let existing = [assigned("2026mabil_qm1", 5)];
-        let picks = distribute(&matches, &existing, &[scout(1), scout(2)]);
+        let picks = distribute(&matches, &existing, &[scout(1), scout(2)], None);
 
         assert_eq!(picked(&picks, 1), [(1, scout(2))]);
     }
@@ -472,7 +704,7 @@ mod tests {
         let matches = [scheduled(1, [1, 2, 3], [4, 5, 6])];
         // Team 99 left the match; Sam is free to take a robot that is in it.
         let existing = [assigned("2026mabil_qm1", 99)];
-        let picks = distribute(&matches, &existing, &[scout(1)]);
+        let picks = distribute(&matches, &existing, &[scout(1)], None);
         assert_eq!(picked(&picks, 1), [(1, scout(1))]);
     }
 
@@ -481,8 +713,203 @@ mod tests {
         let mut playoff = scheduled(1, [1, 2, 3], [4, 5, 6]);
         playoff.red = [None; 3];
         playoff.blue = [None; 3];
-        assert!(distribute(&[playoff], &[], &[scout(1)]).is_empty());
-        assert!(distribute(&[scheduled(2, [1, 2, 3], [4, 5, 6])], &[], &[]).is_empty());
+        assert!(distribute(&[playoff], &[], &[scout(1)], None).is_empty());
+        assert!(distribute(&[scheduled(2, [1, 2, 3], [4, 5, 6])], &[], &[], None).is_empty());
+    }
+
+    fn season(played: i32, to_come: i32) -> Vec<MatchRecord> {
+        (1..=played + to_come)
+            .map(|n| {
+                let mut m = scheduled(n, [1, 2, 3], [4, 5, 6]);
+                m.played = n <= played;
+                m
+            })
+            .collect()
+    }
+
+    fn named(id: i64, name: &str) -> Assignee {
+        Assignee::Scout {
+            id,
+            name: name.into(),
+        }
+    }
+
+    /// The longest run of matches in a row `key` is in, and their count.
+    fn run_and_load(
+        schedule: &[MatchRecord],
+        all: &[Assignment],
+        key: AssigneeKey,
+    ) -> (usize, usize) {
+        let duties = duties(schedule, all);
+        let (mut run, mut longest, mut load) = (0, 0, 0);
+        for i in 0..duties.len() {
+            if on_duty(&duties, i, key) {
+                run += 1;
+                load += 1;
+                longest = longest.max(run);
+            } else {
+                run = 0;
+            }
+        }
+        (longest, load)
+    }
+
+    fn with_picks(existing: &[Assignment], picks: &[Pick]) -> Vec<Assignment> {
+        let mut all = existing.to_vec();
+        all.extend(picks.iter().map(|p| Assignment {
+            match_key: p.match_key.clone(),
+            team_number: p.team_number,
+            assignee: match p.assignee {
+                AssigneeKey::Scout(id) => named(id, "x"),
+                AssigneeKey::Device(id) => tablet(id),
+            },
+        }));
+        all
+    }
+
+    #[test]
+    fn only_the_next_unplayed_matches_are_filled() {
+        let schedule = season(2, 3);
+        let picks = distribute(&schedule, &[], &[scout(1)], Some(2));
+        let keys: Vec<_> = picks.iter().map(|p| p.match_key.as_str()).collect();
+        assert_eq!(keys, ["2026mabil_qm3", "2026mabil_qm4"]);
+    }
+
+    #[test]
+    fn whoever_has_had_the_fewest_matches_goes_first() {
+        // Sam scouted both played matches; Alex none.
+        let schedule = season(2, 1);
+        let existing = [to(1, 1, sam()), to(2, 1, sam())];
+        let picks = distribute(&schedule, &existing, &[scout(1), scout(2)], None);
+        assert_eq!(picked(&picks, 3), [(1, scout(2)), (2, scout(1))]);
+    }
+
+    #[test]
+    fn a_latecomer_catches_up_without_going_an_hour_without_a_break() {
+        // Six scouts did all of Q1-Q10; a seventh arrives for Q11-Q40.
+        let schedule = season(10, 30);
+        let existing: Vec<_> = (1..=10)
+            .flat_map(|m| (1..=6).map(move |s| to(m, s as i32, named(s, "x"))))
+            .collect();
+        let pool: Vec<_> = (1..=7).map(scout).collect();
+        let picks = distribute(&schedule, &existing, &pool, None);
+        assert_eq!(picks.len(), 30 * 6);
+
+        let all = with_picks(&existing, &picks);
+        let (run, late) = run_and_load(&schedule, &all, scout(7));
+        assert!(run <= LONGEST_RUN, "latecomer ran {run} in a row");
+        let (_, early) = run_and_load(&schedule, &all, scout(1));
+        assert!(
+            late > 30 * 6 / 7,
+            "the latecomer did more than a seventh: {late}"
+        );
+        assert!(
+            early > late,
+            "but not more than the early ones: {early} vs {late}"
+        );
+        for s in 1..=7 {
+            let (run, _) = run_and_load(&schedule[10..], &all, scout(s));
+            assert!(run <= LONGEST_RUN, "scout {s} ran {run} in a row");
+        }
+    }
+
+    #[test]
+    fn with_no_one_to_rest_a_long_run_is_still_handed_out() {
+        let schedule = season(0, 8);
+        let picks = distribute(&schedule, &[], &[scout(1)], None);
+        assert_eq!(picks.len(), 8, "an open robot helps nobody");
+    }
+
+    #[test]
+    fn a_long_run_is_broken_past_the_limit_by_the_lightest_free_scout() {
+        let schedule = season(2, 6);
+        let mut assignments: Vec<_> = (1..=8).map(|m| to(m, 4, sam())).collect();
+        // Alex is busy in Q7; Jo is free but already has two to come.
+        assignments.push(to(7, 1, named(2, "Alex")));
+        assignments.push(to(4, 1, named(3, "Jo")));
+        assignments.push(to(5, 1, named(3, "Jo")));
+        let relief = [(scout(2), "Alex".into()), (scout(3), "Jo".into())];
+
+        let suggestions = rotation(&schedule, &assignments, &relief);
+        assert_eq!(
+            suggestions,
+            [Suggestion {
+                match_key: "2026mabil_qm7".into(),
+                team_number: 4,
+                from: scout(1),
+                from_name: "Sam".into(),
+                to: Some((scout(3), "Jo".into())),
+                reason: Reason::LongRun {
+                    first: "2026mabil_qm1".into(),
+                    last: "2026mabil_qm8".into(),
+                    len: 8,
+                },
+            }]
+        );
+    }
+
+    #[test]
+    fn a_long_run_in_the_past_is_history() {
+        let schedule = season(8, 1);
+        let assignments: Vec<_> = (1..=8).map(|m| to(m, 4, sam())).collect();
+        assert!(rotation(&schedule, &assignments, &[(scout(2), "Alex".into())]).is_empty());
+    }
+
+    #[test]
+    fn a_long_run_with_nobody_free_is_still_reported() {
+        let schedule = season(0, 7);
+        let assignments: Vec<_> = (1..=7).map(|m| to(m, 4, sam())).collect();
+        let suggestions = rotation(&schedule, &assignments, &[]);
+        assert_eq!(suggestions.len(), 1);
+        assert_eq!(suggestions[0].match_key, "2026mabil_qm7");
+        assert_eq!(suggestions[0].to, None);
+    }
+
+    #[test]
+    fn a_heavy_scout_hands_a_robot_to_a_light_one() {
+        // Sam: Q1, Q3, Q5, Q7 played, Q9 to come. Alex: nothing.
+        let schedule = season(8, 2);
+        let assignments: Vec<_> = [1, 3, 5, 7, 9].map(|m| to(m, 2, sam())).into();
+        let relief = [(scout(2), "Alex".into())];
+        let suggestions = rotation(&schedule, &assignments, &relief);
+        assert_eq!(suggestions.len(), 1);
+        assert_eq!(
+            (suggestions[0].match_key.as_str(), &suggestions[0].reason),
+            (
+                "2026mabil_qm9",
+                &Reason::Uneven {
+                    from_load: 5,
+                    to_load: 0
+                }
+            )
+        );
+
+        // Within the margin, nothing.
+        let close: Vec<_> = [7, 9].map(|m| to(m, 2, sam())).into();
+        assert!(rotation(&schedule, &close, &relief).is_empty());
+    }
+
+    #[test]
+    fn two_suggestions_never_lean_on_one_person_in_one_match() {
+        let schedule = season(0, 4);
+        let mut assignments: Vec<_> = (1..=4).map(|m| to(m, 1, sam())).collect();
+        assignments.extend((1..=4).map(|m| to(m, 2, named(2, "Alex"))));
+        let relief = [(scout(3), "Jo".into())];
+        let suggestions = rotation(&schedule, &assignments, &relief);
+        assert_eq!(suggestions.len(), 2);
+        assert_ne!(suggestions[0].match_key, suggestions[1].match_key);
+        assert!(
+            suggestions
+                .iter()
+                .all(|s| s.to == Some((scout(3), "Jo".into())))
+        );
+    }
+
+    #[test]
+    fn tablets_are_not_rotated() {
+        let schedule = season(0, 8);
+        let assignments: Vec<_> = (1..=8).map(|m| to(m, 4, tablet(9))).collect();
+        assert!(rotation(&schedule, &assignments, &[(scout(2), "Alex".into())]).is_empty());
     }
 
     #[test]

@@ -567,7 +567,7 @@ A test fails if a table is in no list or in two, if a listed table does not exis
 | --- | --- | --- | --- | --- |
 | U21 | **Graph view**: uPlot + tap-to-toggle metric chips + team chips. Tap, not drag — drag is a desktop metaphor | RI-U5 | L |  |
 | U22 | Notes panel as a separate, filterable, timestamped view | RI-U6 | M |  |
-| L13 | Rotation fairness — track matches scouted per person and suggest rotation, instead of making the lead scout remember | RI-A4 | M |  |
+| L13 | Rotation fairness — track matches scouted per person and suggest rotation, instead of making the lead scout remember | RI-A4 | M | **Done** — `tt_core::assignments::{distribute, rotation}`; see notes |
 | L14 | `yrs`-backed collaborative pick list. The one place in this app where a CRDT genuinely earns its keep — two leads reordering currently clobber each other silently | RI-O14 · RS §5.8 | M |  |
 | X1 | `messages` table, `POST /api/messages`, history endpoint with cursor paging | RI-M1 | M |  |
 | X2 | SSE message stream sharing the S8 event channel | RI-M2 | S |  |
@@ -577,6 +577,15 @@ A test fails if a table is in no list or in two, if a listed table does not exis
 | X6 | `#team` / `#match` autocomplete and context chips — the reason to build chat in-app rather than adopt Matrix | RI-M6 | M |  |
 | X7 | **Moderation: mentor log view, retract-not-delete, rate limiting.** Non-negotiable; the users are minors | RI-M7 | M |  |
 | S13 | QR transfer: Rust encoder, browser scanner with `BarcodeDetector` + zxing-wasm fallback | RI-N6, RI-S12 | L |  |
+
+### Phase 4 notes
+
+**Rotation fairness (L13).** A scout's load is every match they are assigned at the event, played or to come, whether or not they recorded it, since that is the time they were asked to give. Two constants in `tt_core::assignments` set the rules: `LONGEST_RUN` = 6 matches in a row, about 45 minutes of qualifications, and `UNEVEN` = 3 matches between two scouts.
+- **Auto-distribute keeps the rota fair by itself.** It now takes the whole schedule, so played matches count as history, and fills the next *n* unplayed ones. Each open robot goes to whoever has had the fewest matches so far, ties in pool order. Nobody is handed a match that would put them past six in a row while somebody else is free. A latecomer catches up without going an hour without a break. With no more people than robots, nobody can rest, and the robots are handed out anyway. Starting from nothing, it reads like the old round-robin: those who sat one out start the next.
+- **The grid suggests swaps for hand-made assignments.** A Rotation list in the live coverage area gives at most one suggestion per scout. The first kind is a run past six, broken at the seventh match by the lightest scout who is free and would not pass six themselves. The second is a scout with three or more matches beyond the lightest, who takes the heavy scout's first upcoming robot. Suggestions are worked out as though each earlier one were taken, so two never lean on the same person in one match. Each has a button that posts that one robot to the ordinary match save, which `grid-live.js` performs in place. When nobody is free, the list says so and links to the match.
+- **Who can take over:** scouts online now, and scouts with a match still to come, so nobody who went home is suggested. **Tablets are not rotated.** A tablet does not tire, and who will be holding it is not known in advance.
+- **A fix found on the way:** the match save checked "two robots in one match" only among the robots the post named. A post naming one robot, which is what a suggestion sends, could put someone on a second robot. It now counts the robots the post leaves alone.
+- **Checked:** core tests for the history, the limit, a latecomer, a past run, nobody free, the margin, and two suggestions sharing a reliever. Router tests for the suggestion's words and its one-tap move, and for the doubling refusal. Not checked: in a browser.
 
 ---
 
