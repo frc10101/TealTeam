@@ -26,7 +26,17 @@ pub const FROM_UPSTREAM: &[&str] = &[
 /// The server's own: the two logs themselves, and settings not replicated
 /// yet. The point weights (L12) will want to join [`REPLICATED`] once
 /// clients compute rankings.
-pub const SERVER_ONLY: &[&str] = &["changes", "upstream", "scouting_point_weights"];
+///
+/// The pick list documents (L14) do reach clients, but not as rows: a lead's
+/// copy is exchanged whole through `/api/pick-list/doc`, which checks whose
+/// list it is, since a yrs update is merged, not replayed. Their rows, in
+/// `pick_list_entries`, replicate as usual.
+pub const SERVER_ONLY: &[&str] = &[
+    "changes",
+    "upstream",
+    "scouting_point_weights",
+    "pick_list_docs",
+];
 
 #[cfg(test)]
 mod tests {

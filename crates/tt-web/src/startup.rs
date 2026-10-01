@@ -266,6 +266,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/weights", post(handlers::save_weights))
         .route("/api/rankings/manual", post(handlers::save_rankings))
         .route("/api/pick-list", post(handlers::change_pick_list))
+        .route(
+            "/api/pick-list/doc",
+            get(handlers::pick_list_doc).post(handlers::merge_pick_list),
+        )
         .route("/api/sync/pull", get(crate::sync::pull))
         .route("/api/sync/stream", get(crate::sync::stream))
         .route("/api/weights/reset", post(handlers::reset_weights))
@@ -3010,6 +3014,117 @@ mod flow_tests {
             picked(&text(get(&state, "/pick-list?event=2026now", Some(&admin)).await).await),
             ["254"]
         );
+    }
+
+    // ── Pick list copies (L14) ──────────────────────────────────────────────
+
+    /// Post a yrs update to the list's document, as a device would.
+    async fn send_copy(state: &AppState, cookie: &str, update: Vec<u8>) -> Response {
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/pick-list/doc?event=2026now")
+            .header(header::CONTENT_TYPE, "application/octet-stream")
+            .header(header::COOKIE, cookie);
+        router(state.clone())
+            .oneshot(req.body(Body::from(update)).unwrap())
+            .await
+            .expect("request")
+    }
+
+    async fn bytes(response: Response) -> Vec<u8> {
+        axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body")
+            .to_vec()
+    }
+
+    #[tokio::test]
+    async fn a_copy_edited_offline_merges_with_changes_made_meanwhile() {
+        use tt_core::picklist::{Edit, PickDoc, Tag};
+
+        let (state, admin) = scouting().await;
+        pick(&state, &admin, "op=add&team=254").await;
+        pick(&state, &admin, "op=add&team=10101").await;
+
+        // A lead's tablet takes a copy of the list...
+        let response = get(&state, "/api/pick-list/doc?event=2026now", Some(&admin)).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers()[header::CONTENT_TYPE],
+            "application/octet-stream"
+        );
+        let mut tablet = PickDoc::load(&bytes(response).await).expect("a yrs document");
+        assert_eq!(tablet.entries().len(), 2);
+
+        // ...and, offline, moves 10101 to the top. Meanwhile the coach
+        // crosses off 254 on the server.
+        let mut offline = tablet
+            .apply(&Edit::Up { team: 10101 }, &[])
+            .unwrap()
+            .unwrap();
+        pick(&state, &admin, "op=cross&team=254").await;
+        pick(&state, &admin, "op=tag&team=254&tag=red").await;
+
+        // Back online, the tablet sends what it did and gets everything back.
+        let response = send_copy(&state, &admin, offline.clone()).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        tablet.merge(&bytes(response).await).unwrap();
+        let body = text(get(&state, "/pick-list?event=2026now", Some(&admin)).await).await;
+        assert_eq!(picked(&body), ["10101", "254"], "the offline move stands");
+        assert!(body.contains(r#"<li id="team-254" class="pick crossed">"#));
+        let rows = state.repo.pick_list(10101, "2026now").await.unwrap();
+        assert_eq!(tablet.entries(), rows, "the tablet has it all too");
+        assert_eq!(rows[1].tag, Some(Tag::Red));
+
+        // Sending it again changes nothing; a garbled body is refused.
+        offline = bytes(send_copy(&state, &admin, offline).await).await;
+        assert_eq!(PickDoc::load(&offline).unwrap().entries(), rows);
+        let response = send_copy(&state, &admin, b"not yrs".to_vec()).await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(state.repo.pick_list(10101, "2026now").await.unwrap(), rows);
+    }
+
+    #[tokio::test]
+    async fn a_copy_is_only_ever_of_the_viewers_own_teams_list() {
+        let (state, admin) = scouting().await;
+        pick(&state, &admin, "op=add&team=254").await;
+
+        // A scout is sent home.
+        let kim = with_kim(&state).await;
+        let response = get(&state, "/api/pick-list/doc?event=2026now", Some(&kim)).await;
+        assert_eq!(location(&response), "/");
+
+        // A coach on another team gets that team's list, which is empty.
+        sqlx::query("UPDATE users SET is_coach = 1, team_number = 254 WHERE id = 2")
+            .execute(state.repo.pool())
+            .await
+            .expect("promote");
+        let response = get(&state, "/api/pick-list/doc?event=2026now", Some(&kim)).await;
+        let theirs = tt_core::picklist::PickDoc::load(&bytes(response).await).unwrap();
+        assert!(theirs.entries().is_empty());
+
+        // An event that is not the one named is not quietly swapped in.
+        let response = get(&state, "/api/pick-list/doc?event=2026nope", Some(&admin)).await;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn the_pick_list_page_watches_the_live_stream() {
+        let (state, admin) = scouting().await;
+        let (heads, _) = state.repo.log_heads().await.unwrap();
+        let body = text(get(&state, "/pick-list?event=2026now", Some(&admin)).await).await;
+        assert!(body.contains(&format!(
+            r#"data-stream="/api/sync/stream?changes={heads}&"#
+        )));
+        assert!(body.contains(r#"data-page="/pick-list?event=2026now""#));
+        assert!(body.contains("/static/js/pick-live.js"));
+        for region in [
+            r#"id="pick-rows""#,
+            r#"id="pick-not-listed""#,
+            r#"id="pick-candidates""#,
+        ] {
+            assert!(body.contains(region), "{region}");
+        }
     }
 
     // ── Coverage (L6) ───────────────────────────────────────────────────────

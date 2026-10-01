@@ -113,6 +113,7 @@ mod tests {
                 "events",
                 "matches",
                 "observations",
+                "pick_list_docs",
                 "pick_list_entries",
                 "scout_assignments",
                 "scouting_point_weights",

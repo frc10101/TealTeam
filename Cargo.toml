@@ -49,6 +49,9 @@ tower-http = { version = "0.7", features = ["trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 trait-variant = "0.1"
+# The pick list's CRDT (L14). Pure Rust and wasm-clean, so a browser replica
+# merges the same way the server does.
+yrs = "0.28"
 
 [profile.release]
 lto = true

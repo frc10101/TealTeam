@@ -2,15 +2,19 @@
 //!
 //! `GET /pick-list?event=` shows the viewer's team's list; `POST
 //! /api/pick-list?event=` makes one change to it. What a change does is
-//! `tt_core::picklist::apply`, and the write only lands on the list the change
-//! was applied to (`Repo::replace_pick_list`). If someone else changed the list
-//! in between, the change is simply applied again to what is there now.
+//! `tt_core::picklist::PickDoc::apply`, and the update it makes is merged into
+//! the stored list (`Repo::merge_pick_list`), so a change someone else made in
+//! between is kept too (L14). `/api/pick-list/doc?event=` exchanges a whole
+//! copy of the list, for one kept on a device.
+//!
+//! The page watches the live stream, and redraws the list when anyone else
+//! changes it (`pick-live.js`).
 
 use std::collections::HashMap;
 
 use chrono::Utc;
 use tracing::{info, warn};
-use tt_core::picklist::{self, Edit, Entry, Tag};
+use tt_core::picklist::{Edit, PickDoc, Tag};
 use tt_core::user::User;
 use tt_repo::Repo;
 use tt_templates::{Candidate, Nav, PickListPage, PickRow, TagOption, team_href};
@@ -20,9 +24,6 @@ use crate::scouting::new_record_id;
 use crate::startup::AppState;
 
 const NOT_SAVED: &str = "Not saved: the server's storage did not answer. Try again.";
-
-/// Enough for any real collision: each retry is one small transaction.
-const ATTEMPTS: usize = 3;
 
 pub fn href(event_key: &str) -> String {
     format!("/pick-list?event={event_key}")
@@ -54,6 +55,8 @@ pub async fn page(
         typed_team,
         tags: TagOption::all(),
         post_href: String::new(),
+        live_href: String::new(),
+        stream_href: String::new(),
     };
 
     let Some(owning_team) = user.team_number else {
@@ -70,6 +73,10 @@ pub async fn page(
     };
     page.event_name = event.name.clone();
     page.post_href = format!("/api/pick-list?event={}", event.key);
+    page.live_href = href(&event.key);
+    page.stream_href = crate::sync::stream_href(state, &event.key)
+        .await
+        .unwrap_or_default();
     if let Some(unknown) = &context.unknown {
         errors.push(format!(
             "There is no event “{unknown}” on this server. Showing {} instead.",
@@ -234,39 +241,93 @@ pub async fn change(
         }
     };
 
-    for _ in 0..ATTEMPTS {
-        let before: Vec<Entry> = match state.repo.pick_list(owning_team, &event.key).await {
-            Ok(list) => list,
-            Err(e) => {
-                warn!("pick list for {owning_team} at {}: {e}", event.key);
-                return Err(NOT_SAVED.into());
-            }
-        };
-        let mut after = before.clone();
-        picklist::apply(&mut after, &edit, &roster)?;
-
-        let written = after == before
-            || match state
-                .repo
-                .replace_pick_list(owning_team, &event.key, &before, &after, Utc::now())
-                .await
-            {
-                Ok(written) => written,
-                Err(e) => {
-                    warn!("storing pick list for {owning_team} at {}: {e}", event.key);
-                    return Err(NOT_SAVED.into());
-                }
-            };
-        if written {
-            info!(user = %user.email, event = %event.key, ?edit, "pick list changed");
-            let team = edit.team();
-            return Ok(match edit {
-                Edit::Remove { .. } => format!("{}&removed={team}", href(&event.key)),
-                _ => format!("{}#team-{team}", href(&event.key)),
-            });
+    let mut list = match state
+        .repo
+        .pick_list_doc(owning_team, &event.key, Utc::now())
+        .await
+        .map_err(|e| e.to_string())
+        .and_then(|doc| PickDoc::load(&doc))
+    {
+        Ok(list) => list,
+        Err(e) => {
+            warn!("pick list for {owning_team} at {}: {e}", event.key);
+            return Err(NOT_SAVED.into());
         }
+    };
+    // The edit is merged, not written over the list: if someone else's
+    // change lands between the read and the write, both stand.
+    if let Some(update) = list.apply(&edit, &roster)? {
+        if let Err(e) = state
+            .repo
+            .merge_pick_list(owning_team, &event.key, &update, Utc::now())
+            .await
+        {
+            warn!("storing pick list for {owning_team} at {}: {e}", event.key);
+            return Err(NOT_SAVED.into());
+        }
+        info!(user = %user.email, event = %event.key, ?edit, "pick list changed");
     }
-    Err("Someone else was changing the list at the same moment. Try again.".into())
+    let team = edit.team();
+    Ok(match edit {
+        Edit::Remove { .. } => format!("{}&removed={team}", href(&event.key)),
+        _ => format!("{}#team-{team}", href(&event.key)),
+    })
+}
+
+/// Why a copy of the list was not exchanged.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Refused {
+    NoTeam,
+    NoEvent,
+    NotAnUpdate,
+    Storage,
+}
+
+/// A copy of the list, exchanged (L14): `update`, if any, is merged into the
+/// team's list, and the whole of the list comes back as a yrs document. A
+/// copy that was edited offline sends what it did and catches up on what
+/// everyone else did in one round trip, and nothing is lost on either side.
+///
+/// An update is merged as it is: the roster is not checked, as an edit made
+/// here would be, since the copy that made it checked against what it had.
+pub async fn exchange(
+    state: &AppState,
+    user: &User,
+    requested: Option<&str>,
+    context: &EventContext,
+    update: Option<&[u8]>,
+) -> Result<Vec<u8>, Refused> {
+    let owning_team = user.team_number.ok_or(Refused::NoTeam)?;
+    let event = match (&context.selected, requested) {
+        (Some(event), Some(key)) if event.key == key => event,
+        _ => return Err(Refused::NoEvent),
+    };
+    if let Some(update) = update {
+        // Read first, so a garbled body is the sender's fault, not storage's.
+        PickDoc::new()
+            .merge(update)
+            .map_err(|_| Refused::NotAnUpdate)?;
+        state
+            .repo
+            .merge_pick_list(owning_team, &event.key, update, Utc::now())
+            .await
+            .map_err(|e| {
+                warn!(
+                    "merging into pick list for {owning_team} at {}: {e}",
+                    event.key
+                );
+                Refused::Storage
+            })?;
+        info!(user = %user.email, event = %event.key, bytes = update.len(), "pick list merged");
+    }
+    state
+        .repo
+        .pick_list_doc(owning_team, &event.key, Utc::now())
+        .await
+        .map_err(|e| {
+            warn!("pick list for {owning_team} at {}: {e}", event.key);
+            Refused::Storage
+        })
 }
 
 #[cfg(test)]

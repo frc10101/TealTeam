@@ -393,15 +393,23 @@ impl Repo for SqliteRepo {
         self.pick_list_impl(owning_team, event_key).await
     }
 
-    async fn replace_pick_list(
+    async fn pick_list_doc(
         &self,
         owning_team: i32,
         event_key: &str,
-        expected: &[Entry],
-        list: &[Entry],
         now: DateTime<Utc>,
-    ) -> Result<bool> {
-        self.replace_pick_list_impl(owning_team, event_key, expected, list, now)
+    ) -> Result<Vec<u8>> {
+        self.pick_list_doc_impl(owning_team, event_key, now).await
+    }
+
+    async fn merge_pick_list(
+        &self,
+        owning_team: i32,
+        event_key: &str,
+        update: &[u8],
+        now: DateTime<Utc>,
+    ) -> Result<Vec<Entry>> {
+        self.merge_pick_list_impl(owning_team, event_key, update, now)
             .await
     }
 

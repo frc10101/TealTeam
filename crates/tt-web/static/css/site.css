@@ -568,6 +568,8 @@ details.card:not([open]) > summary { border-bottom: 0; }
 
 /* ── Pick list (U20) ────────────────────────────────────────────────────── */
 
+/* A region pick-live.js swaps, with no box of its own in the page grid. */
+#pick-not-listed { display: contents; }
 .pick-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
 .pick {
   display: grid; gap: 0.5rem; padding: 0.5rem 0.75rem;

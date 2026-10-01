@@ -10,6 +10,7 @@ chrono-tz = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+yrs = { workspace = true }
 
 # NOTE: this crate must never gain sqlx, axum, tokio, reqwest, or chrono's
 # "clock" feature. Functions that need the current time take it as a parameter

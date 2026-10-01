@@ -12,8 +12,9 @@
 
 use std::collections::HashMap;
 
+use axum::body::Bytes;
 use axum::extract::{Form, Path, Query, State};
-use axum::http::header::ACCEPT;
+use axum::http::header::{ACCEPT, CONTENT_TYPE};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum_extra::extract::cookie::CookieJar;
@@ -681,6 +682,50 @@ pub async fn change_pick_list(
                 .unwrap_or_default();
             html(picklist::page(&state, nav, &user, &context, vec![error], typed, None).await)
         }
+    }
+}
+
+/// `GET /api/pick-list/doc?event=`: the team's list as a yrs document (L14).
+pub async fn pick_list_doc(
+    State(state): State<AppState>,
+    Strategist(user): Strategist,
+    EventParam(requested): EventParam,
+) -> Response {
+    let (_, context) = event_page(&state, Some(&user), requested.as_deref()).await;
+    pick_list_copy(picklist::exchange(&state, &user, requested.as_deref(), &context, None).await)
+}
+
+/// `POST /api/pick-list/doc?event=` with a yrs update as the body: merged
+/// into the team's list, and the whole list sent back.
+pub async fn merge_pick_list(
+    State(state): State<AppState>,
+    Strategist(user): Strategist,
+    EventParam(requested): EventParam,
+    body: Bytes,
+) -> Response {
+    let (_, context) = event_page(&state, Some(&user), requested.as_deref()).await;
+    let update = (!body.is_empty()).then_some(&body[..]);
+    pick_list_copy(picklist::exchange(&state, &user, requested.as_deref(), &context, update).await)
+}
+
+fn pick_list_copy(exchanged: Result<Vec<u8>, picklist::Refused>) -> Response {
+    use picklist::Refused;
+    match exchanged {
+        Ok(state) => ([(CONTENT_TYPE, "application/octet-stream")], state).into_response(),
+        Err(Refused::NoTeam) => (
+            StatusCode::FORBIDDEN,
+            "Your account has no team, and a pick list belongs to a team.",
+        )
+            .into_response(),
+        Err(Refused::NoEvent) => (StatusCode::NOT_FOUND, "No such event.").into_response(),
+        Err(Refused::NotAnUpdate) => {
+            (StatusCode::BAD_REQUEST, "The body is not a yrs v1 update.").into_response()
+        }
+        Err(Refused::Storage) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "The server's storage did not answer.",
+        )
+            .into_response(),
     }
 }
 

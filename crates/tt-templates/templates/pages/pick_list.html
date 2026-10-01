@@ -4,6 +4,10 @@
   to it, applied to the list as it is when it arrives -- so two people working
   on it at once both land, instead of the second save undoing the first.
   After a change the page comes back scrolled to the team that moved.
+
+  pick-live.js (L14) redraws the list, the teams not on it, and the add box's
+  suggestions when anyone else changes the list, from the live stream. The
+  regions it swaps are found by id.
 #}
 {% extends "layout.html" %}
 {% block content %}
@@ -43,7 +47,7 @@
 </section>
 
 {% if unavailable.is_empty() %}
-  <section class="card">
+  <section class="card" id="pick-rows">
     <div class="card-header">
       <h2>{{ rows.len() }} {% if rows.len() == 1 %}team{% else %}teams{% endif %}{% if crossed > 0 %} · {{ crossed }} crossed off{% endif %}</h2>
     </div>
@@ -74,7 +78,7 @@
                   <button class="btn btn-secondary" name="op" value="cross">Cross off</button>
                 {% endif %}
               </form>
-              <details class="pick-more">
+              <details class="pick-more" id="more-{{ row.team }}">
                 <summary>More for {{ row.team }}</summary>
                 <form class="inline-field" method="post" action="{{ post_href }}">
                   <input type="hidden" name="team" value="{{ row.team }}">
@@ -104,8 +108,9 @@
     </div>
   </section>
 
+  <div id="pick-not-listed">
   {% if !candidates.is_empty() %}
-    <details class="card">
+    <details class="card" id="not-listed-teams">
       <summary class="card-header"><h2>Not on the list · {{ candidates.len() }}</h2></summary>
       <div class="card-body">
         <p class="hint">Best ranked first. Tap one to add it to the bottom.</p>
@@ -119,5 +124,11 @@
       </div>
     </details>
   {% endif %}
+  </div>
 {% endif %}
 {% endblock %}
+
+{% block scripts %}{% if !stream_href.is_empty() %}
+<div id="pick-stream" data-stream="{{ stream_href }}" data-page="{{ live_href }}" hidden></div>
+<script src="/static/js/pick-live.js" defer></script>
+{% endif %}{% endblock %}

@@ -549,17 +549,26 @@ pub trait LocalRepo {
     /// A team's pick list for an event, best first.
     async fn pick_list(&self, owning_team: i32, event_key: &str) -> Result<Vec<Entry>>;
 
-    /// Store `list` as the team's pick list, if the stored one still reads
-    /// `expected`. `false` when someone changed it in between, and nothing was
-    /// written: read it again and redo the edit on what is there now.
-    async fn replace_pick_list(
+    /// The same list as a yrs document (L14), its whole state as one update:
+    /// what a change is made to, or a tablet keeps a copy of. A list with no
+    /// document yet gets one from its rows, made and stored once.
+    async fn pick_list_doc(
         &self,
         owning_team: i32,
         event_key: &str,
-        expected: &[Entry],
-        list: &[Entry],
         now: DateTime<Utc>,
-    ) -> Result<bool>;
+    ) -> Result<Vec<u8>>;
+
+    /// Merge a yrs update into the team's list, and store the rows it now
+    /// reads as. Updates commute: one made to an older reading of the list
+    /// still lands, and one merged twice lands once. The list after.
+    async fn merge_pick_list(
+        &self,
+        owning_team: i32,
+        event_key: &str,
+        update: &[u8],
+        now: DateTime<Utc>,
+    ) -> Result<Vec<Entry>>;
 
     // ── Upstream log (S1) ───────────────────────────────────────────────────
 

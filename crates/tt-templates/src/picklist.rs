@@ -27,6 +27,11 @@ pub struct PickListPage {
     pub tags: Vec<TagOption>,
     /// Where every change posts.
     pub post_href: String,
+    /// This page, for `pick-live.js` to fetch again.
+    pub live_href: String,
+    /// The live stream from when the page was drawn (S8); empty without
+    /// storage.
+    pub stream_href: String,
 }
 
 #[derive(Debug, Clone)]
