@@ -36,6 +36,11 @@ if [[ "$fast" == false ]]; then
   # chrono "clock" would hide that same leak into tt-core.
   step "wasm32 upstream clients (tt-upstream)"
   cargo build -p tt-upstream --target wasm32-unknown-unknown
+
+  # The browser's repo (C4). Its SQLite is C, which sqlite-wasm-rs builds
+  # with clang for wasm32.
+  step "wasm32 browser repo (tt-client)"
+  cargo build -p tt-client --target wasm32-unknown-unknown
 fi
 
 printf '\n\033[1;32mAll checks passed.\033[0m\n'

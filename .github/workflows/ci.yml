@@ -53,6 +53,11 @@ jobs:
       - name: Build the upstream clients for wasm32
         run: cargo build -p tt-upstream --target wasm32-unknown-unknown --locked
 
+      # The browser's repo (C4), on its own for the same reason. Its SQLite
+      # is C that sqlite-wasm-rs compiles with clang, which the runner has.
+      - name: Build the browser repo for wasm32
+        run: cargo build -p tt-client --target wasm32-unknown-unknown --locked
+
   test:
     name: Test and lint
     runs-on: ubuntu-latest

@@ -1,0 +1,27 @@
+[package]
+name = "tt-client"
+version = "0.1.0"
+edition = "2024"
+description = "The browser's Repo: the server's schema over SQLite-WASM, kept in OPFS."
+
+# Compiles to wasm32 (C4), and natively for its tests. Build it for wasm on
+# its own, like tt-upstream: cargo unifies features within one build.
+[dependencies]
+tt-core = { workspace = true }
+tt-repo = { workspace = true }
+# Formatting the server's timestamps; not "clock": the caller passes `now`.
+chrono = { workspace = true, features = ["alloc"] }
+rusqlite = { workspace = true }
+tracing = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+rusqlite = { workspace = true, features = ["bundled"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = { workspace = true }
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+
+[dev-dependencies]
+tt-repo-sqlite = { workspace = true }
+tokio = { workspace = true }

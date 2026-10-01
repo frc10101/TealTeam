@@ -14,6 +14,9 @@ members = ["crates/*"]
 #                             browser with signal fetches upstream itself (S4).
 #                             The sync loop and the journal are native-only.
 #   tt-repo-sqlite         -- server-side adapter. sqlx lives here and nowhere else.
+#   tt-client              -- the browser's adapter (C4): the same schema over
+#                             SQLite compiled to wasm, kept in OPFS. rusqlite,
+#                             not sqlx, which has no wasm32 build.
 #   tt-web                 -- axum binary. The only crate that knows about HTTP.
 #
 # CI enforces this (.github/workflows/ci.yml). If you find yourself adding a
@@ -25,6 +28,7 @@ tt-templates = { path = "crates/tt-templates" }
 tt-repo = { path = "crates/tt-repo" }
 tt-repo-sqlite = { path = "crates/tt-repo-sqlite" }
 tt-upstream = { path = "crates/tt-upstream" }
+tt-client = { path = "crates/tt-client" }
 
 anyhow = "1"
 askama = "0.16"
@@ -45,6 +49,10 @@ chrono-tz = { version = "0.9", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "sqlite", "chrono", "macros", "migrate"] }
+# The browser's SQLite (C4). On wasm32 it runs on sqlite-wasm-rs, which builds
+# SQLite's C with clang. 0.39 because it shares sqlx's libsqlite3-sys (0.37):
+# two versions of it cannot link into one workspace.
+rusqlite = { version = "0.39", default-features = false, features = ["serialize"] }
 thiserror = "2"
 time = "0.3"
 tokio = { version = "1", features = ["full"] }
