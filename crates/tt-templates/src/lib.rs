@@ -652,6 +652,9 @@ pub struct UpstreamPanel {
     pub result_headline: String,
     pub result_ok: bool,
     pub result_problems: Vec<String>,
+    /// Who pushed the newest upstream bundle, from where, when, and what it
+    /// brought (S5). Empty when nobody has.
+    pub last_bundle: String,
 }
 
 // ── Assignments (L1) ────────────────────────────────────────────────────────

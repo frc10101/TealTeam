@@ -17,6 +17,7 @@
 
 mod assignments;
 pub mod backup;
+pub mod bundle;
 mod competition;
 pub mod migrate;
 mod observations;
@@ -419,6 +420,14 @@ impl Repo for SqliteRepo {
 
     async fn upstream_since(&self, after: i64, limit: i64) -> Result<Vec<tt_repo::UpstreamEntry>> {
         self.upstream_since_impl(after, limit).await
+    }
+
+    async fn latest_upstream(
+        &self,
+        api: &str,
+        path: &str,
+    ) -> Result<Option<tt_repo::UpstreamEntry>> {
+        self.latest_upstream_impl(api, path).await
     }
 
     async fn changes_since(

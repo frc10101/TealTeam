@@ -6,11 +6,91 @@
 //! not to how long the server has been polling them.
 
 use chrono::{DateTime, Utc};
-use sqlx::Row;
+use sqlx::sqlite::SqliteRow;
+use sqlx::{Row, SqliteConnection};
 use tt_repo::{Change, NewUpstream, Result, UPSTREAM_KEEP_PER_PATH, UpstreamEntry};
 
 use crate::SqliteRepo;
 use crate::users::{from_sql, query_err, to_sql};
+
+/// What an append did with a response.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Appended {
+    New(i64),
+    /// The same body as the newest for its path.
+    Unchanged,
+    /// Fetched no later than the newest for its path. Only a bundle's rows are
+    /// checked for this: the Pi's own fetches are the newest by definition.
+    Stale,
+}
+
+/// Append `entry` and prune its path, inside the caller's transaction.
+pub(crate) async fn append_in(
+    conn: &mut SqliteConnection,
+    entry: &NewUpstream,
+    refuse_stale: bool,
+) -> Result<Appended> {
+    let newest: Option<(String, String)> = sqlx::query_as(
+        "SELECT body, fetched_at FROM upstream WHERE api = ? AND path = ? \
+         ORDER BY seq DESC LIMIT 1",
+    )
+    .bind(&entry.api)
+    .bind(&entry.path)
+    .fetch_optional(&mut *conn)
+    .await
+    .map_err(|e| query_err("reading the upstream log", e))?;
+    if let Some((body, fetched_at)) = &newest {
+        if *body == entry.body {
+            return Ok(Appended::Unchanged);
+        }
+        if refuse_stale && from_sql(fetched_at).is_some_and(|newest| newest >= entry.fetched_at) {
+            return Ok(Appended::Stale);
+        }
+    }
+
+    let seq: i64 = sqlx::query_scalar(
+        "INSERT INTO upstream (api, path, etag, body, fetched_at, via) \
+         VALUES (?, ?, ?, ?, ?, ?) RETURNING seq",
+    )
+    .bind(&entry.api)
+    .bind(&entry.path)
+    .bind(&entry.etag)
+    .bind(&entry.body)
+    .bind(to_sql(entry.fetched_at))
+    .bind(&entry.via)
+    .fetch_one(&mut *conn)
+    .await
+    .map_err(|e| query_err("appending to the upstream log", e))?;
+
+    sqlx::query(
+        "DELETE FROM upstream WHERE api = ? AND path = ? AND seq NOT IN \
+         (SELECT seq FROM upstream WHERE api = ? AND path = ? ORDER BY seq DESC LIMIT ?)",
+    )
+    .bind(&entry.api)
+    .bind(&entry.path)
+    .bind(&entry.api)
+    .bind(&entry.path)
+    .bind(UPSTREAM_KEEP_PER_PATH)
+    .execute(&mut *conn)
+    .await
+    .map_err(|e| query_err("pruning the upstream log", e))?;
+
+    Ok(Appended::New(seq))
+}
+
+fn entry_from(row: &SqliteRow) -> UpstreamEntry {
+    UpstreamEntry {
+        seq: row.get("seq"),
+        entry: NewUpstream {
+            api: row.get("api"),
+            path: row.get("path"),
+            etag: row.get("etag"),
+            body: row.get("body"),
+            fetched_at: from_sql(&row.get::<String, _>("fetched_at")).unwrap_or_default(),
+            via: row.get("via"),
+        },
+    }
+}
 
 impl SqliteRepo {
     pub(crate) async fn append_upstream_impl(&self, entry: &NewUpstream) -> Result<Option<i64>> {
@@ -19,50 +99,31 @@ impl SqliteRepo {
             .begin()
             .await
             .map_err(|e| query_err("appending to the upstream log", e))?;
-
-        let newest: Option<String> = sqlx::query_scalar(
-            "SELECT body FROM upstream WHERE api = ? AND path = ? ORDER BY seq DESC LIMIT 1",
-        )
-        .bind(&entry.api)
-        .bind(&entry.path)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(|e| query_err("reading the upstream log", e))?;
-        if newest.as_deref() == Some(entry.body.as_str()) {
-            return Ok(None);
-        }
-
-        let seq: i64 = sqlx::query_scalar(
-            "INSERT INTO upstream (api, path, etag, body, fetched_at, via) \
-             VALUES (?, ?, ?, ?, ?, ?) RETURNING seq",
-        )
-        .bind(&entry.api)
-        .bind(&entry.path)
-        .bind(&entry.etag)
-        .bind(&entry.body)
-        .bind(to_sql(entry.fetched_at))
-        .bind(&entry.via)
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(|e| query_err("appending to the upstream log", e))?;
-
-        sqlx::query(
-            "DELETE FROM upstream WHERE api = ? AND path = ? AND seq NOT IN \
-             (SELECT seq FROM upstream WHERE api = ? AND path = ? ORDER BY seq DESC LIMIT ?)",
-        )
-        .bind(&entry.api)
-        .bind(&entry.path)
-        .bind(&entry.api)
-        .bind(&entry.path)
-        .bind(UPSTREAM_KEEP_PER_PATH)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| query_err("pruning the upstream log", e))?;
-
+        let appended = append_in(&mut tx, entry, false).await?;
         tx.commit()
             .await
             .map_err(|e| query_err("appending to the upstream log", e))?;
-        Ok(Some(seq))
+        Ok(match appended {
+            Appended::New(seq) => Some(seq),
+            Appended::Unchanged | Appended::Stale => None,
+        })
+    }
+
+    pub(crate) async fn latest_upstream_impl(
+        &self,
+        api: &str,
+        path: &str,
+    ) -> Result<Option<UpstreamEntry>> {
+        let row = sqlx::query(
+            "SELECT seq, api, path, etag, body, fetched_at, via FROM upstream \
+             WHERE api = ? AND path = ? ORDER BY seq DESC LIMIT 1",
+        )
+        .bind(api)
+        .bind(path)
+        .fetch_optional(self.pool())
+        .await
+        .map_err(|e| query_err("reading the upstream log", e))?;
+        Ok(row.as_ref().map(entry_from))
     }
 
     pub(crate) async fn upstream_since_impl(
@@ -79,20 +140,7 @@ impl SqliteRepo {
         .fetch_all(self.pool())
         .await
         .map_err(|e| query_err("reading the upstream log", e))?;
-        Ok(rows
-            .iter()
-            .map(|row| UpstreamEntry {
-                seq: row.get("seq"),
-                entry: NewUpstream {
-                    api: row.get("api"),
-                    path: row.get("path"),
-                    etag: row.get("etag"),
-                    body: row.get("body"),
-                    fetched_at: from_sql(&row.get::<String, _>("fetched_at")).unwrap_or_default(),
-                    via: row.get("via"),
-                },
-            })
-            .collect())
+        Ok(rows.iter().map(entry_from).collect())
     }
 }
 

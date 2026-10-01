@@ -283,6 +283,7 @@ pub fn panel(
         result_headline: outcome.map(ManualSync::headline).unwrap_or_default(),
         result_ok: outcome.is_some_and(|o| o.ok),
         result_problems: outcome.map(|o| o.problems.clone()).unwrap_or_default(),
+        last_bundle: String::new(),
     }
 }
 

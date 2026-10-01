@@ -107,6 +107,7 @@ mod tests {
         assert_eq!(
             tables,
             vec![
+                "bundle_imports",
                 "changes",
                 "devices",
                 "event_teams",
@@ -118,6 +119,7 @@ mod tests {
                 "scout_assignments",
                 "scouting_point_weights",
                 "sessions",
+                "sync_state",
                 "team_event_stats",
                 "teams",
                 "upstream",

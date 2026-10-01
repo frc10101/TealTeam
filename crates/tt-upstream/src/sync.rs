@@ -14,12 +14,12 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{NaiveDate, TimeDelta, Utc};
+use chrono::{DateTime, NaiveDate, TimeDelta, Utc};
 use tokio::sync::Notify;
 use tracing::{info, warn};
 use tt_core::records::{Event, MatchRecord, Team, TeamEventStats};
 use tt_core::timezone;
-use tt_core::upstream::{self, Phase};
+use tt_core::upstream::{self, ComponentOprs, Oprs, Phase, Rankings};
 use tt_repo::Repo;
 
 use crate::first::{EventFilters, FirstClient};
@@ -218,12 +218,21 @@ pub async fn sync_matches<R: Repo + Sync>(
     client: &TbaClient,
     event_key: &str,
 ) -> Result<SyncReport> {
-    let mut report = SyncReport::default();
-    let now = Utc::now();
-
     let matches = client.matches(event_key).await?;
+    Ok(store_matches(repo, event_key, &matches, Utc::now()).await)
+}
 
-    for raw in &matches {
+/// Store an event's matches, as TBA lists them. `synced_at` is when they were
+/// fetched: now for the Pi's own sync, the phone's time for a bundle (S5).
+pub async fn store_matches<R: Repo + Sync>(
+    repo: &R,
+    event_key: &str,
+    matches: &[upstream::Match],
+    synced_at: DateTime<Utc>,
+) -> SyncReport {
+    let mut report = SyncReport::default();
+
+    for raw in matches {
         let Some(comp_level) = raw.comp_level() else {
             report.problem(format!(
                 "match {} has an unrecognised comp_level {:?}",
@@ -248,14 +257,14 @@ pub async fn sync_matches<R: Repo + Sync>(
             actual_at: raw.actual_unix().and_then(from_unix),
         };
 
-        match repo.upsert_match(&record, now).await {
+        match repo.upsert_match(&record, synced_at).await {
             Ok(()) => report.matches += 1,
             Err(e) => report.problem(format!("storing match {}: {e}", raw.key)),
         }
     }
 
     info!("synced {} match(es) for {event_key}", report.matches);
-    Ok(report)
+    report
 }
 
 fn from_unix(seconds: i64) -> Option<chrono::DateTime<Utc>> {
@@ -269,7 +278,6 @@ pub async fn sync_stats<R: Repo + Sync>(
     event_key: &str,
 ) -> Result<SyncReport> {
     let mut report = SyncReport::default();
-    let now = Utc::now();
 
     let oprs = client.oprs(event_key).await?;
     let rankings = client.rankings(event_key).await?;
@@ -285,21 +293,43 @@ pub async fn sync_stats<R: Repo + Sync>(
         }
     };
 
-    let roster = repo
-        .event_teams(event_key)
-        .await
-        .map_err(|e| UpstreamError::Status {
-            api: "repo",
-            path: event_key.to_string(),
-            status: 0,
-            body: e.to_string(),
-        })?;
+    let stored = store_stats(
+        repo,
+        event_key,
+        &oprs,
+        &rankings,
+        components.as_ref(),
+        Utc::now(),
+    )
+    .await
+    .map_err(|e| UpstreamError::Status {
+        api: "repo",
+        path: event_key.to_string(),
+        status: 0,
+        body: e.to_string(),
+    })?;
+    report.merge(stored);
+    Ok(report)
+}
+
+/// Store rankings and OPRs for every team on an event's roster. `synced_at`
+/// is when they were fetched, as for [`store_matches`].
+pub async fn store_stats<R: Repo + Sync>(
+    repo: &R,
+    event_key: &str,
+    oprs: &Oprs,
+    rankings: &Rankings,
+    components: Option<&ComponentOprs>,
+    synced_at: DateTime<Utc>,
+) -> tt_repo::Result<SyncReport> {
+    let mut report = SyncReport::default();
+    let roster = repo.event_teams(event_key).await?;
 
     for team in &roster {
         let key = upstream::team_key(team.number);
         let ranking = rankings.for_team(&key);
 
-        let (auto, teleop, endgame) = match &components {
+        let (auto, teleop, endgame) = match components {
             Some(c) => (
                 c.phase_opr(&key, Phase::Auto),
                 c.phase_opr(&key, Phase::Teleop),
@@ -334,10 +364,10 @@ pub async fn sync_stats<R: Repo + Sync>(
             total_points: ranking
                 .and_then(|r| r.effective_total_points())
                 .map(clamp_i32),
-            synced_at: Some(now),
+            synced_at: Some(synced_at),
         };
 
-        match repo.upsert_team_stats(&stats, now).await {
+        match repo.upsert_team_stats(&stats, synced_at).await {
             Ok(()) => report.stats += 1,
             Err(e) => report.problem(format!("storing stats for team {}: {e}", team.number)),
         }

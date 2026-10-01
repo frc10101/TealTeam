@@ -11,6 +11,7 @@ mod assets;
 mod assignments;
 mod auth;
 mod backups;
+mod bundle;
 mod coach;
 mod config;
 mod errors;

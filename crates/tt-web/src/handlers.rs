@@ -599,11 +599,13 @@ async fn lead_scout_page(
     reviewed: String,
 ) -> Response {
     let (nav, context) = event_page(state, Some(user), requested).await;
+    let mut panel = upstream::panel(&state.upstream, outcome, Utc::now());
+    panel.last_bundle = crate::bundle::last_import(state).await;
     html(LeadScoutPage {
         title: "Lead Scout".into(),
         nav,
         season_name: state.season.name.clone(),
-        upstream: upstream::panel(&state.upstream, outcome, Utc::now()),
+        upstream: panel,
         stored: events::stored(&*state.repo, &context).await,
         queue: review::queue(state, &context).await,
         reviewed,

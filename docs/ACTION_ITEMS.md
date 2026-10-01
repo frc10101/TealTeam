@@ -445,7 +445,7 @@ The architectural payoff. Phase 2 must be shipping before this starts.
 | S2 | `changes` append-only log + `/api/sync/pull` with a lag window. **Not** per-table watermarks — those cannot see deletions and have a commit-ordering race | RI-O15 | M | **Done** — `changes` table + triggers, `GET /api/sync/pull`; see Phase 3 notes |
 | S3 | Scoped subscription filtering + a never-replicate allowlist, so other teams' notes never leak | RI-O16 | M | **Done** — `sync::Scope`, `tt_repo_sqlite::replication`; see Phase 3 notes |
 | S4 | Compile the FIRST/TBA clients for `wasm32`; client-side conditional fetch with ETags. **Both APIs allow direct browser requests**, so no relay server is needed | RI-S3 | M |  |
-| S5 | Bundle import on the Pi: role-gate the push, `ATTACH`, upsert, advance cursor, audit-log | RI-S4 | M |  |
+| S5 | Bundle import on the Pi: role-gate the push, `ATTACH`, upsert, advance cursor, audit-log | RI-S4 | M | **Done** — `POST /api/sync/bundle`, `tt_repo_sqlite::bundle`, `tt_upstream::project`; see Phase 3 notes |
 | S6 | USB tether as the Pi's automatic uplink; pull bundles whenever `usb0` is up | RI-S6 | M |  |
 | S7 | Opportunistic client fetch: detect signal, fetch upstream, queue bundle, push on reconnect | RI-S7 | M |  |
 | S8 | **SSE fan-out endpoint** with `Last-Event-ID` resume and a polling fallback | RI-S9 | M | **Done** — `GET /api/sync/stream`; see Phase 3 notes |
@@ -559,6 +559,14 @@ Not checked: a real tablet, or an iPad's `pagehide`.
 - `SERVER_ONLY`: the logs themselves, and the point weights for now.
 
 A test fails if a table is in no list or in two, if a listed table does not exist, or if any table outside `REPLICATED` has a trigger writing to `changes`.
+
+**A phone that found signal can hand the Pi what it fetched (S5).** `POST /api/sync/bundle` takes a bundle as its body: a SQLite file with a `meta` table (`format` = `1`, `log` = the id of the client's upstream log) and S1's `upstream` table (`seq, api, path, etag, body, fetched_at`). The format is written down in `tt_repo_sqlite::bundle`. S4 and S7 build bundles; nothing does yet.
+- **Only a lead scout may push.** Refusals are status codes with a JSON reason, never the guards' redirect, so a client knows to keep its bundle: 401, 403, 409 for another schema (S11's `?schema=`, as for the pull), 413 past 32 MB, 422 for a file that is not a bundle (with why), and 503.
+- **The import.** The file is `ATTACH`ed, and one transaction does the rest. Rows past this log's cursor go through the same append as the Pi's own fetches. A row is skipped when its body is already the newest for its path, and **when it was fetched no later than the newest**, so an old phone cannot roll a ranking back. A time in the future is taken as now. A row that is not a FIRST or TBA JSON response is refused and counted. The cursor (`sync_state`, source `bundle:<log>`) moves to the bundle's newest row, so the same bundle twice imports nothing. A wiped phone starts a new log, which is read from the start.
+- **The audit trail.** Every push is a `bundle_imports` row: when, who, which tablet, the seq range, and the counts. That includes empty and refused-row pushes, but not files refused whole. Appended rows carry `via = 'bundle:<id>'`, never the device id, which is the tablet's cookie. The lead scout page's status list says who pushed last, from which tablet, when, and how many responses were new.
+- **Then the tables.** `tt_upstream::project` applies the log's newest response for each path the bundle touched, using the Pi's own storing code, split out of the sync as `store_matches` and `store_stats`. So rankings alone combine with the OPRs already logged. Stats wait until the log has both rankings and OPRs. Rows are stamped with the phone's fetch time, and stats with the older of the two. Only TBA's per-event matches, rankings, and OPRs are applied. Season lists and FIRST's rosters stay in the log, which clients still get, and the bulk load (I8) is what brings those. An event the Pi does not have is said, not created.
+- **Not done:** the Pi's own sync still writes the tables inline, as well as logging. Only bundles go "append, then project", which S1's notes had hoped for both.
+- **Checked:** repo tests (once only, stale, refused rows, cursors per log, files that are not bundles, and the one connection being left usable), projection tests, and a router test of every refusal and a push applied end to end. **`ATTACH` on an in-memory database silently attaches an empty one**, so those tests use a file. Not checked: a real phone's bundle, since none builds one yet.
 ---
 
 ## Phase 4 — Analysis and communication

@@ -70,6 +70,10 @@
       <dd><span class="badge {{ upstream.uplink_class }}">{{ upstream.uplink_label }}</span></dd>
       <dt>Last sync</dt>
       <dd>{{ upstream.last_sync }}{% if upstream.stale %} <span class="badge badge-amber">stale</span>{% endif %}</dd>
+      {% if !upstream.last_bundle.is_empty() %}
+        <dt>Last bundle</dt>
+        <dd>{{ upstream.last_bundle }}</dd>
+      {% endif %}
       {% if let Some(stored) = stored %}
         <dt>Stored</dt>
         <dd>{{ stored.event_name }}: {{ stored.teams }} teams · {{ stored.matches }} matches{% if stored.matches > 0 %}, {{ stored.played }} played{% endif %}</dd>

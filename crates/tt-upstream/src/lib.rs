@@ -9,6 +9,7 @@
 pub mod first;
 pub mod journal;
 pub mod probe;
+pub mod project;
 pub mod sync;
 pub mod tba;
 

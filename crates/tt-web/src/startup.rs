@@ -272,6 +272,12 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/sync/pull", get(crate::sync::pull))
         .route("/api/sync/stream", get(crate::sync::stream))
+        .route(
+            "/api/sync/bundle",
+            post(crate::bundle::push).layer(axum::extract::DefaultBodyLimit::max(
+                crate::bundle::MAX_BUNDLE_BYTES,
+            )),
+        )
         .route("/api/weights/reset", post(handlers::reset_weights))
         .route(
             "/api/observations/{id}/approve",
@@ -4582,5 +4588,132 @@ mod flow_tests {
         assert!(page.contains("<h1>That did not work</h1>"));
         // axum fills in the length of whatever body leaves the layer.
         assert_eq!(length.expect("length"), page.len().to_string().as_str());
+    }
+
+    // ── Upstream bundles (S5) ───────────────────────────────────────────────
+
+    /// A bundle as a client would push it: one TBA response, `body`, for
+    /// `path`, as row `seq` of the log `phone-1`.
+    async fn bundle_bytes(dir: &std::path::Path, seq: i64, path: &str, body: &str) -> Vec<u8> {
+        use sqlx::{ConnectOptions, Connection};
+        let file = dir.join(format!("bundle-{seq}.sqlite"));
+        let mut conn = sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&file)
+            .create_if_missing(true)
+            .journal_mode(sqlx::sqlite::SqliteJournalMode::Delete)
+            .connect()
+            .await
+            .unwrap();
+        sqlx::raw_sql(
+            "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL); \
+             INSERT INTO meta VALUES ('format', '1'), ('log', 'phone-1'); \
+             CREATE TABLE upstream (seq INTEGER PRIMARY KEY, api TEXT NOT NULL, \
+               path TEXT NOT NULL, etag TEXT, body TEXT NOT NULL, fetched_at TEXT NOT NULL);",
+        )
+        .execute(&mut conn)
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO upstream VALUES (?, 'tba', ?, NULL, ?, ?)")
+            .bind(seq)
+            .bind(path)
+            .bind(body)
+            .bind(chrono::Utc::now().to_rfc3339())
+            .execute(&mut conn)
+            .await
+            .unwrap();
+        conn.close().await.unwrap();
+        std::fs::read(&file).unwrap()
+    }
+
+    async fn push_bundle(
+        state: &AppState,
+        query: &str,
+        bytes: Vec<u8>,
+        cookie: Option<&str>,
+    ) -> (StatusCode, serde_json::Value) {
+        let mut req = Request::builder()
+            .method("POST")
+            .uri(format!("/api/sync/bundle{query}"))
+            .header(header::CONTENT_TYPE, "application/vnd.sqlite3");
+        if let Some(c) = cookie {
+            req = req.header(header::COOKIE, c);
+        }
+        let response = router(state.clone())
+            .oneshot(req.body(Body::from(bytes)).unwrap())
+            .await
+            .expect("request");
+        let status = response.status();
+        let body = serde_json::from_str(&text(response).await).unwrap_or_default();
+        (status, body)
+    }
+
+    #[tokio::test]
+    async fn a_lead_scouts_bundle_lands_once_is_applied_and_named_on_their_page() {
+        // A file, not memory: ATTACH on an in-memory database attaches an
+        // empty one.
+        let dir = std::env::temp_dir().join(format!("tt-web-bundle-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let repo =
+            SqliteRepo::connect(&format!("sqlite://{}", dir.join("pi.db").display())).unwrap();
+        tt_repo_sqlite::migrate::apply(repo.pool()).await.unwrap();
+        let state = AppState {
+            repo: Arc::new(repo),
+            season: Arc::new(season::current_season().expect("embedded schema")),
+            upstream: Arc::new(Upstream::disabled()),
+        };
+        let lead = signed_up(&state).await; // the first account, an admin
+        let kim = with_kim(&state).await;
+        let event = tt_core::records::Event {
+            key: "2026mslr".into(),
+            name: "Magnolia".into(),
+            location: None,
+            timezone: None,
+            start_date: None,
+            end_date: None,
+            event_code: None,
+            event_type: None,
+            district_key: None,
+            week: None,
+        };
+        state
+            .repo
+            .upsert_event(&event, chrono::Utc::now())
+            .await
+            .unwrap();
+        let matches = r#"[{"key":"2026mslr_qm1","comp_level":"qm","set_number":1,
+            "match_number":1,"alliances":{"red":{"score":40,"team_keys":[]},
+            "blue":{"score":30,"team_keys":[]}},"winning_alliance":"red"}]"#;
+        let bytes = bundle_bytes(&dir, 1, "/event/2026mslr/matches", matches).await;
+
+        // Refused, as status codes a client can act on, never a redirect.
+        let (status, _) = push_bundle(&state, "", bytes.clone(), None).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        let (status, body) = push_bundle(&state, "", bytes.clone(), Some(&kim)).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+        let old = format!("?schema={}", tt_repo_sqlite::migrate::latest() - 1);
+        let (status, body) = push_bundle(&state, &old, bytes.clone(), Some(&lead)).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(body["action"], "reload");
+        let (status, body) = push_bundle(&state, "", b"rankings".to_vec(), Some(&lead)).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(body["error"], "that is not a SQLite file");
+
+        let (status, body) = push_bundle(&state, "", bytes.clone(), Some(&lead)).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["appended"], 1);
+        assert_eq!(body["applied"]["matches"], 1, "{body}");
+        assert_eq!(body["cursor"], 1);
+        let stored = state.repo.match_by_key("2026mslr_qm1").await.unwrap();
+        assert_eq!(stored.expect("applied").red_score, Some(40));
+
+        let (status, body) = push_bundle(&state, "", bytes, Some(&lead)).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["read"], 0, "the same bundle again is nothing new");
+
+        let page = text(get(&state, "/lead-scout", Some(&lead)).await).await;
+        assert!(page.contains("<dt>Last bundle</dt>"), "{page}");
+        assert!(page.contains("Sam, just now: nothing new"), "{page}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

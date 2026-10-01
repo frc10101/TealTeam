@@ -56,6 +56,11 @@ pub enum RepoError {
     #[error("{what} already exists")]
     Conflict { what: &'static str },
 
+    /// The input itself was unacceptable, such as a pushed bundle that is not
+    /// one (S5). The words say why, and are safe to show the person.
+    #[error("{0}")]
+    Refused(String),
+
     /// Schema is older or newer than this build expects.
     #[error("schema version mismatch: expected {expected}, found {found}")]
     SchemaMismatch { expected: i64, found: i64 },
@@ -579,6 +584,10 @@ pub trait LocalRepo {
 
     /// Up to `limit` entries after `after`, oldest first.
     async fn upstream_since(&self, after: i64, limit: i64) -> Result<Vec<UpstreamEntry>>;
+
+    /// The newest response logged for `path`: its current state, which is
+    /// what the tables are derived from (S5).
+    async fn latest_upstream(&self, api: &str, path: &str) -> Result<Option<UpstreamEntry>>;
 
     // ── Change log (S2) ─────────────────────────────────────────────────────
 

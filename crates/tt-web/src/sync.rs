@@ -55,7 +55,10 @@ pub const UPSTREAM_PER_PULL: i64 = 20;
 
 /// The 409 for a client that said it was built for another schema (S11), or
 /// nothing when it matches or did not say. The same for `pull` and `stream`.
-fn schema_mismatch(state: &AppState, query: &HashMap<String, String>) -> Option<Response> {
+pub(crate) fn schema_mismatch(
+    state: &AppState,
+    query: &HashMap<String, String>,
+) -> Option<Response> {
     let client = query.get("schema")?.parse::<i64>().ok()?;
     let server = crate::shell::page_version(state);
     (client != server.schema).then(|| {

@@ -23,9 +23,9 @@ pub const FROM_UPSTREAM: &[&str] = &[
     "team_event_stats",
 ];
 
-/// The server's own: the two logs themselves, and settings not replicated
-/// yet. The point weights (L12) will want to join [`REPLICATED`] once
-/// clients compute rankings.
+/// The server's own: the two logs themselves, settings not replicated yet,
+/// and the bundle cursors and audit trail (S5). The point weights (L12) will
+/// want to join [`REPLICATED`] once clients compute rankings.
 ///
 /// The pick list documents (L14) do reach clients, but not as rows: a lead's
 /// copy is exchanged whole through `/api/pick-list/doc`, which checks whose
@@ -36,6 +36,8 @@ pub const SERVER_ONLY: &[&str] = &[
     "upstream",
     "scouting_point_weights",
     "pick_list_docs",
+    "sync_state",
+    "bundle_imports",
 ];
 
 #[cfg(test)]
