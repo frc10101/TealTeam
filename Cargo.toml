@@ -10,6 +10,9 @@ members = ["crates/*"]
 #   tt-core, tt-templates  -- pure. MUST compile to wasm32-unknown-unknown.
 #                             No sqlx, no axum, no tokio net/fs/time-driver.
 #   tt-repo                -- the Repo trait. Abstract; also wasm-clean.
+#   tt-upstream            -- the FIRST/TBA clients also compile to wasm32, so a
+#                             browser with signal fetches upstream itself (S4).
+#                             The sync loop and the journal are native-only.
 #   tt-repo-sqlite         -- server-side adapter. sqlx lives here and nowhere else.
 #   tt-web                 -- axum binary. The only crate that knows about HTTP.
 #
@@ -49,6 +52,11 @@ tower-http = { version = "0.7", features = ["trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 trait-variant = "0.1"
+# The browser side of tt-upstream (S4): a timer for retry backoff, over the
+# same wasm-bindgen that reqwest's fetch backend already pulls in.
+js-sys = "0.3"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
 # The pick list's CRDT (L14). Pure Rust and wasm-clean, so a browser replica
 # merges the same way the server does.
 yrs = "0.28"

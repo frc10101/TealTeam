@@ -120,6 +120,46 @@ async fn clones_share_what_they_have_seen() {
 }
 
 #[tokio::test]
+async fn a_client_starting_cold_revalidates_what_its_log_remembers() {
+    // A browser's client lives as long as its page (S4): it seeds the cache
+    // from its own upstream log, so the first request is already conditional.
+    let (base, up) = stub().await;
+    let tba = client(&base, &Uplink::new());
+    tba.remember("/event/2026mabil/matches", "W/\"v0\"", ONE_MATCH);
+
+    let matches = tba.matches("2026mabil").await.expect("revalidated");
+
+    assert_eq!(matches.len(), 1, "the remembered body answers the 304");
+    assert_eq!(up.full.load(Ordering::SeqCst), 0);
+    assert_eq!(up.not_modified.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn a_remembered_tag_that_is_stale_fetches_the_new_body() {
+    let (base, up) = stub().await;
+    up.version.store(1, Ordering::SeqCst);
+    let tba = client(&base, &Uplink::new());
+    tba.remember("/event/2026mabil/matches", "W/\"v0\"", ONE_MATCH);
+
+    let matches = tba.matches("2026mabil").await.expect("fetched");
+
+    assert_eq!(matches[0].red_score(), Some(88), "not the remembered body");
+    assert_eq!(up.full.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn a_tag_that_cannot_be_a_header_is_not_remembered() {
+    let (base, up) = stub().await;
+    let tba = client(&base, &Uplink::new());
+    tba.remember("/event/2026mabil/matches", "bad\ntag", ONE_MATCH);
+
+    tba.matches("2026mabil").await.expect("fetched");
+
+    assert_eq!(up.full.load(Ordering::SeqCst), 1);
+    assert_eq!(up.not_modified.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
 async fn a_304_nobody_asked_for_is_an_error_not_empty_data() {
     let (base, up) = stub().await;
     up.always_304.store(true, Ordering::SeqCst);

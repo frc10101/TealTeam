@@ -3,13 +3,20 @@
 //!
 //! Parsing lives in `tt_core::upstream`; this crate is transport and
 //! orchestration only. That split exists so the deserializers can be tested
-//! against recorded payloads without a network, and so they can later compile to
-//! wasm32 for a client that has signal to fetch upstream itself (S4).
+//! against recorded payloads without a network.
+//!
+//! The clients compile to wasm32 too (S4), so a browser that has signal fetches
+//! upstream itself and hands the Pi a bundle. reqwest runs over `fetch` there,
+//! and both APIs answer a browser directly. The sync loop and the journal stay
+//! on the server: they need tokio's timers and a [`Repo`](tt_repo::Repo) to
+//! write to.
 
 pub mod first;
 pub mod journal;
 pub mod probe;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod project;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod sync;
 pub mod tba;
 
@@ -36,6 +43,38 @@ pub fn backoff(attempt: u32) -> Duration {
         1 => Duration::from_millis(500),
         _ => Duration::from_secs(1),
     }
+}
+
+/// Wait before a retry, on tokio's timer.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) async fn sleep(duration: Duration) {
+    tokio::time::sleep(duration).await;
+}
+
+/// Wait before a retry, on `setTimeout`: a browser has no tokio runtime to
+/// drive a timer.
+///
+/// Looked up on the global object rather than `window`, so it works in a
+/// Service Worker as well as a page.
+#[cfg(target_arch = "wasm32")]
+pub(crate) async fn sleep(duration: Duration) {
+    use wasm_bindgen::{JsCast, JsValue};
+
+    let promise = js_sys::Promise::new(&mut |resolve, _reject| {
+        let global = js_sys::global();
+        let waited = js_sys::Reflect::get(&global, &JsValue::from_str("setTimeout"))
+            .ok()
+            .and_then(|f| f.dyn_into::<js_sys::Function>().ok())
+            .map(|set_timeout| {
+                let millis = JsValue::from_f64(duration.as_millis() as f64);
+                set_timeout.call2(&global, &resolve, &millis)
+            });
+        // No timer at all: retry now rather than never.
+        if !matches!(waited, Some(Ok(_))) {
+            let _ = resolve.call0(&JsValue::NULL);
+        }
+    });
+    let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
 }
 
 /// Whether a status code is worth trying again.

@@ -15,9 +15,11 @@ use std::fmt;
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
-use tokio::sync::mpsc;
-use tokio::task::JoinHandle;
+#[cfg(not(target_arch = "wasm32"))]
+use tokio::{sync::mpsc, task::JoinHandle};
+#[cfg(not(target_arch = "wasm32"))]
 use tracing::warn;
+#[cfg(not(target_arch = "wasm32"))]
 use tt_repo::{NewUpstream, Repo};
 
 /// A response worth logging: it parsed, and it is not a 304.
@@ -54,6 +56,7 @@ impl fmt::Debug for Recorder {
 
 /// A recorder that appends to `repo`'s upstream log as `via = "pi"`, and the
 /// task doing it. The task ends once every clone of the recorder is dropped.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn journal<R: Repo + Send + Sync + 'static>(repo: Arc<R>) -> (Recorder, JoinHandle<()>) {
     let (tx, mut rx) = mpsc::unbounded_channel::<Fetched>();
     let task = tokio::spawn(async move {

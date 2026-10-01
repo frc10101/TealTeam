@@ -11,6 +11,13 @@
 //! During quals the loop asks for the same four resources per event every two
 //! minutes and most of them have not moved, so on a phone tether this is most
 //! of the data the Pi would otherwise spend.
+//!
+//! The same requests work from a browser (S4). TBA's CORS preflight allows
+//! `If-None-Match` and exposes `ETag`, and a request carrying its own
+//! `If-None-Match` skips the browser's HTTP cache, so the 304 reaches this code
+//! rather than being answered from that cache. A browser's cache here lives
+//! only as long as its page or worker, so [`TbaClient::remember`] seeds it from
+//! the client's own upstream log.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -50,7 +57,7 @@ pub struct TbaClient {
 /// The last good response per path, for `If-None-Match` (I9).
 ///
 /// In memory only. After a restart the first pass fetches everything in full,
-/// once, which costs less than a table and a migration would.
+/// once, unless someone [remembered](TbaClient::remember) what was fetched.
 #[derive(Default)]
 struct Cache {
     entries: HashMap<String, Cached>,
@@ -99,14 +106,13 @@ impl TbaClient {
             return Err(UpstreamError::NotConfigured("The Blue Alliance"));
         }
         Ok(Self {
-            http: reqwest::Client::builder()
-                .timeout(REQUEST_TIMEOUT)
-                .build()
-                .map_err(|source| UpstreamError::Transport {
+            http: reqwest::Client::builder().build().map_err(|source| {
+                UpstreamError::Transport {
                     api: API,
                     path: "<client>".into(),
                     source,
-                })?,
+                }
+            })?,
             base_url: DEFAULT_BASE_URL.to_string(),
             auth_key,
             uplink,
@@ -115,13 +121,13 @@ impl TbaClient {
         })
     }
 
-    /// Point at a different host. For tests against a local stub.
     /// Send every response with new content to `recorder` (S1).
     pub fn with_recorder(mut self, recorder: Recorder) -> Self {
         self.recorder = Some(recorder);
         self
     }
 
+    /// Point at a different host. For tests against a local stub.
     pub fn with_base_url(mut self, base_url: impl Into<String>) -> Self {
         self.base_url = base_url.into();
         self
@@ -132,6 +138,22 @@ impl TbaClient {
     pub fn from_env(uplink: Uplink) -> Option<Self> {
         let key = std::env::var("TBA_AUTH_KEY").ok()?;
         Self::new(key.trim(), uplink).ok()
+    }
+
+    /// Hold `body` as what `path` last returned under `etag`, so the next
+    /// request for it is conditional (S4).
+    ///
+    /// For a client starting cold: it seeds the cache from the newest row per
+    /// path in its upstream log, and a phone that fetched the schedule
+    /// yesterday spends a 304 on it today. `path` is the log's, e.g.
+    /// `/event/2026mabil/matches`. A tag that is not a valid header is ignored.
+    pub fn remember(&self, path: &str, etag: &str, body: impl Into<Arc<str>>) {
+        let Ok(etag) = HeaderValue::from_str(etag) else {
+            return;
+        };
+        if let Ok(mut cache) = self.cache.lock() {
+            cache.put(path, etag, body.into());
+        }
     }
 
     async fn get<T: DeserializeOwned>(&self, path: &str) -> Result<T> {
@@ -151,6 +173,9 @@ impl TbaClient {
             let mut request = self
                 .http
                 .get(&url)
+                // Per request, not on the client: a browser's client has no
+                // timeout of its own.
+                .timeout(REQUEST_TIMEOUT)
                 .header("X-TBA-Auth-Key", &self.auth_key)
                 .header("Accept", "application/json");
             if let Some((etag, _)) = &cached {
@@ -181,7 +206,7 @@ impl TbaClient {
 
                         if attempt + 1 < MAX_ATTEMPTS && is_retryable(status) {
                             warn!("{error}; retrying");
-                            tokio::time::sleep(backoff(attempt)).await;
+                            crate::sleep(backoff(attempt)).await;
                             last = Some(error);
                             continue;
                         }
@@ -230,7 +255,7 @@ impl TbaClient {
                     self.uplink.record_error(&error.to_string());
                     if attempt + 1 < MAX_ATTEMPTS {
                         debug!("{error}; retrying");
-                        tokio::time::sleep(backoff(attempt)).await;
+                        crate::sleep(backoff(attempt)).await;
                         last = Some(error);
                         continue;
                     }

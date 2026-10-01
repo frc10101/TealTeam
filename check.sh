@@ -31,6 +31,11 @@ if [[ "$fast" == false ]]; then
     rustup target add wasm32-unknown-unknown
   fi
   cargo build -p tt-core -p tt-templates --target wasm32-unknown-unknown
+
+  # Its own run: cargo unifies features across one build, and tt-upstream's
+  # chrono "clock" would hide that same leak into tt-core.
+  step "wasm32 upstream clients (tt-upstream)"
+  cargo build -p tt-upstream --target wasm32-unknown-unknown
 fi
 
 printf '\n\033[1;32mAll checks passed.\033[0m\n'

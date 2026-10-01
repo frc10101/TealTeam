@@ -47,6 +47,12 @@ jobs:
       - name: Build pure crates for wasm32
         run: cargo build -p tt-core -p tt-templates --target wasm32-unknown-unknown --locked
 
+      # The FIRST/TBA clients run in a browser too (S4). A separate build:
+      # cargo unifies features within one, and tt-upstream's chrono "clock"
+      # would hide that same leak into tt-core.
+      - name: Build the upstream clients for wasm32
+        run: cargo build -p tt-upstream --target wasm32-unknown-unknown --locked
+
   test:
     name: Test and lint
     runs-on: ubuntu-latest

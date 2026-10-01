@@ -50,14 +50,13 @@ impl FirstClient {
             return Err(UpstreamError::NotConfigured("FIRST Events API"));
         }
         Ok(Self {
-            http: reqwest::Client::builder()
-                .timeout(REQUEST_TIMEOUT)
-                .build()
-                .map_err(|source| UpstreamError::Transport {
+            http: reqwest::Client::builder().build().map_err(|source| {
+                UpstreamError::Transport {
                     api: API,
                     path: "<client>".into(),
                     source,
-                })?,
+                }
+            })?,
             base_url: DEFAULT_BASE_URL.to_string(),
             username,
             token,
@@ -110,6 +109,7 @@ impl FirstClient {
             let response = self
                 .http
                 .get(&url)
+                .timeout(REQUEST_TIMEOUT)
                 .basic_auth(&self.username, Some(&self.token))
                 .header("Accept", "application/json")
                 .query(query)
@@ -131,7 +131,7 @@ impl FirstClient {
 
                         if attempt + 1 < MAX_ATTEMPTS && is_retryable(status) {
                             warn!("{error}; retrying");
-                            tokio::time::sleep(backoff(attempt)).await;
+                            crate::sleep(backoff(attempt)).await;
                             last = Some(error);
                             continue;
                         }
@@ -182,7 +182,7 @@ impl FirstClient {
                     self.uplink.record_error(&error.to_string());
                     if attempt + 1 < MAX_ATTEMPTS {
                         debug!("{error}; retrying");
-                        tokio::time::sleep(backoff(attempt)).await;
+                        crate::sleep(backoff(attempt)).await;
                         last = Some(error);
                         continue;
                     }

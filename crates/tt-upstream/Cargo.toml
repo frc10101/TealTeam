@@ -4,17 +4,30 @@ version = "0.1.0"
 edition = "2024"
 description = "FIRST and Blue Alliance HTTP clients, plus the sync that lands their data in a Repo."
 
+# The clients compile to wasm32 as well (S4): reqwest runs over the browser's
+# fetch there. Build it for wasm on its own, never alongside tt-core -- cargo
+# unifies features, and chrono's "clock" here would hide a leak into tt-core.
 [dependencies]
 tt-core = { workspace = true }
 tt-repo = { workspace = true }
 
-chrono = { workspace = true, features = ["clock"] }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true }
 tracing = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+chrono = { workspace = true, features = ["clock"] }
+tokio = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# `wasmbind` reads the clock from JavaScript's Date; without it Utc::now()
+# panics in a browser.
+chrono = { workspace = true, features = ["clock", "wasmbind"] }
+js-sys = { workspace = true }
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
 
 [dev-dependencies]
 tt-repo-sqlite = { workspace = true }

@@ -3,7 +3,13 @@
 //! A raw TCP connect, not an HTTP request: no DNS, no TLS handshake, no payload.
 //! On a Pi sharing a phone's tethered connection that difference is the
 //! difference between a 40ms answer and a multi-second one.
+//!
+//! A browser cannot open a socket (S4). There the probe asks
+//! `navigator.onLine`, which is only trustworthy when it says no: then the
+//! request is not worth making. A yes proves nothing, so it records nothing,
+//! and the request itself finds out.
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 
 use crate::Uplink;
@@ -11,11 +17,33 @@ use crate::Uplink;
 /// Cloudflare's resolver. Chosen because it answers on 443 from essentially
 /// anywhere with a route, and because it is an IP -- so a broken DNS server does
 /// not read as "no internet".
+#[cfg(not(target_arch = "wasm32"))]
 const PROBE_HOST: &str = "1.1.1.1";
+#[cfg(not(target_arch = "wasm32"))]
 const PROBE_PORT: u16 = 443;
+#[cfg(not(target_arch = "wasm32"))]
 const PROBE_TIMEOUT: Duration = Duration::from_millis(1500);
 
 /// Test the uplink and record the result.
+#[cfg(target_arch = "wasm32")]
+pub async fn probe(uplink: &Uplink) -> bool {
+    use wasm_bindgen::JsValue;
+
+    // `navigator` on the global object: a page's and a worker's both have
+    // `onLine`. Anything missing reads as "maybe", like a yes.
+    let on_line = js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("navigator"))
+        .and_then(|navigator| js_sys::Reflect::get(&navigator, &JsValue::from_str("onLine")))
+        .ok()
+        .and_then(|v| v.as_bool());
+    if on_line == Some(false) {
+        uplink.record_probe(false, "the browser reports no network");
+        return false;
+    }
+    true
+}
+
+/// Test the uplink and record the result.
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn probe(uplink: &Uplink) -> bool {
     let address = format!("{PROBE_HOST}:{PROBE_PORT}");
     let attempt = tokio::time::timeout(
