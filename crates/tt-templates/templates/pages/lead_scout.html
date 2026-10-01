@@ -16,6 +16,32 @@
 
 {% if !reviewed.is_empty() %}<p class="alert alert-success" role="status">{{ reviewed }}</p>{% endif %}
 
+{# Only when there is something: a scout's tablet sent it, and the Pi said
+   no (C10). Usually a match not on the schedule yet, or the wrong robot. #}
+{% if refused.unavailable || !refused.items.is_empty() %}
+  <section class="card" id="refused">
+    <div class="card-header"><h2>Refused when sent</h2></div>
+    <div class="card-body">
+      {% if refused.unavailable %}
+        <p>Could not read what the server refused. Reload to try again.</p>
+      {% else %}
+        <p><strong>{{ refused.items.len() }}</strong> saved on a tablet and refused by the server, oldest first. Record each against the right match, or dismiss it.</p>
+        <ul class="queue">
+          {% for item in refused.items %}
+            <li>
+              <a class="queue-item" href="{{ item.href }}">
+                <strong>{{ item.heading }}</strong>
+                <span class="muted">{{ item.byline }}</span>
+                <span>{{ item.reason }}</span>
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+  </section>
+{% endif %}
+
 {% if let Some(queue) = queue %}
   <section class="card" id="review">
     <div class="card-header"><h2>Waiting for review</h2></div>

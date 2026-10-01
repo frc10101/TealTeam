@@ -116,6 +116,7 @@ mod tests {
                 "observations",
                 "pick_list_docs",
                 "pick_list_entries",
+                "refused_entries",
                 "scout_assignments",
                 "scouting_point_weights",
                 "sessions",

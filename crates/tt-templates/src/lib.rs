@@ -447,7 +447,10 @@ pub struct LeadScoutPage {
     pub stored: Option<StoredCounts>,
     /// The review queue (L8). `None` with no event selected.
     pub queue: Option<ReviewQueue>,
-    /// What the review that led here did.
+    /// Outbox entries the Pi refused, waiting for a lead (C10). From every
+    /// event, since one may name a match no event has.
+    pub refused: RefusedList,
+    /// What the review, or the refusal dealt with, that led here did.
     pub reviewed: String,
 }
 
@@ -625,6 +628,62 @@ pub struct ReviewPage {
     /// Waiting after this one, for "Approve" to say where it goes next.
     pub waiting: usize,
     pub back_href: String,
+}
+
+/// Outbox entries the Pi refused (C10), for the lead-scout page.
+#[derive(Debug, Clone, Default)]
+pub struct RefusedList {
+    pub items: Vec<RefusedItem>,
+    /// Storage could not say.
+    pub unavailable: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct RefusedItem {
+    /// `"Q99 · Team 254"`, or the match key as sent when it is not on the
+    /// schedule.
+    pub heading: String,
+    /// `"Sam on Red tablet, 5 minutes ago"`.
+    pub byline: String,
+    /// The Pi's words, as the scout's tablet has them.
+    pub reason: String,
+    pub href: String,
+}
+
+/// One refused entry in full: why, the answers, and what a lead can do.
+#[derive(Template)]
+#[template(path = "pages/refused.html")]
+pub struct RefusedPage {
+    pub title: String,
+    pub nav: Nav,
+    pub id: i64,
+    pub heading: String,
+    pub byline: String,
+    pub reason: String,
+    /// `"Recorded by Kim, 2 minutes ago."`. Empty while it waits.
+    pub resolution: String,
+    /// The observation it was recorded as, once it was.
+    pub observation_href: String,
+    pub answers: Vec<tt_core::review::AnswerGroup>,
+    pub hidden_notes: String,
+    pub other_version: String,
+    /// The selected event's matches, to record it against another. Empty
+    /// with no event, and the match key is typed instead.
+    pub matches: Vec<MatchChoice>,
+    /// What the form holds: the entry's, or what was just tried.
+    pub match_key: String,
+    /// `match_key` is one of `matches`; if not, it is offered as sent.
+    pub match_listed: bool,
+    pub team_number: String,
+    pub errors: Vec<String>,
+    pub back_href: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct MatchChoice {
+    pub key: String,
+    /// `"Q14 · Red 254 1678 971 · Blue 2 3 4"`.
+    pub label: String,
 }
 
 /// A scout's record that the lead scout declined, and how to answer it (L10).
@@ -2477,6 +2536,7 @@ mod tests {
             },
             stored: None,
             queue: None,
+            refused: RefusedList::default(),
             reviewed: String::new(),
         };
 

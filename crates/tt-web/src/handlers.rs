@@ -35,6 +35,7 @@ use crate::graph;
 use crate::notes;
 use crate::picklist;
 use crate::ranking::{self, RankingParams};
+use crate::refused::{self, ResolvedParam};
 use crate::review::{self, ReviewedParam};
 use crate::scouting::{self, ScoutParams};
 use crate::standings;
@@ -454,15 +455,13 @@ pub async fn lead_scout(
     LeadScout(user): LeadScout,
     EventParam(requested): EventParam,
     reviewed: ReviewedParam,
+    resolved: ResolvedParam,
 ) -> Response {
-    lead_scout_page(
-        &state,
-        &user,
-        requested.as_deref(),
-        None,
-        reviewed.message(),
-    )
-    .await
+    let mut notice = reviewed.message();
+    if notice.is_empty() {
+        notice = resolved.message();
+    }
+    lead_scout_page(&state, &user, requested.as_deref(), None, notice).await
 }
 
 // ── Assignments (L1, L2) ────────────────────────────────────────────────────
@@ -609,6 +608,7 @@ async fn lead_scout_page(
         upstream: panel,
         stored: events::stored(&*state.repo, &context).await,
         queue: review::queue(state, &context).await,
+        refused: refused::list(state, &context).await,
         reviewed,
     })
 }
@@ -925,6 +925,67 @@ pub async fn decline_observation(
     Form(pairs): Form<Vec<(String, String)>>,
 ) -> Response {
     verdict(state, user, requested, id, pairs, true).await
+}
+
+// ── Refused outbox entries (C10) ────────────────────────────────────────────
+
+/// `GET /lead-scout/refused/{id}`: one entry the Pi refused, in full.
+pub async fn refused_page(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
+    Path(id): Path<i64>,
+) -> Response {
+    let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
+    match refused::page(&state, nav, &context, &user, id, None, Vec::new()).await {
+        Some(page) => html(page),
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+/// A 303 onwards, or the refused entry again with why not.
+async fn refused_outcome(
+    state: &AppState,
+    user: &tt_core::user::User,
+    requested: Option<&str>,
+    id: i64,
+    outcome: Result<String, refused::Refused>,
+) -> Response {
+    match outcome {
+        Ok(next) => Redirect::to(&next).into_response(),
+        Err(refused::Refused::Missing) => StatusCode::NOT_FOUND.into_response(),
+        Err(refused::Refused::Again { errors, draft }) => {
+            let (nav, context) = event_page(state, Some(user), requested).await;
+            match refused::page(state, nav, &context, user, id, draft, errors).await {
+                Some(page) => html(page),
+                None => StatusCode::NOT_FOUND.into_response(),
+            }
+        }
+    }
+}
+
+/// `POST /api/refused/{id}/record`: record it against the posted match and
+/// team.
+pub async fn record_refused(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
+    Path(id): Path<i64>,
+    Form(pairs): Form<Vec<(String, String)>>,
+) -> Response {
+    let outcome = refused::record(&state, &user, id, &pairs).await;
+    refused_outcome(&state, &user, requested.as_deref(), id, outcome).await
+}
+
+/// `POST /api/refused/{id}/dismiss`.
+pub async fn dismiss_refused(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
+    Path(id): Path<i64>,
+) -> Response {
+    let outcome = refused::dismiss(&state, &user, id, requested.as_deref()).await;
+    refused_outcome(&state, &user, requested.as_deref(), id, outcome).await
 }
 
 /// Whether the caller is a browser expecting a page, rather than a script

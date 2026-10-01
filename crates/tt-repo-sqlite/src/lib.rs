@@ -22,6 +22,7 @@ mod competition;
 pub mod migrate;
 mod observations;
 mod picklist;
+pub mod refused;
 pub mod replication;
 pub mod snapshot;
 mod standings;

@@ -238,6 +238,7 @@ pub fn router(state: AppState) -> Router {
         .route("/lead-scout", get(handlers::lead_scout))
         .route("/lead-scout/assignments", get(handlers::assignments))
         .route("/lead-scout/submissions/{id}", get(handlers::review_page))
+        .route("/lead-scout/refused/{id}", get(handlers::refused_page))
         .route("/lead-scout/rankings", get(handlers::rankings))
         .route("/lead-scout/rankings/enter", get(handlers::rankings_entry))
         .route("/lead-scout/weights", get(handlers::weights))
@@ -290,6 +291,8 @@ pub fn router(state: AppState) -> Router {
             )),
         )
         .route("/api/weights/reset", post(handlers::reset_weights))
+        .route("/api/refused/{id}/record", post(handlers::record_refused))
+        .route("/api/refused/{id}/dismiss", post(handlers::dismiss_refused))
         .route(
             "/api/observations/{id}/approve",
             post(handlers::approve_observation),

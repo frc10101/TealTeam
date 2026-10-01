@@ -22,6 +22,7 @@ mod notes;
 mod picklist;
 mod push;
 mod ranking;
+mod refused;
 mod review;
 mod scouting;
 mod shell;

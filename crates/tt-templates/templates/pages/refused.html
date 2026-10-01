@@ -1,0 +1,76 @@
+{#
+  An observation the Pi refused when a scout's tablet pushed it (C10): why,
+  every answer, and what a lead can do. Recording it again runs the same
+  checks as the push, so a match not on the schedule then is fine once it
+  is. Dismissing records who did it; nothing is deleted.
+#}
+{% extends "layout.html" %}
+{% block content %}
+{% for error in errors %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endfor %}
+
+<section class="card">
+  <div class="card-header">
+    <h1>{{ heading }}</h1>
+  </div>
+  <div class="card-body">
+    <p>Saved by {{ byline }}.</p>
+    <p><span class="badge badge-red">Refused</span> {{ reason }}</p>
+    {% if !resolution.is_empty() %}
+      <p>{{ resolution }}{% if !observation_href.is_empty() %} <a href="{{ observation_href }}">See it</a>{% endif %}</p>
+    {% endif %}
+    {% if !other_version.is_empty() %}<p class="hint">{{ other_version }}</p>{% endif %}
+    <p><a class="back" href="{{ back_href }}">Back to the lead-scout page</a></p>
+  </div>
+</section>
+
+{% for group in answers %}
+  <section class="card">
+    <div class="card-header"><h2>{{ group.label }}</h2></div>
+    <div class="card-body">
+      <dl class="detail answers">
+        {% for answer in group.answers %}
+          <dt>{{ answer.label }}</dt>
+          {% if answer.hidden %}
+            <dd class="muted">{{ hidden_notes }}</dd>
+          {% else %}
+            <dd{% if answer.is_text %} class="text-answer"{% endif %}>{{ answer.value }}</dd>
+          {% endif %}
+        {% endfor %}
+      </dl>
+    </div>
+  </section>
+{% endfor %}
+
+{% if resolution.is_empty() %}
+  <section class="card" id="resolve">
+    <div class="card-header"><h2>What to do with it</h2></div>
+    <div class="card-body stack">
+      <form method="post" action="/api/refused/{{ id }}/record{{ nav.event.query() }}" class="stack">
+        <div class="field">
+          <label class="form-label" for="refused-match">Match</label>
+          {% if matches.is_empty() %}
+            <input class="form-input" id="refused-match" name="match" value="{{ match_key }}" required>
+          {% else %}
+            <select class="form-select" id="refused-match" name="match">
+              {% if !match_listed %}<option value="{{ match_key }}" selected>{{ match_key }} (as sent)</option>{% endif %}
+              {% for choice in matches %}
+                <option value="{{ choice.key }}"{% if choice.key == match_key %} selected{% endif %}>{{ choice.label }}</option>
+              {% endfor %}
+            </select>
+          {% endif %}
+        </div>
+        <div class="field">
+          <label class="form-label" for="refused-team">Team</label>
+          <input class="form-input" type="number" id="refused-team" name="team" value="{{ team_number }}" min="1" inputmode="numeric" required>
+        </div>
+        <p class="hint">Recorded as the scout who saved it, checked as if it had just been sent. It goes into the review queue like any other.</p>
+        <button class="btn btn-primary btn-lg" type="submit">Record it</button>
+      </form>
+      <form method="post" action="/api/refused/{{ id }}/dismiss{{ nav.event.query() }}">
+        <button class="btn btn-danger" type="submit">Dismiss</button>
+        <p class="hint">For one nobody can place, or answers that do not fit the form. The scout's tablet still has it, to export or discard.</p>
+      </form>
+    </div>
+  </section>
+{% endif %}
+{% endblock %}

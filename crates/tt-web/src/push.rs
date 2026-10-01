@@ -6,6 +6,7 @@
 //! tablet whose cookie came with it. A scout whose session has lapsed is
 //! still known by the device's offline token (C9, `crate::token`). The answer is a [`Receipt`] per entry:
 //! recorded (now, or already), or refused with a reason a person can read.
+//! The Pi keeps each refusal for the lead scout (C10, `crate::refused`).
 //! The device clears an entry only once it comes back through the change
 //! log (`tt_core::outbox` says why).
 //!
@@ -30,7 +31,8 @@ use tracing::{info, warn};
 use tt_core::outbox::{MAX_PER_PUSH, Outcome, Push, PushReply, QueuedObservation, Receipt};
 use tt_core::record_id;
 use tt_core::user::User;
-use tt_repo::{Device, NewObservation, Repo, RepoError};
+use tt_repo::{Device, NewObservation, Recorded, Repo, RepoError};
+use tt_repo_sqlite::refused::NewRefusal;
 
 use crate::auth::device_uuid;
 use crate::startup::AppState;
@@ -112,37 +114,81 @@ pub async fn push(
 }
 
 /// One entry, as `scouting::submit` would take it from the form. `Err` only
-/// for storage; everything about the entry itself is an [`Outcome`].
+/// for storage; everything about the entry itself is an [`Outcome`]. A
+/// refusal is kept for the lead scout (C10) before it is answered, so one
+/// the Pi could not keep is a 503 and the device sends it again.
 async fn record(
     state: &AppState,
     user: &User,
     device: Option<&Device>,
-    queued: QueuedObservation,
+    mut queued: QueuedObservation,
     now: DateTime<Utc>,
 ) -> Result<Outcome, RepoError> {
-    let refused = |reason: String| Ok(Outcome::Refused { reason });
+    queued.observed_at = observed_at(queued.observed_at, device, now);
+    let author = Author {
+        scouter_id: Some(user.id),
+        device_id: device.map(|d| d.id),
+        submitting_team: user.team_number,
+    };
+    match record_as(state, &queued, author, now).await? {
+        Ok(_) => Ok(Outcome::Recorded),
+        Err(reason) => {
+            let refusal = NewRefusal {
+                entry: queued,
+                scouter_id: author.scouter_id,
+                device_id: author.device_id,
+                submitting_team: author.submitting_team,
+                reason: reason.clone(),
+            };
+            state.repo.keep_refusal(&refusal, now).await?;
+            Ok(Outcome::Refused { reason })
+        }
+    }
+}
+
+/// Who an entry is recorded as. For a push, the signed-in scout, the
+/// tablet, and the scout's team; for a lead recording a refusal (C10), the
+/// same three as the push kept them.
+#[derive(Debug, Clone, Copy)]
+pub struct Author {
+    pub scouter_id: Option<i64>,
+    pub device_id: Option<i64>,
+    pub submitting_team: Option<i32>,
+}
+
+/// Check an entry by the form's rules and record it. `observed_at` is
+/// already on the Pi's clock. The inner `Err` is why it was not recorded,
+/// for a person; the outer one is storage.
+pub async fn record_as(
+    state: &AppState,
+    queued: &QueuedObservation,
+    author: Author,
+    now: DateTime<Utc>,
+) -> Result<Result<Recorded, String>, RepoError> {
     let Some(client_record_id) = record_id::normalize(&queued.client_record_id) else {
-        return refused("Not saved: it has no record id.".into());
+        return Ok(Err("Not saved: it has no record id.".into()));
     };
     // The schedule decides the event and alliance, never the device.
     let Some(record) = state.repo.match_by_key(&queued.match_key).await? else {
-        return refused(format!(
+        return Ok(Err(format!(
             "Not saved: {} is not on the schedule.",
             queued.match_key
-        ));
+        )));
     };
     let Some(alliance) = record.alliance_of(queued.team_number) else {
-        return refused(format!(
+        return Ok(Err(format!(
             "Not saved: team {} is not in {}.",
             queued.team_number, record.key
-        ));
+        )));
     };
     // Answers on another form are kept as they are, and the review page
     // flags them (S11); on this form they must fit it.
     if queued.schema_version == state.season.version
         && let Err(e) = state.season.validate_payload(&queued.payload)
     {
-        return refused(format!("Not saved: the answers do not fit the form ({e})."));
+        return Ok(Err(format!(
+            "Not saved: the answers do not fit the form ({e})."
+        )));
     }
 
     let observation = NewObservation {
@@ -151,19 +197,19 @@ async fn record(
         event_key: record.event_key.clone(),
         team_number: queued.team_number,
         alliance,
-        payload: queued.payload,
+        payload: queued.payload.clone(),
         schema_version: queued.schema_version,
-        scouter_id: Some(user.id),
-        device_id: device.map(|d| d.id),
-        submitting_team: user.team_number,
-        observed_at: observed_at(queued.observed_at, device, now),
+        scouter_id: author.scouter_id,
+        device_id: author.device_id,
+        submitting_team: author.submitting_team,
+        observed_at: queued.observed_at,
     };
     match state.repo.record_observation(&observation, now).await {
-        Ok(_) => Ok(Outcome::Recorded),
-        Err(RepoError::Conflict { .. }) => refused(format!(
-            "Not saved: you already have an observation of team {} in {}.",
+        Ok(recorded) => Ok(Ok(recorded)),
+        Err(RepoError::Conflict { .. }) => Ok(Err(format!(
+            "Not saved: the scout already has an observation of team {} in {}.",
             observation.team_number, record.key
-        )),
+        ))),
         Err(e) => Err(e),
     }
 }
@@ -448,6 +494,129 @@ mod tests {
         // Sam's row as the Pi has it. Not Sam's name: the snapshot was
         // taken before any row named Sam, and keeps only those (S10b).
         assert_eq!(mine[0].scouter_id, saved.scouter_id);
+
+        // The Pi kept the refusal for the lead scout (C10). Sam made the
+        // first account, so Sam is an admin and may act as lead.
+        let open = state.repo.open_refusals().await.unwrap();
+        assert_eq!(open.len(), 1);
+        let kept = &open[0];
+        assert_eq!(kept.entry.client_record_id, WRONG);
+        assert_eq!(kept.reason, outbox[1].refused.clone().unwrap());
+        assert_eq!(kept.scouter_name.as_deref(), Some("Sam"));
+        assert_eq!(kept.submitting_team, Some(10101));
+        assert!(kept.device_name.is_some(), "the tablet it came from");
+        let lead_page = sam
+            .send(Request::get("/lead-scout?event=2026now"), Body::empty())
+            .await;
+        assert!(
+            lead_page.body.contains("Refused when sent"),
+            "{}",
+            lead_page.body
+        );
+        assert!(
+            lead_page.body.contains("Q2 · Team 9999"),
+            "{}",
+            lead_page.body
+        );
+        let href = format!("/lead-scout/refused/{}", kept.id);
+        assert!(lead_page.body.contains(&href));
+        let detail = sam
+            .send(Request::get(format!("{href}?event=2026now")), Body::empty())
+            .await;
+        assert_eq!(detail.status, 200);
+        assert!(
+            detail.body.contains("tippy on the ramp"),
+            "Sam's own team's notes"
+        );
+        assert!(detail.body.contains("is not in 2026now_qm2"));
+
+        let form = |body: &'static str| {
+            sam.send(
+                Request::post(format!("/api/refused/{}/record?event=2026now", kept.id))
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded"),
+                Body::from(body),
+            )
+        };
+        // The same checks as the push: Sam already has 254 in this match.
+        let again = form("match=2026now_qm2&team=254").await;
+        assert_eq!(again.status, 200);
+        assert!(
+            again
+                .body
+                .contains("already has an observation of team 254"),
+            "{}",
+            again.body
+        );
+        let again = form("match=2026now_qm2&team=many").await;
+        assert!(again.body.contains("must be a number"), "{}", again.body);
+        assert_eq!(state.repo.open_refusals().await.unwrap().len(), 1);
+        // Sam meant the robot beside it.
+        let recorded = form("match=2026now_qm2&team=1").await;
+        assert_eq!(recorded.status, 303, "{}", recorded.body);
+        assert!(state.repo.open_refusals().await.unwrap().is_empty());
+        let pending = state.repo.pending_observations("2026now").await.unwrap();
+        let fixed = pending.iter().find(|o| o.team_number == 1).unwrap();
+        assert_eq!(fixed.scouter_name.as_deref(), Some("Sam"));
+        assert_eq!(fixed.submitting_team, Some(10101));
+        assert_eq!(fixed.observed_at, Some(kept.entry.observed_at));
+        let done = sam
+            .send(Request::get(format!("{href}?event=2026now")), Body::empty())
+            .await;
+        assert!(done.body.contains("Recorded by Sam"), "{}", done.body);
+        assert!(!done.body.contains("Record it"));
+        let lead_page = sam
+            .send(Request::get("/lead-scout?event=2026now"), Body::empty())
+            .await;
+        assert!(!lead_page.body.contains("Refused when sent"));
+        let twice = form("match=2026now_qm2&team=1").await;
+        assert!(twice.body.contains("already dealt with"), "{}", twice.body);
+
+        // It kept its record id, so the tablet's refused entry clears when
+        // it comes back, like any other.
+        tokio::time::sleep(
+            (crate::sync::LAG + TimeDelta::milliseconds(300))
+                .to_std()
+                .unwrap(),
+        )
+        .await;
+        let report = client.sync(&device, Utc::now()).await.unwrap();
+        assert_eq!((report.sent, report.echoed), (0, 1));
+        assert!(device.outbox().unwrap().is_empty());
+
+        // One nobody can place is dismissed, and stays dismissed.
+        let mut lost = kept.clone();
+        lost.entry.client_record_id = "0191f7ac-1234-7000-8000-000000000003".into();
+        lost.entry.match_key = "2026now_sf9m1".into();
+        let refusal = tt_repo_sqlite::refused::NewRefusal {
+            entry: lost.entry,
+            scouter_id: lost.scouter_id,
+            device_id: lost.device_id,
+            submitting_team: lost.submitting_team,
+            reason: "Not saved: 2026now_sf9m1 is not on the schedule.".into(),
+        };
+        state.repo.keep_refusal(&refusal, Utc::now()).await.unwrap();
+        let id = state.repo.open_refusals().await.unwrap()[0].id;
+        let dismissed = sam
+            .send(
+                Request::post(format!("/api/refused/{id}/dismiss?event=2026now")),
+                Body::empty(),
+            )
+            .await;
+        assert_eq!(dismissed.status, 303);
+        assert!(state.repo.open_refusals().await.unwrap().is_empty());
+        let done = sam
+            .send(
+                Request::get(format!("/lead-scout/refused/{id}")),
+                Body::empty(),
+            )
+            .await;
+        assert!(done.body.contains("Dismissed by Sam"), "{}", done.body);
+        assert_eq!(
+            sam.send(Request::get("/lead-scout/refused/999"), Body::empty())
+                .await
+                .status,
+            404
+        );
 
         // Refusals of the whole push say why, and never redirect.
         let push = |n: usize| {

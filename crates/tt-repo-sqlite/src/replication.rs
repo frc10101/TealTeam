@@ -34,6 +34,9 @@ pub const FROM_UPSTREAM: &[&str] = &[
 /// copy is exchanged whole through `/api/pick-list/doc`, which checks whose
 /// list it is, since a yrs update is merged, not replayed. Their rows, in
 /// `pick_list_entries`, replicate as usual.
+///
+/// Refused outbox entries (C10) are for the lead scout's page. Whatever a lead
+/// makes of one reaches devices as an ordinary observation.
 pub const SERVER_ONLY: &[&str] = &[
     "changes",
     "upstream",
@@ -41,6 +44,7 @@ pub const SERVER_ONLY: &[&str] = &[
     "pick_list_docs",
     "sync_state",
     "bundle_imports",
+    "refused_entries",
 ];
 
 #[cfg(test)]
