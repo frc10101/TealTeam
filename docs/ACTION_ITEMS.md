@@ -443,7 +443,7 @@ The architectural payoff. Phase 2 must be shipping before this starts.
 | --- | --- | --- | --- | --- |
 | S1 | `upstream` append-only log fed by the FIRST/TBA clients | RI-S2 | M | **Done** — `upstream` table, `tt_upstream::journal`; see Phase 3 notes |
 | S2 | `changes` append-only log + `/api/sync/pull` with a lag window. **Not** per-table watermarks — those cannot see deletions and have a commit-ordering race | RI-O15 | M | **Done** — `changes` table + triggers, `GET /api/sync/pull`; see Phase 3 notes |
-| S3 | Scoped subscription filtering + a never-replicate allowlist, so other teams' notes never leak | RI-O16 | M |  |
+| S3 | Scoped subscription filtering + a never-replicate allowlist, so other teams' notes never leak | RI-O16 | M | **Done** — `sync::Scope`, `tt_repo_sqlite::replication`; see Phase 3 notes |
 | S4 | Compile the FIRST/TBA clients for `wasm32`; client-side conditional fetch with ETags. **Both APIs allow direct browser requests**, so no relay server is needed | RI-S3 | M |  |
 | S5 | Bundle import on the Pi: role-gate the push, `ATTACH`, upsert, advance cursor, audit-log | RI-S4 | M |  |
 | S6 | USB tether as the Pi's automatic uplink; pull bundles whenever `usb0` is up | RI-S6 | M |  |
@@ -480,7 +480,7 @@ So on the event LAN today, C2 does what it can: an Android "Add to Home screen" 
 **The venue stream and the pull (S2).** A `changes` table logs every insert, update, and delete of observations, assignments, and pick list entries. That includes reviews and declines, which are observation updates. **SQLite triggers write it** in the same transaction as the change, so no code path can forget, and a deletion is an ordinary `delete` row with no body. Each row carries a key that is the same on every device: `client_record_id`, or `match_key:team`. Rows written before S2 were logged once by the migration, so the log alone rebuilds the current state.
 
 - **The pull.** `GET /api/sync/pull?changes=<cursor>&upstream=<cursor>` returns both streams, each with its next cursor and a `more` flag. At most 500 changes and 20 upstream bodies come per request. Changes are served only once they are two seconds old: the lag window for a change whose `seq` is taken but not yet committed. The changes cursor moves past rows the viewer may not see, so nobody is sent back for them.
-- **Visibility is decided in one place,** `tt_web::sync::visible`. A pick list goes only to its team, since `team_scope` is the owning team. Another team's observation arrives with its notes removed by `tt_core::notes::redact`. Unreadable answers are sent as none, never passed through. **S3's subscription scope is a marked hook there,** to be applied before these two rules and never instead of them. Only these three tables have triggers. users, sessions, and devices have none, and the migration says they must never get one.
+- **Visibility is decided in one place,** `tt_web::sync::visible`. A pick list goes only to its team, since `team_scope` is the owning team. Another team's observation arrives with its notes removed by `tt_core::notes::redact`. Unreadable answers are sent as none, never passed through. **S3's subscription scope** applies there too: see below. Only these three tables have triggers. users, sessions, and devices have none, and the migration says they must never get one.
 - **Not built:** compaction. An event writes a few thousand change rows, mostly pick-list reorders, a few MB at most. When it matters, superseded upserts can be pruned per `entity_pk` as S1 prunes per path, but tombstones must stay longer than any client stays offline. Nothing consumes the pull yet; C7's sync client is the first.
 
 **A reload with no server shows a page, not the browser's error (C1).** This is where a secure context allows it: https, or localhost (open decision 9). `static/js/shell.js` registers `/sw.js`, and does nothing at all when `!isSecureContext`. The worker's source is `src/sw.js`; `src/shell.rs` serves it from the root, so its scope is the whole site, and fills in its precache list from the embedded asset table. The worker does four things:
@@ -549,6 +549,16 @@ Not checked: a real tablet, or an iPad's `pagehide`.
 
 
 **Tablet clocks (S12).** `device.js` measures its clock against the server's on every heartbeat, NTP-style. The reply carries `server_ms`, the server's time taken to be halfway through the round trip. The next heartbeat reports `offset_ms` (server minus tablet) and `rtt_ms`. The server keeps the latest per device, in `devices.clock_offset_ms` (migration 0005), and ignores a measurement taken over a round trip longer than 10 s. The Tablets list on the assignments page reads it as "clock 3 s behind" or "clock 4 min ahead". Past a minute (`connectivity::CLOCK_TOLERANCE`) it becomes an amber badge saying the tablet's timestamps will be wrong, and to set its clock to automatic. Within a second reads as "in step", since the measurement is only good to half a round trip. Everything is UTC milliseconds, so a tablet set to the wrong zone shows as hours out only if its clock itself is wrong, not merely its display. Nothing corrects timestamps by the offset yet; C7's outbox can, when it stamps offline records.
+
+**Scoped subscriptions and the replication allowlist (S3).** A client subscribes with `?event=` on the pull or the stream, repeated or comma-separated; none is every event. A change for another event is not sent. Of the upstream log, TBA's per-event paths (`/event/<key>/...`) are scoped the same way. Season lists and FIRST's rosters, which name events by FIRST's code, are small and go to everyone. The cursor moves past whatever the scope leaves out. **The team is never the client's to choose:** it is the signed-in viewer's, and `sync::visible` applies the pick-list and notes rules whatever scope was asked for. The grid and the scouting page subscribe to their own event.
+
+**Which tables replicate is decided by name, in `tt_repo_sqlite::replication`.** There are four lists, and every table is in exactly one:
+- `REPLICATED`, through `changes`: observations, assignments, pick lists.
+- `NEVER_REPLICATED`: users, sessions, devices.
+- `FROM_UPSTREAM`, which clients derive from the upstream log.
+- `SERVER_ONLY`: the logs themselves, and the point weights for now.
+
+A test fails if a table is in no list or in two, if a listed table does not exist, or if any table outside `REPLICATED` has a trigger writing to `changes`.
 ---
 
 ## Phase 4 — Analysis and communication

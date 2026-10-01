@@ -378,7 +378,7 @@ pub async fn page(
     }
 
     // S9: so the page can say when the lead moves one of this scout's robots.
-    if let Some(stream) = crate::sync::stream_href(state).await {
+    if let Some(stream) = crate::sync::stream_href(state, &event.key).await {
         let labels: std::collections::BTreeMap<&str, String> = matches
             .iter()
             .map(|m| (m.key.as_str(), m.label()))

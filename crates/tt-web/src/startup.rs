@@ -1839,6 +1839,48 @@ mod flow_tests {
         assert!(grid.contains(r#"<span class="muted">· clock 1 s behind</span>"#));
     }
 
+    #[tokio::test]
+    async fn a_pull_sends_only_the_events_subscribed_to() {
+        // S3.
+        let (state, sam) = scouting().await;
+        post(
+            &state,
+            "/api/submission?event=2026now",
+            &observation_form(254, RECORD_ID, GOOD_ANSWERS),
+            Some(&sam),
+        )
+        .await;
+        tokio::time::sleep(
+            (crate::sync::LAG + chrono::TimeDelta::milliseconds(200))
+                .to_std()
+                .unwrap(),
+        )
+        .await;
+        let pull = |query: &'static str| {
+            let (state, sam) = (state.clone(), sam.clone());
+            async move {
+                let body =
+                    text(get(&state, &format!("/api/sync/pull?{query}"), Some(&sam)).await).await;
+                serde_json::from_str::<serde_json::Value>(&body).expect("json")
+            }
+        };
+        let elsewhere = pull("event=2026else").await;
+        let here = pull("event=2026now").await;
+        let has = |v: &serde_json::Value| {
+            v["changes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|c| c["entity_pk"] == RECORD_ID)
+        };
+        assert!(!has(&elsewhere), "{elsewhere}");
+        assert!(has(&here));
+        assert_eq!(
+            elsewhere["changes_cursor"], here["changes_cursor"],
+            "past it all the same"
+        );
+    }
+
     async fn observations(state: &AppState) -> i64 {
         sqlx::query_scalar("SELECT COUNT(*) FROM observations")
             .fetch_one(state.repo.pool())

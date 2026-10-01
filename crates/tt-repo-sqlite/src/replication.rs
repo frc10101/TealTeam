@@ -1,0 +1,79 @@
+//! Which tables reach clients, and how (S3).
+//!
+//! Every table is in exactly one list, and a test fails the build if a new
+//! one is not, or if a table outside [`REPLICATED`] gets a trigger writing to
+//! `changes`. Replicating a table is a decision made here, by name, never a
+//! side effect of a migration.
+
+/// Written by scouts and leads; every change goes to clients through the
+/// `changes` log (S2), filtered by `sync::visible`.
+pub const REPLICATED: &[&str] = &["observations", "scout_assignments", "pick_list_entries"];
+
+/// Never to leave the server: password hashes, session tokens, and which
+/// person holds which tablet.
+pub const NEVER_REPLICATED: &[&str] = &["users", "sessions", "devices"];
+
+/// Derived from FIRST and TBA. Clients get the responses they came from,
+/// through the `upstream` log (S1), and derive the same rows.
+pub const FROM_UPSTREAM: &[&str] = &[
+    "events",
+    "teams",
+    "event_teams",
+    "matches",
+    "team_event_stats",
+];
+
+/// The server's own: the two logs themselves, and settings not replicated
+/// yet. The point weights (L12) will want to join [`REPLICATED`] once
+/// clients compute rankings.
+pub const SERVER_ONLY: &[&str] = &["changes", "upstream", "scouting_point_weights"];
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    use super::*;
+    use crate::SqliteRepo;
+
+    #[tokio::test]
+    async fn every_table_is_classified_and_only_the_replicated_ones_feed_changes() {
+        let repo = SqliteRepo::connect("sqlite::memory:").expect("connect");
+        crate::migrate::apply(repo.pool()).await.expect("migrate");
+
+        let tables: BTreeSet<String> = sqlx::query_scalar(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' \
+             AND name NOT LIKE '\\_%' ESCAPE '\\'",
+        )
+        .fetch_all(repo.pool())
+        .await
+        .unwrap()
+        .into_iter()
+        .collect();
+        let lists = [REPLICATED, NEVER_REPLICATED, FROM_UPSTREAM, SERVER_ONLY];
+        for table in &tables {
+            let homes = lists.iter().filter(|l| l.contains(&table.as_str())).count();
+            assert_eq!(
+                homes, 1,
+                "{table} must be in exactly one list in replication.rs, not {homes}"
+            );
+        }
+        for name in lists.concat() {
+            assert!(tables.contains(name), "{name} is listed but does not exist");
+        }
+
+        let fed: BTreeSet<String> = sqlx::query_scalar(
+            "SELECT DISTINCT tbl_name FROM sqlite_master \
+             WHERE type = 'trigger' AND sql LIKE '%INSERT INTO changes%'",
+        )
+        .fetch_all(repo.pool())
+        .await
+        .unwrap()
+        .into_iter()
+        .collect();
+        let replicated: BTreeSet<String> = REPLICATED.iter().map(|t| t.to_string()).collect();
+        assert_eq!(
+            fed, replicated,
+            "only REPLICATED tables may write to changes"
+        );
+    }
+}

@@ -31,7 +31,7 @@ use std::time::Duration;
 
 use axum::Json;
 use axum::extract::{Query, State};
-use axum::http::{HeaderMap, StatusCode, header};
+use axum::http::{HeaderMap, StatusCode, Uri, header};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use chrono::{TimeDelta, Utc};
@@ -79,8 +79,10 @@ fn schema_mismatch(state: &AppState, query: &HashMap<String, String>) -> Option<
 pub async fn pull(
     State(state): State<AppState>,
     Auth(viewer): Auth,
+    uri: Uri,
     Query(query): Query<HashMap<String, String>>,
 ) -> Response {
+    let scope = Scope::from_query(uri.query());
     let cursor = |name: &str| {
         query
             .get(name)
@@ -124,10 +126,11 @@ pub async fn pull(
 
     let shown: Vec<JsonValue> = changes
         .into_iter()
-        .filter_map(|c| visible(&state.season, &viewer, c))
+        .filter_map(|c| visible(&state.season, &viewer, &scope, c))
         .collect();
     let upstream: Vec<JsonValue> = upstream
         .into_iter()
+        .filter(|u| scope.has_upstream(&u.entry.path))
         .map(|u| {
             json!({
                 "seq": u.seq,
@@ -154,15 +157,70 @@ pub async fn pull(
     .into_response()
 }
 
+/// What a client subscribed to (S3): the events it asked for, as
+/// `?event=2026mslr` (repeated, or comma-separated). None asked for is every
+/// event. The team is never the client's to choose: it is the signed-in
+/// viewer's, and [`visible`] applies it whatever the scope says.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Scope {
+    pub events: Option<Vec<String>>,
+}
+
+impl Scope {
+    pub fn from_query(raw: Option<&str>) -> Self {
+        let events: Vec<String> = raw
+            .unwrap_or_default()
+            .split('&')
+            .filter_map(|pair| pair.split_once('='))
+            .filter(|(k, _)| *k == "event")
+            .flat_map(|(_, v)| v.split(','))
+            .map(|v| v.trim().to_ascii_lowercase())
+            .filter(|v| !v.is_empty())
+            .collect();
+        Self {
+            events: (!events.is_empty()).then_some(events),
+        }
+    }
+
+    fn has_event(&self, event_key: &str) -> bool {
+        self.events
+            .as_ref()
+            .is_none_or(|events| events.iter().any(|e| e == event_key))
+    }
+
+    /// An upstream response's path, in scope? TBA's per-event paths
+    /// (`/event/2026mslr/...`) carry their event; anything else -- season
+    /// lists, FIRST's rosters by FIRST code -- is small and goes to everyone.
+    pub fn has_upstream(&self, path: &str) -> bool {
+        match path
+            .strip_prefix("/event/")
+            .and_then(|rest| rest.split('/').next())
+        {
+            Some(event_key) => self.has_event(event_key),
+            None => true,
+        }
+    }
+}
+
 /// What `viewer` may see of `change`, or nothing.
 ///
-/// Two rules hold now and always: a team-scoped change (a pick list) goes to
-/// that team only, and an observation's notes go only to the team that wrote
-/// them (U13). Everything else is public.
-///
-/// **S3 hook:** a client's subscription scope (its event, what it asked for)
-/// filters here, before these two rules, never instead of them.
-pub fn visible(schema: &SeasonSchema, viewer: &User, change: Change) -> Option<JsonValue> {
+/// First the client's [`Scope`]: a change for an event it did not subscribe
+/// to is not sent. Then two rules that hold whatever the scope: a team-scoped
+/// change (a pick list) goes to that team only, and an observation's notes go
+/// only to the team that wrote them (U13). Everything else is public.
+pub fn visible(
+    schema: &SeasonSchema,
+    viewer: &User,
+    scope: &Scope,
+    change: Change,
+) -> Option<JsonValue> {
+    if change
+        .event_key
+        .as_deref()
+        .is_some_and(|event| !scope.has_event(event))
+    {
+        return None;
+    }
     if change
         .team_scope
         .is_some_and(|team| viewer.team_number != Some(team))
@@ -242,10 +300,10 @@ impl Drop for Slot {
 
 /// The live stream from this moment on, for a page to open (S9): it wants
 /// what happens next, not the history. `None` without storage.
-pub async fn stream_href(state: &AppState) -> Option<String> {
+pub async fn stream_href(state: &AppState, event_key: &str) -> Option<String> {
     let (changes, upstream) = state.repo.log_heads().await.ok()?;
     Some(format!(
-        "/api/sync/stream?changes={changes}&upstream={upstream}"
+        "/api/sync/stream?changes={changes}&upstream={upstream}&event={event_key}"
     ))
 }
 
@@ -283,6 +341,7 @@ pub fn parse_event_id(raw: &str) -> Option<(i64, i64)> {
 pub async fn stream(
     State(state): State<AppState>,
     Auth(viewer): Auth,
+    uri: Uri,
     headers: HeaderMap,
     Query(query): Query<HashMap<String, String>>,
 ) -> Response {
@@ -320,6 +379,7 @@ pub async fn stream(
     let tail = Tail {
         state,
         viewer,
+        scope: Scope::from_query(uri.query()),
         changes,
         upstream,
         pending: VecDeque::new(),
@@ -347,6 +407,7 @@ pub async fn stream(
 struct Tail {
     state: AppState,
     viewer: User,
+    scope: Scope,
     changes: i64,
     upstream: i64,
     pending: VecDeque<Event>,
@@ -368,7 +429,7 @@ impl Tail {
                 let mut unsent = false;
                 for change in rows {
                     self.changes = change.seq;
-                    match visible(&self.state.season, &self.viewer, change) {
+                    match visible(&self.state.season, &self.viewer, &self.scope, change) {
                         Some(row) => {
                             unsent = false;
                             self.push("change", &row);
@@ -389,8 +450,14 @@ impl Tail {
             .await
         {
             Ok(rows) => {
+                let mut unsent = false;
                 for u in rows {
                     self.upstream = u.seq;
+                    if !self.scope.has_upstream(&u.entry.path) {
+                        unsent = true;
+                        continue;
+                    }
+                    unsent = false;
                     self.push(
                         "upstream",
                         &json!({
@@ -402,6 +469,9 @@ impl Tail {
                             "fetched_at": u.entry.fetched_at,
                         }),
                     );
+                }
+                if unsent {
+                    self.push("cursor", &json!({}));
                 }
             }
             Err(e) => warn!("sync stream: {e}"),
@@ -420,6 +490,26 @@ impl Tail {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_scope_is_the_events_asked_for_and_none_is_every_event() {
+        let all = Scope::from_query(Some("changes=4"));
+        assert_eq!(all, Scope::default());
+        assert!(all.has_upstream("/event/2026mslr/matches"));
+
+        let two = Scope::from_query(Some("event=2026MSLR&changes=4&event=2026lake,2026x"));
+        assert_eq!(
+            two.events.as_deref(),
+            Some(&["2026mslr".to_string(), "2026lake".into(), "2026x".into()][..])
+        );
+        assert!(two.has_upstream("/event/2026lake/rankings"));
+        assert!(!two.has_upstream("/event/2026mil/rankings"));
+        assert!(
+            two.has_upstream("/events/2026"),
+            "season lists go to everyone"
+        );
+        assert!(two.has_upstream("/2026/teams?eventCode=MILSTEIN"));
+    }
 
     #[test]
     fn an_event_id_carries_both_cursors_and_junk_is_ignored() {
