@@ -351,7 +351,7 @@ macro_rules! same {
 }
 
 /// Every read but the assignment grid, which the server cannot read from a
-/// snapshot at all: see `the_assignment_grid_reads_without_the_names`.
+/// snapshot at all: see `the_assignment_grid_reads_with_scouts_names`.
 async fn every_read_agrees(f: &Fixture) {
     let date = NaiveDate::from_ymd_opt(2026, 3, 14).unwrap();
     assert_eq!(same!(f, health()), tt_repo::Health::Ready);
@@ -419,7 +419,11 @@ async fn a_snapshot_opens_as_is_and_reads_as_the_server_reads_it() {
     // What the cut left, as the device sees it.
     let approved = f.device.approved_observations("2026here").await.unwrap();
     assert_eq!(approved.len(), 1, "o-away is another event's");
-    assert_eq!(approved[0].scouter_name, None, "no users on a device");
+    assert_eq!(
+        approved[0].scouter_name.as_deref(),
+        Some("Sam"),
+        "the names a snapshot's rows use (S10b)"
+    );
     let pending = f.device.pending_observations("2026here").await.unwrap();
     assert_eq!(pending[0].payload.get("hidden"), Some(&Value::Flag(true)));
     assert!(
@@ -447,7 +451,7 @@ async fn a_snapshot_opens_as_is_and_reads_as_the_server_reads_it() {
 }
 
 #[tokio::test]
-async fn the_assignment_grid_reads_without_the_names() {
+async fn the_assignment_grid_reads_with_scouts_names() {
     let f = fixture("grid").await;
     let grid = f.device.event_assignments("2026here").await.unwrap();
     let assignees: Vec<_> = grid.iter().map(|a| (a.team_number, &a.assignee)).collect();
@@ -458,7 +462,7 @@ async fn the_assignment_grid_reads_without_the_names() {
                 254,
                 &Assignee::Scout {
                     id: f.sam,
-                    name: format!("Scout {}", f.sam)
+                    name: "Sam".into()
                 }
             ),
             (
@@ -547,22 +551,23 @@ async fn writes_land_on_the_device_as_on_the_server() {
 
 #[tokio::test]
 async fn a_scout_with_no_signal_records_what_the_file_has_no_user_for() {
-    // The reason foreign keys are off on the device: Sam's row never left
-    // the Pi, and Sam's observation still names Sam.
+    // The reason foreign keys are off on the device: a scout who signed up
+    // after the snapshot has no row in it, and their observation names them.
     let f = fixture("offline").await;
-    assert_eq!(f.device.user_by_id(f.sam).await.unwrap(), None);
+    let newcomer = f.lee + 100;
+    assert_eq!(f.device.user_by_id(newcomer).await.unwrap(), None);
 
-    let mine = observation("o-mine", "2026here_qm2", 254, Some(f.sam));
+    let mine = observation("o-mine", "2026here_qm2", 254, Some(newcomer));
     let recorded = f.device.record_observation(&mine, at(30)).await.unwrap();
     assert!(matches!(recorded, Recorded::Created(_)));
     assert!(
         f.device
-            .recorded_by("2026here", f.sam)
+            .recorded_by("2026here", newcomer)
             .await
             .unwrap()
             .contains(&("2026here_qm2".into(), 254))
     );
-    let conflict = observation("o-again", "2026here_qm2", 254, Some(f.sam));
+    let conflict = observation("o-again", "2026here_qm2", 254, Some(newcomer));
     assert!(matches!(
         f.device.record_observation(&conflict, at(31)).await,
         Err(RepoError::Conflict { .. })
@@ -584,7 +589,7 @@ async fn a_scout_with_no_signal_records_what_the_file_has_no_user_for() {
                 match_key: "2026here_qm2".into(),
                 event_key: "2026here".into(),
                 team_number: 4,
-                assignee: AssigneeKey::Scout(f.sam),
+                assignee: AssigneeKey::Scout(newcomer),
             }],
             f.lee,
             at(33),

@@ -15,7 +15,7 @@
 //!    the heads are exact cursors: no lag window, unlike the pull.
 //! 2. Cut it down, on a connection of its own with foreign keys **off**, so
 //!    emptying `users` cascades into nothing:
-//!    - [`NEVER_REPLICATED`] tables are emptied, and so is every
+//!    - [`NEVER_REPLICATED`] tables are emptied but `users`, and so is every
 //!      [`SERVER_ONLY`] one but two. `upstream` keeps the newest response per
 //!      path in scope, which is the whole current state of it (S1).
 //!      `sync_state` holds the snapshot's cursors, as `server:changes` and
@@ -24,6 +24,10 @@
 //!      `event_key` outside the scope go. `events` and `teams` stay whole:
 //!      season lists go to everyone, as in the pull.
 //!    - Pick lists that are not the viewer's team's go.
+//!    - `users` keeps the scouts the rows left name, by id and name only,
+//!      so an offline grid says "Sam", not "Scout 7" (S10b). The email is
+//!      `#<id>`, the password hash empty, the roles off: nobody signs in
+//!      to the copy, and nothing else about a person leaves the server.
 //!    - Observations keep their answers as [`Audience::answers`] says,
 //!      which is notes removed for anyone but the writing team (U13).
 //! 3. `VACUUM` the scratch file, so nothing removed survives in a free page,
@@ -219,6 +223,27 @@ async fn cut(
         }
     }
 
+    // The people the rows left name, by id and name, and nothing else about
+    // them. The email must stay unique, so it is the id.
+    sqlx::query(
+        "DELETE FROM users WHERE id NOT IN ( \
+             SELECT scouter_id FROM scout_assignments WHERE scouter_id IS NOT NULL \
+             UNION SELECT assigned_by FROM scout_assignments WHERE assigned_by IS NOT NULL \
+             UNION SELECT scouter_id FROM observations WHERE scouter_id IS NOT NULL \
+             UNION SELECT reviewed_by FROM observations WHERE reviewed_by IS NOT NULL)",
+    )
+    .execute(&mut *tx)
+    .await
+    .map_err(err("cutting users from a snapshot"))?;
+    sqlx::query(
+        "UPDATE users SET email = '#' || id, password_hash = '', team_number = NULL, \
+             is_admin = 0, is_lead_scout = 0, is_coach = 0, \
+             last_login_at = NULL, last_seen_at = NULL",
+    )
+    .execute(&mut *tx)
+    .await
+    .map_err(err("cutting users from a snapshot"))?;
+
     // The upstream log: the newest response per path, in scope.
     sqlx::query(
         "DELETE FROM upstream WHERE seq NOT IN (SELECT MAX(seq) FROM upstream GROUP BY api, path)",
@@ -242,7 +267,7 @@ async fn cut(
     for table in NEVER_REPLICATED
         .iter()
         .chain(SERVER_ONLY)
-        .filter(|t| **t != "upstream")
+        .filter(|t| !["users", "upstream"].contains(*t))
     {
         sqlx::query(sqlx::AssertSqlSafe(format!("DELETE FROM {table}")))
             .execute(&mut *tx)
@@ -303,7 +328,8 @@ mod tests {
         for sql in [
             format!(
                 "INSERT INTO users (id, email, name, password_hash, team_number, created_at, updated_at) \
-                 VALUES (1, 'sam@x', 'Sam', 'SECRET-HASH', 10101, {t}, {t})"
+                 VALUES (1, 'sam@x', 'Sam', 'SECRET-HASH', 10101, {t}, {t}), \
+                        (2, 'pat@x', 'UNNAMED-PAT', 'SECRET-HASH', 10101, {t}, {t})"
             ),
             format!("INSERT INTO sessions VALUES ('SECRET-SESSION', 1, {t}, {t})"),
             format!(
@@ -383,6 +409,8 @@ mod tests {
         );
         for secret in [
             "SECRET-HASH",
+            "sam@x",
+            "UNNAMED-PAT",
             "SECRET-SESSION",
             "SECRET-DEVICE",
             "THEIR-NOTE",
@@ -412,7 +440,7 @@ mod tests {
         assert_eq!(ok, ["ok"]);
 
         for empty in NEVER_REPLICATED.iter().chain(SERVER_ONLY) {
-            if ["upstream", "sync_state"].contains(empty) {
+            if ["users", "upstream", "sync_state"].contains(empty) {
                 continue;
             }
             let n: i64 =
@@ -427,7 +455,15 @@ mod tests {
         let matches: Vec<String> = rows(&mut conn, "SELECT tba_key FROM matches").await;
         assert_eq!(matches, ["2026here_qm1"]);
         let assigned: Vec<i64> = rows(&mut conn, "SELECT scouter_id FROM scout_assignments").await;
-        assert_eq!(assigned, [1], "emptying users did not cascade");
+        assert_eq!(assigned, [1], "cutting users did not cascade");
+        let users: Vec<String> = rows(
+            &mut conn,
+            "SELECT id || ' ' || name || ' ' || email || ' [' || password_hash || '] ' \
+                    || (team_number IS NULL) || is_admin || is_lead_scout || is_coach \
+             FROM users",
+        )
+        .await;
+        assert_eq!(users, ["1 Sam #1 [] 1000"], "a name, and nothing else");
         let observed: Vec<String> = rows(
             &mut conn,
             "SELECT client_record_id || ' ' || payload FROM observations ORDER BY 1",
@@ -490,6 +526,6 @@ mod tests {
         .fetch_one(repo.pool())
         .await
         .unwrap();
-        assert_eq!(left, (1, 2), "only the copy was cut");
+        assert_eq!(left, (2, 2), "only the copy was cut");
     }
 }

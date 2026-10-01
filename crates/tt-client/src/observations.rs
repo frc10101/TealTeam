@@ -38,8 +38,8 @@ fn stored_from_row(row: &Row) -> rusqlite::Result<StoredObservation> {
     })
 }
 
-/// With the names resolved; on a device they are usually gone, since a
-/// snapshot carries no `users`, and read as `None` like a deleted account.
+/// With the names resolved. A snapshot keeps the names its rows use
+/// (S10b); one it lacks reads as `None`, like a deleted account.
 const STORED: &str = "SELECT o.*, s.name AS scouter_name, r.name AS reviewer_name \
                       FROM observations o \
                       LEFT JOIN users s ON s.id = o.scouter_id \

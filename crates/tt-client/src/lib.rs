@@ -25,8 +25,8 @@
 //! # Foreign keys are off
 //!
 //! On the server they are on. Here they cannot be: a snapshot carries no
-//! `users` or `devices` (they never leave the server), so a scout's own
-//! observation names a `scouter_id` this file has no row for. The server
+//! `devices` and only the `users` its rows name, by name (S10b), so a
+//! scout's own observation can name a `scouter_id` this file has no row for. The server
 //! enforces the keys when the row reaches it (C7); on the device they would
 //! only refuse every offline write.
 //!

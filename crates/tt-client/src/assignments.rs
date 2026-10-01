@@ -12,9 +12,9 @@ use crate::ClientRepo;
 use crate::sql::{Context, to_sql, ts_column};
 
 fn assignment_from_row(row: &Row) -> rusqlite::Result<Option<Assignment>> {
-    // A snapshot keeps the assignments but none of `users` or `devices`
-    // (S10), so the name is usually missing here, where on the server it
-    // never is. The grid still reads, with the id in place of the name.
+    // A snapshot keeps the scouts' names (S10b) but none of `devices`, and
+    // a scout signed up after it was taken is missing too, where on the
+    // server nobody ever is. The grid still reads, with the id for the name.
     let scout = match row.get::<_, Option<i64>>("scouter_id")? {
         Some(id) => Some(Assignee::Scout {
             id,
