@@ -39,8 +39,10 @@ mod competition;
 mod observations;
 #[cfg(target_arch = "wasm32")]
 pub mod opfs;
+pub mod outbox;
 mod picklist;
 mod sql;
+pub mod sync;
 mod upstream;
 mod users;
 

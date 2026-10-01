@@ -30,4 +30,6 @@ tracing-subscriber = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+# The device's side of a push, run against the real router (C7).
+tt-client = { workspace = true }
 tower = { version = "0.5", features = ["util"] }

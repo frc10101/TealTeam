@@ -20,6 +20,7 @@ mod graph;
 mod handlers;
 mod notes;
 mod picklist;
+mod push;
 mod ranking;
 mod review;
 mod scouting;

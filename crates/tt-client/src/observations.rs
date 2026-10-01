@@ -1,6 +1,7 @@
 //! Observations and their review: `tt_repo_sqlite::observations`, on the
-//! device. Recording one here is what a scout with no signal does (C7 will
-//! push it); the rows fire the same `changes` triggers as on the server.
+//! device. A scout with no signal records through the outbox
+//! (`ClientRepo::queue_observation`, C7), which calls this and queues the
+//! push; the rows fire the same `changes` triggers as on the server.
 
 use chrono::{DateTime, Utc};
 use rusqlite::{OptionalExtension, Row, params};

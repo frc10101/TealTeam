@@ -77,12 +77,12 @@ async fn write(file: &JsValue, bytes: Vec<u8>) -> Result<()> {
     Ok(())
 }
 
-fn get(target: &JsValue, key: &str) -> std::result::Result<JsValue, JsValue> {
+pub(crate) fn get(target: &JsValue, key: &str) -> std::result::Result<JsValue, JsValue> {
     Reflect::get(target, &JsValue::from_str(key))
 }
 
 /// `target.method(...args)`, awaited if it returns a promise.
-async fn call(
+pub(crate) async fn call(
     target: &JsValue,
     method: &str,
     args: &[JsValue],

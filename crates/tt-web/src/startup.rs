@@ -278,6 +278,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/sync/pull", get(crate::sync::pull))
         .route("/api/sync/stream", get(crate::sync::stream))
         .route("/api/sync/snapshot", get(crate::snapshot::download))
+        .route("/api/sync/push", post(crate::push::push))
         .route(
             "/api/sync/bundle",
             post(crate::bundle::push).layer(axum::extract::DefaultBodyLimit::max(
