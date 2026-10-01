@@ -657,7 +657,7 @@ A test fails if a table is in no list or in two, if a listed table does not exis
 | --- | --- | --- | --- | --- |
 | Q1 | `tt-core` unit tests: scoring, mode aggregation, match-status, connectivity classification, match-number normalization, TBA fallback extraction. **Every one of these had a bug** | RS §11 | M | **Done** — gaps filled in `tt-core`; two bugs fixed, see notes |
 | Q2 | Deserialization tests against **recorded** FIRST/TBA payloads, including at least one from a prior season | RS §11 | M | **Done** — `tt-upstream/tests/recorded.rs` over `tests/fixtures/`; six fixes, see notes |
-| Q3 | Load test before the season: 30 simulated clients, two hours, p95 latency and SSE stability — with the cable pulled, the power killed, and a client's storage filled, deliberately | RI §Load Testing · RS §11 | M |  |
+| Q3 | Load test before the season: 30 simulated clients, two hours, p95 latency and SSE stability — with the cable pulled, the power killed, and a client's storage filled, deliberately | RI §Load Testing · RS §11 | M | **Done** — `crates/tt-load`, `tests/browser/storage-full.mjs`, [LOAD_TEST.md](LOAD_TEST.md); one bug fixed; Pi untested |
 | Q4 | Backups: timed dump to the SSD (10-minute interval, 24-hour retention), USB copy between match blocks, and **one deliberate restore test** before you need it | RI §Backups | M | **Done** — `tt_repo_sqlite::backup`, `tt-web backup` / `check-backup`, [PI_STORAGE.md](PI_STORAGE.md#backups-q4); USB and Pi steps untested |
 | Q5 | Store everything in UTC; render in the event's IANA zone per `TIMEZONE_HANDLING.md` | RI §Time Sync | S | **Done** — `tt_core::timezone`; see notes |
 
@@ -708,6 +708,21 @@ Tested:
 - By hand, with the real binary running against a copy of a test database: `tt-web backup` into a folder printed the same counts as the database (7 observations, 5 picks, 12 assignments), `check-backup` agreed, and the first timed snapshot landed 10 minutes after start.
 
 Not tested: a real USB stick or anything on the Pi.
+
+**Q3: the load test.** `tt-load run --server target/release/tt-web` runs the whole test on one machine. It starts the server on a fresh database, seeds an event, and runs 30 scouts for two hours. Every 15 minutes it causes a fault, alternating between the two kinds. The cable is pulled for 45 seconds: a relay stops passing bytes, so in-flight saves arrive late. The power is cut for 20 seconds: SIGKILL, with the cable also out, and a restart on the same database. `tt-load run --url` runs the same scouts against the Pi, with the faults done by hand. [LOAD_TEST.md](LOAD_TEST.md) covers both.
+
+A scout's cycle is: open the scouting page, save, load the page the save redirects to, and pull. The redirect reopens the stream from `Last-Event-ID`, as a browser would. A failed save is retried with the same record id. This runs at about a hundred times event load. The report gives steady and overall p95 per request type, and every stream drop with its reason. It has seven verdicts. The two that matter most: every save a scout was told was saved is on the server exactly once, and every save reached every scout's stream exactly once.
+
+**Results, on a desktop rather than the Pi.** Two hours with seven faults: 14,228 saves, all on the server once, 118 of them retried. Every save reached all 30 streams, with a p95 of 3.0 s: the two-second lag plus the poll. All 210 stream drops and every failed request fell inside a fault. The slowest page was the assignment grid, at 85 ms p95; everything else was 3 ms or under. The timed backups did not run, because the tool had not created their folder and the server never does (Q4). A 25-minute rerun with backups on also passed every verdict, and a backup landed mid-load. Full numbers are in [LOAD_TEST.md](LOAD_TEST.md#results). The Pi is the run that matters.
+
+**A full phone (`storage-full.mjs`, 12 checks, all pass).** Chromium with localStorage full and the origin's quota turned down to 4 MB and filled. The scouting page works and its draft fails quietly. The save reaches the server. The offline shell does not install, and nothing breaks. With space freed, the shell installs.
+
+**One bug, fixed: a full phone could never download its snapshot (S10).** `getFileHandle(…, { create: true })` creates an empty `tealteam.sqlite3` before the write. When the write failed for lack of space, the empty file stayed. Every later `bootstrap()` then answered "exists" and the device never got its copy. An empty file no longer counts as a copy, and running out of space is refused with reason `full`, not a bare `QuotaExceededError`.
+
+**Found, not fixed:**
+
+- **A power cut can lose a save the scout was told was made.** The database runs WAL with `synchronous=NORMAL`. SQLite documents that a commit under that setting can roll back on power loss, though not when the process is killed, so this test cannot catch it. The setting was chosen to spare SD and USB storage an fsync per commit, but the database now lives on the SSD (P3). At an event that is about one commit a minute. `synchronous=FULL` is a one-line change in `SqliteRepo::connect`. Measure it on the Pi with `tt-load` before deciding.
+- **A full phone has no offline shell and is not told.** The site works online, and the account page shows how full the device is, but a reload with no server shows the browser's error page.
 ---
 
 ## Open decisions

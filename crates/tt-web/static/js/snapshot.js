@@ -15,6 +15,9 @@
 // { replace: true }: that copy may hold what the outbox (C7) has not pushed.
 // The file is written with createWritable, which swaps it in only when
 // complete, so a download cut off half way leaves the old copy, or none.
+// "None" is an empty file -- getFileHandle makes one before the write -- so
+// an empty file is not a copy (Q3). A device out of space is refused with
+// reason "full".
 //
 // Only in a secure context: https, or the device itself. Over the event LAN's
 // plain http there is no OPFS at all -- see open decision 9.
@@ -40,18 +43,26 @@
 
   function exists(dir, name) {
     return dir.getFileHandle(name).then(
-      function () { return true; },
+      function (file) {
+        return file.getFile().then(function (f) { return f.size > 0; });
+      },
       function () { return false; }
     );
   }
 
   function write(dir, name, data) {
-    return dir.getFileHandle(name, { create: true }).then(function (file) {
-      if (!file.createWritable) throw fail("unsupported", "this browser cannot write OPFS files here");
-      return file.createWritable().then(function (out) {
-        return out.write(data).then(function () { return out.close(); });
+    return dir
+      .getFileHandle(name, { create: true })
+      .then(function (file) {
+        if (!file.createWritable) throw fail("unsupported", "this browser cannot write OPFS files here");
+        return file.createWritable().then(function (out) {
+          return out.write(data).then(function () { return out.close(); });
+        });
+      })
+      .catch(function (e) {
+        if (e && e.name === "QuotaExceededError") throw fail("full", "this device is out of space");
+        throw e;
       });
-    });
   }
 
   function schema() {

@@ -2412,6 +2412,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "tt-load"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "rand 0.9.5",
+ "reqwest",
+ "serde_json",
+ "tokio",
+ "tt-core",
+ "tt-repo",
+ "tt-repo-sqlite",
+]
+
+[[package]]
 name = "tt-repo"
 version = "0.1.0"
 dependencies = [
