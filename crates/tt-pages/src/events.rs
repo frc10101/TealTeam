@@ -7,9 +7,8 @@
 use chrono::{DateTime, Utc};
 use tracing::warn;
 use tt_core::records::{Event, default_event};
-use tt_core::user::User;
 use tt_repo::LocalRepo;
-use tt_templates::EventSwitcher;
+use tt_templates::{EventPanel, EventSummary, EventSwitcher};
 
 /// `?event=`'s value, lowercased, if it is not blank.
 ///
@@ -38,7 +37,7 @@ impl EventContext {
 
 /// Decide which events to offer and which to show.
 ///
-/// Offered: the viewer's team's events; every event when they have no team, or
+/// Offered: `viewer_team`'s events; every event when there is no team, or
 /// when their team is on no roster yet -- a scout whose team's registration has
 /// not synced should still see something (REBUILD_SPEC.md 5.1).
 ///
@@ -49,11 +48,11 @@ impl EventContext {
 /// switcher rather than failing.
 pub async fn resolve<R: LocalRepo>(
     repo: &R,
-    viewer: Option<&User>,
+    viewer_team: Option<i32>,
     requested: Option<&str>,
     now: DateTime<Utc>,
 ) -> EventContext {
-    let mut options = match viewer.and_then(|u| u.team_number) {
+    let mut options = match viewer_team {
         Some(team) => match repo.events_for_team(team).await {
             Ok(events) if !events.is_empty() => events,
             Ok(_) => all_events(repo).await,
@@ -103,4 +102,32 @@ async fn all_events<R: LocalRepo>(repo: &R) -> Vec<Event> {
         warn!("listing events: {e}");
         Vec::new()
     })
+}
+
+/// The home page's event card (U3).
+pub async fn panel<R: LocalRepo>(
+    repo: &R,
+    context: &EventContext,
+    viewer_team: Option<i32>,
+) -> EventPanel {
+    let summary = match &context.selected {
+        Some(event) => {
+            let roster = repo.event_teams(&event.key).await.unwrap_or_else(|e| {
+                warn!("roster for {}: {e}", event.key);
+                Vec::new()
+            });
+            let matches = repo.event_matches(&event.key).await.unwrap_or_else(|e| {
+                warn!("matches for {}: {e}", event.key);
+                Vec::new()
+            });
+            Some(EventSummary::new(event, &roster, &matches, viewer_team))
+        }
+        None => None,
+    };
+
+    EventPanel {
+        none_loaded: summary.is_none() && context.options.is_empty(),
+        summary,
+        unknown_key: context.unknown.clone().unwrap_or_default(),
+    }
 }

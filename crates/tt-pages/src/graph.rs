@@ -9,21 +9,24 @@
 //! The numbers are shared, as on the team profile: every approved observation
 //! at the event, whoever's scouts recorded it. Notes are not numbers and are
 //! not here; they are U22's view.
+//!
+//! The device makes this page too (C6), over its copy. The script draws from
+//! the page's own data, so a chart works offline as it does online.
 
 use std::collections::HashMap;
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use serde_json::json;
 use tracing::warn;
 use tt_core::connectivity::describe_age;
 use tt_core::graph::{self, DEFAULT_TEAMS, MAX_METRICS, MAX_TEAMS, Metric, POINTS, Point, Sample};
 use tt_core::ranking::{self, Scored};
 use tt_core::records::{Event, TeamEventStats};
-use tt_repo::{Repo, StoredObservation};
+use tt_core::season::SeasonSchema;
+use tt_repo::{LocalRepo, StoredObservation};
 use tt_templates::{Chip, GraphPage, Nav, TableRow, TeamTable};
 
 use crate::events::EventContext;
-use crate::startup::AppState;
 
 /// What one event contributes.
 struct Loaded {
@@ -34,11 +37,15 @@ struct Loaded {
     stats: Vec<TeamEventStats>,
 }
 
-pub async fn page(
-    state: &AppState,
+/// The chart for the event `context` selected. `query` is a list, not a
+/// map: `team` and `metric` repeat.
+pub async fn page<R: LocalRepo>(
+    repo: &R,
+    schema: &SeasonSchema,
     nav: Nav,
     context: &EventContext,
     query: &[(String, String)],
+    now: DateTime<Utc>,
 ) -> GraphPage {
     let storage_ready = nav.storage_ready;
     let all = |name: &str| -> Vec<&str> {
@@ -91,8 +98,7 @@ pub async fn page(
         let mut events = vec![selected.clone()];
         if season {
             let year = &selected.key[..selected.key.len().min(4)];
-            let mut others: Vec<Event> = state
-                .repo
+            let mut others: Vec<Event> = repo
                 .list_events()
                 .await?
                 .into_iter()
@@ -103,20 +109,19 @@ pub async fn page(
         }
         let mut loaded = Vec::new();
         for event in events {
-            let approved = state.repo.approved_observations(&event.key).await?;
+            let approved = repo.approved_observations(&event.key).await?;
             // An event nobody scouted adds nothing, so skip its schedule.
             if approved.is_empty() && event.key != selected.key {
                 continue;
             }
-            let matches = state
-                .repo
+            let matches = repo
                 .event_matches(&event.key)
                 .await?
                 .into_iter()
                 .enumerate()
                 .map(|(i, m)| (m.key.clone(), (m.label(), i)))
                 .collect();
-            let stats = state.repo.event_stats(&event.key).await?;
+            let stats = repo.event_stats(&event.key).await?;
             loaded.push(Loaded {
                 event,
                 approved,
@@ -124,8 +129,8 @@ pub async fn page(
                 stats,
             });
         }
-        let pending = state.repo.pending_observations(&selected.key).await?;
-        let overrides = state.repo.weight_overrides().await?;
+        let pending = repo.pending_observations(&selected.key).await?;
+        let overrides = repo.weight_overrides().await?;
         tt_repo::Result::Ok((loaded, pending.len(), overrides))
     };
     let (loaded, waiting, overrides) = match loaded.await {
@@ -137,8 +142,7 @@ pub async fn page(
         }
     };
     // Names are a nicety: without them the chart still reads.
-    let roster = state
-        .repo
+    let roster = repo
         .event_teams(&selected.key)
         .await
         .inspect_err(|e| warn!("roster for {}: {e}", selected.key))
@@ -151,7 +155,6 @@ pub async fn page(
             .unwrap_or_default()
     };
 
-    let schema = &state.season;
     let at_selected = &loaded[loaded
         .iter()
         .position(|l| l.event.key == selected.key)
@@ -377,12 +380,18 @@ pub async fn page(
         })
         .collect();
 
-    page.source = source(schema.version, &loaded, waiting, any_stats);
+    page.source = source(schema.version, &loaded, waiting, any_stats, now);
     page
 }
 
 /// Where the numbers come from: always said (RI 2B).
-fn source(version: i64, loaded: &[Loaded], waiting: usize, any_stats: bool) -> String {
+fn source(
+    version: i64,
+    loaded: &[Loaded],
+    waiting: usize,
+    any_stats: bool,
+    now: DateTime<Utc>,
+) -> String {
     let approved = loaded.iter().flat_map(|l| &l.approved);
     let counted = approved
         .clone()
@@ -418,7 +427,7 @@ fn source(version: i64, loaded: &[Loaded], waiting: usize, any_stats: bool) -> S
     said.push_str(&match (any_stats, synced) {
         (true, Some(at)) => format!(
             " OPR, DPR, and CCWM: The Blue Alliance, synced {}.",
-            describe_age(Utc::now() - at)
+            describe_age(now - at)
         ),
         (true, None) => " OPR, DPR, and CCWM: The Blue Alliance.".to_string(),
         (false, _) => " Nothing from The Blue Alliance has been synced yet.".to_string(),

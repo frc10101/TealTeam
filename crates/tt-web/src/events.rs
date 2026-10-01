@@ -19,7 +19,7 @@ use axum::extract::{FromRequestParts, Query};
 use axum::http::request::Parts;
 use tracing::warn;
 use tt_repo::Repo;
-use tt_templates::{EventPanel, EventSummary, StoredCounts};
+use tt_templates::StoredCounts;
 
 /// Shared with the service worker's pages (C5).
 pub use tt_pages::events::{EventContext, resolve};
@@ -41,34 +41,6 @@ impl<S: Send + Sync> FromRequestParts<S> for EventParam {
         Ok(EventParam(tt_pages::events::requested(
             requested.as_deref(),
         )))
-    }
-}
-
-/// The home page's event card (U3).
-pub async fn panel<R: Repo + Sync>(
-    repo: &R,
-    context: &EventContext,
-    viewer_team: Option<i32>,
-) -> EventPanel {
-    let summary = match &context.selected {
-        Some(event) => {
-            let roster = repo.event_teams(&event.key).await.unwrap_or_else(|e| {
-                warn!("roster for {}: {e}", event.key);
-                Vec::new()
-            });
-            let matches = repo.event_matches(&event.key).await.unwrap_or_else(|e| {
-                warn!("matches for {}: {e}", event.key);
-                Vec::new()
-            });
-            Some(EventSummary::new(event, &roster, &matches, viewer_team))
-        }
-        None => None,
-    };
-
-    EventPanel {
-        none_loaded: summary.is_none() && context.options.is_empty(),
-        summary,
-        unknown_key: context.unknown.clone().unwrap_or_default(),
     }
 }
 
@@ -103,7 +75,6 @@ mod tests {
     use axum::http::Request;
     use chrono::{DateTime, NaiveDate, Utc};
     use tt_core::records::Event;
-    use tt_core::user::{Roles, User};
     use tt_repo_sqlite::SqliteRepo;
 
     fn day(month: u32, day: u32) -> NaiveDate {
@@ -127,16 +98,6 @@ mod tests {
             event_type: None,
             district_key: None,
             week: None,
-        }
-    }
-
-    fn viewer(team_number: Option<i32>) -> User {
-        User {
-            id: 1,
-            email: "sam@example.com".into(),
-            name: "Sam".into(),
-            team_number,
-            roles: Roles::SCOUT,
         }
     }
 
@@ -205,7 +166,7 @@ mod tests {
     #[tokio::test]
     async fn a_viewer_with_a_team_is_offered_that_teams_events() {
         let repo = repo().await;
-        let context = resolve(&repo, Some(&viewer(Some(10101))), None, noon(3, 13)).await;
+        let context = resolve(&repo, Some(10101), None, noon(3, 13)).await;
 
         assert_eq!(keys(&context.options), ["2026late"]);
         // Not the event running today: this team is not at it.
@@ -215,8 +176,8 @@ mod tests {
     #[tokio::test]
     async fn anyone_else_is_offered_everything_and_lands_on_todays_event() {
         let repo = repo().await;
-        for who in [None, Some(viewer(None)), Some(viewer(Some(254)))] {
-            let context = resolve(&repo, who.as_ref(), None, noon(3, 13)).await;
+        for who in [None, Some(254)] {
+            let context = resolve(&repo, who, None, noon(3, 13)).await;
             assert_eq!(keys(&context.options), ["2026early", "2026mid", "2026late"]);
             assert_eq!(context.selected.unwrap().key, "2026mid", "{who:?}");
         }
@@ -225,13 +186,7 @@ mod tests {
     #[tokio::test]
     async fn an_event_named_in_the_url_is_shown_even_off_the_teams_list() {
         let repo = repo().await;
-        let context = resolve(
-            &repo,
-            Some(&viewer(Some(10101))),
-            Some("2026early"),
-            noon(3, 13),
-        )
-        .await;
+        let context = resolve(&repo, Some(10101), Some("2026early"), noon(3, 13)).await;
 
         assert_eq!(context.selected.as_ref().unwrap().key, "2026early");
         assert_eq!(
@@ -259,7 +214,7 @@ mod tests {
             .expect("migrate");
 
         let context = resolve(&repo, None, None, noon(3, 13)).await;
-        let panel = panel(&repo, &context, None).await;
+        let panel = tt_pages::events::panel(&repo, &context, None).await;
 
         assert!(panel.none_loaded);
         assert!(panel.summary.is_none());

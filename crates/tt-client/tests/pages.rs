@@ -1,11 +1,12 @@
 //! The pages a device makes for itself (C5), against the server's.
 //!
 //! A Pi is seeded through the server's own `Repo` and cut into a snapshot for
-//! team 10101 at 2026here, as `/api/sync/snapshot` cuts it. The team page made
+//! team 10101 at 2026here, as `/api/sync/snapshot` cuts it. Each page made
 //! from the device's copy must be the page the Pi makes from its own
-//! database, byte for byte: the same function, the same template, and rows
-//! the snapshot kept.
+//! database for a 10101 scout, byte for byte: the same function, the same
+//! template, and rows the snapshot kept.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use chrono::{DateTime, NaiveDate, TimeZone, Utc};
@@ -214,17 +215,57 @@ async fn fixture(dir: &Dir, season: &SeasonSchema) -> (SqliteRepo, ClientRepo) {
     (pi, device)
 }
 
-/// The team page as `tt-web` makes it for a 10101 scout, over `repo`.
-async fn team_page(repo: &impl LocalRepo, season: &SeasonSchema, query: Option<&str>) -> String {
-    let context = events::resolve(repo, None, Some("2026here"), now()).await;
+/// The event and header as `tt-web` makes them for a 10101 scout.
+async fn scout_view(repo: &impl LocalRepo) -> (Nav, events::EventContext) {
+    let context = events::resolve(repo, Some(10101), Some("2026here"), now()).await;
     let nav = Nav {
         event: context.switcher(),
         ..Nav::anonymous(true)
     };
+    (nav, context)
+}
+
+/// The team page as `tt-web` makes it for a 10101 scout, over `repo`.
+async fn team_page(repo: &impl LocalRepo, season: &SeasonSchema, query: Option<&str>) -> String {
+    let (nav, context) = scout_view(repo).await;
     tt_pages::teams::page(repo, season, nav, Some(10101), &context, query, now())
         .await
         .render_html()
         .unwrap()
+}
+
+/// The other pages a scout reads at an event, as `tt-web` makes them for a
+/// 10101 scout, over `repo`: home, the notes, and the graph.
+async fn other_pages(repo: &impl LocalRepo, season: &SeasonSchema) -> Vec<(&'static str, String)> {
+    let mut made = Vec::new();
+    let (nav, context) = scout_view(repo).await;
+    let home = tt_pages::home::page(repo, season, nav, Some(10101), &context).await;
+    made.push(("home", home.render_html().unwrap()));
+    for (name, query) in [
+        ("notes", ""),
+        ("notes by schedule", "order=schedule&team=254"),
+    ] {
+        let query: HashMap<String, String> = form_urlencoded::parse(query.as_bytes())
+            .into_owned()
+            .collect();
+        let (nav, context) = scout_view(repo).await;
+        let page =
+            tt_pages::notes::page(repo, season, nav, Some(10101), &context, &query, now()).await;
+        made.push((name, page.render_html().unwrap()));
+    }
+    for (name, query) in [
+        ("graph", ""),
+        ("graph chosen", "chosen=1&team=254&metric=points&metric=opr"),
+        ("graph season", "span=season"),
+    ] {
+        let query: Vec<(String, String)> = form_urlencoded::parse(query.as_bytes())
+            .into_owned()
+            .collect();
+        let (nav, context) = scout_view(repo).await;
+        let page = tt_pages::graph::page(repo, season, nav, &context, &query, now()).await;
+        made.push((name, page.render_html().unwrap()));
+    }
+    made
 }
 
 /// `page` without its "Other events" card, or the blank lines its
@@ -278,6 +319,19 @@ async fn the_device_makes_the_page_the_server_makes() {
         assert!(made.contains(shown), "{shown} missing");
     }
     assert!(!made.contains("254&#39;s notes"), "another team's notes");
+
+    let served = other_pages(&pi, &season).await;
+    let made = other_pages(&device, &season).await;
+    for ((name, served), (_, made)) in served.iter().zip(&made) {
+        assert_eq!(served, made, "{name}");
+    }
+    let [(_, home), (_, notes), _, (_, graph), ..] = made.as_slice() else {
+        panic!("every page made");
+    };
+    assert!(home.contains("Citrus"), "the roster");
+    assert!(notes.contains("10101&#39;s notes") && notes.contains("Q1 · Sam"));
+    assert!(!notes.contains("254&#39;s notes"), "another team's notes");
+    assert!(graph.contains("Poofs") && graph.contains("Scouting: 2 approved observations"));
 }
 
 #[tokio::test]
@@ -300,19 +354,59 @@ async fn the_worker_answers_the_addresses_it_knows_and_no_others() {
         "says where it came from"
     );
     assert!(page.contains("Poofs") && page.contains("OPR</dt><dd>50.50"));
-    // The device cannot know who is holding it: no account, no one's notes.
+    // The device cannot know who is holding it: no account links.
     assert!(!page.contains("Sign in") && !page.contains("Sign out"));
-    assert!(!page.contains("10101&#39;s notes"));
-    // Every event the copy has is offered: the device knows no one's team.
-    assert!(page.contains(r#"value="2026away""#));
+    // But it knows whose copy it holds: that team's notes, and its events.
+    assert_eq!(
+        tt_client::pages::viewer_team(&device),
+        Some(10101),
+        "the snapshot says"
+    );
+    assert_eq!(
+        tt_client::pages::TEAM_SOURCE,
+        tt_repo_sqlite::snapshot::TEAM_SOURCE
+    );
+    assert!(page.contains("10101&#39;s notes"));
+    assert!(!page.contains(r#"value="2026away""#), "10101 is not there");
+    // The pages it can make are a tap away; the lead's are not offered.
+    assert!(page.contains(r#"href="/notes?event=2026here""#));
+    assert!(!page.contains("/lead-scout"));
 
     let roster = render(&device, &season, "/teams", "", now()).await.unwrap();
     assert!(roster.contains("Citrus"), "the roster at the default event");
 
+    let home = render(&device, &season, "/", "", now()).await.unwrap();
+    assert!(home.contains("copy of team 10101's data") && home.contains(r#"id="offline-agenda""#));
+    assert!(
+        !home.contains("/sign-in"),
+        "no sign-in the device cannot do"
+    );
+    let notes = render(&device, &season, "/notes", "team=254", now())
+        .await
+        .unwrap();
+    assert!(notes.contains("10101&#39;s notes"));
+    // `team` and `metric` repeat, and every one counts.
+    let graph = render(
+        &device,
+        &season,
+        "/graph",
+        "chosen=1&team=254&metric=points&metric=opr",
+        now(),
+    )
+    .await
+    .unwrap();
+    for on in [
+        r#"name="team" value="254" checked"#,
+        r#"name="metric" value="points" checked"#,
+        r#"name="metric" value="opr" checked"#,
+    ] {
+        assert!(graph.contains(on), "{on}");
+    }
+
     for elsewhere in [
-        "/",
         "/lead-scout",
         "/submission",
+        "/pick-list",
         "/teams/",
         "/api/sync/pull",
     ] {

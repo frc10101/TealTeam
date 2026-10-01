@@ -19,7 +19,9 @@
 //!      [`SERVER_ONLY`] one but two. `upstream` keeps the newest response per
 //!      path in scope, which is the whole current state of it (S1).
 //!      `sync_state` holds the snapshot's cursors, as `server:changes` and
-//!      `server:upstream`: how far this copy has read the server.
+//!      `server:upstream`: how far this copy has read the server. And
+//!      [`TEAM_SOURCE`], whose "cursor" is the viewer's team: whose notes
+//!      the copy holds, so pages made from it can show them (C6).
 //!    - Rows of every [`REPLICATED`] and [`FROM_UPSTREAM`] table with an
 //!      `event_key` outside the scope go. `events` and `teams` stay whole:
 //!      season lists go to everyone, as in the pull.
@@ -52,6 +54,10 @@ use crate::users::query_err;
 /// The `sync_state` sources a snapshot's cursors are stored under.
 pub const CHANGES_SOURCE: &str = "server:changes";
 pub const UPSTREAM_SOURCE: &str = "server:upstream";
+/// The `sync_state` row naming the team a snapshot was cut for, absent for a
+/// viewer with none. A device cannot know who is holding it; this says whose
+/// copy it holds.
+pub const TEAM_SOURCE: &str = "snapshot:team";
 
 /// Who a snapshot is for. The rules are the pull's; this is how the caller,
 /// which knows the viewer and the season, hands them over.
@@ -274,7 +280,11 @@ async fn cut(
             .await
             .map_err(err("emptying a table in a snapshot"))?;
     }
-    for (source, cursor) in [(CHANGES_SOURCE, changes), (UPSTREAM_SOURCE, upstream)] {
+    let team = audience.team().map(|team| (TEAM_SOURCE, i64::from(team)));
+    for (source, cursor) in [(CHANGES_SOURCE, changes), (UPSTREAM_SOURCE, upstream)]
+        .into_iter()
+        .chain(team)
+    {
         sqlx::query("INSERT INTO sync_state (source, cursor, applied_at) VALUES (?, ?, ?)")
             .bind(source)
             .bind(cursor)
@@ -496,7 +506,8 @@ mod tests {
             cursors,
             [
                 format!("{CHANGES_SOURCE}={}", heads.0),
-                format!("{UPSTREAM_SOURCE}={}", heads.1)
+                format!("{UPSTREAM_SOURCE}={}", heads.1),
+                format!("{TEAM_SOURCE}=10101"),
             ]
         );
         let _ = conn.close().await;
@@ -523,6 +534,13 @@ mod tests {
         let repo = seeded("teamless").await;
         let snap = build(&repo, &Teamless).await.expect("snapshot");
         assert!(!snap.bytes.windows(8).any(|w| w == b"our-pick"));
+        assert!(
+            !snap
+                .bytes
+                .windows(TEAM_SOURCE.len())
+                .any(|w| w == TEAM_SOURCE.as_bytes()),
+            "no team to record"
+        );
 
         let left: (i64, i64) = sqlx::query_as(
             "SELECT (SELECT count(*) FROM users), (SELECT count(*) FROM pick_list_entries)",

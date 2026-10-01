@@ -7,6 +7,12 @@
       <p>Signed in as <strong>{{ nav.name }}</strong>{% if !team_display.is_empty() %} · team {{ team_display }}{% endif %}.</p>
       <p class="muted">Season: {{ season_name }} ({{ season_year }})</p>
       <p><a class="btn btn-primary" href="/submission{{ nav.event.query() }}">Start scouting</a></p>
+    {% else if nav.from_device %}
+      {# C6: made on the device, which cannot know who is holding it, only
+         whose copy it holds. #}
+      <p>{% if team_display.is_empty() %}This device's copy of the data.{% else %}This device's copy of team {{ team_display }}'s data.{% endif %}</p>
+      <p class="muted">Season: {{ season_name }} ({{ season_year }})</p>
+      <p>Teams, Notes, and Graph work from it until the server is back.</p>
     {% else %}
       <p>Scouting and analytics for FRC team 10101.</p>
       <p class="muted">Season: {{ season_name }} ({{ season_year }})</p>
@@ -17,6 +23,11 @@
     {% endif %}
   </div>
 </section>
+
+{# C8: agenda.js draws the assignments the scouting page kept on this device. #}
+{% if nav.from_device %}
+  <section class="card" id="offline-agenda" hidden></section>
+{% endif %}
 
 {% if !event.unknown_key.is_empty() %}
   <p class="alert alert-error" role="alert">
@@ -62,4 +73,5 @@
     </div>
   </section>
 {% endif %}
+
 {% endblock %}

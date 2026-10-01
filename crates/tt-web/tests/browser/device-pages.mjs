@@ -10,7 +10,8 @@
 // in the folder seeded by sqlite3, and prints PASS or FAIL per check. A
 // scout opens the team page, the device takes its snapshot (S10), and the
 // server goes away: the team page is then made by the service worker from the
-// device's copy, and every other page is the offline shell. With a LAN
+// device's copy, and so are home, the notes, and the graph (C6), for the team
+// the copy was cut for. Every other page is the offline shell. With a LAN
 // address it also checks that plain http is left as it was (open decision 9).
 import { spawn, execFileSync } from "node:child_process";
 import { rmSync, writeFileSync } from "node:fs";
@@ -40,8 +41,9 @@ for (const [t, name] of [[254, "Poofs"], [1678, "Citrus"], [10101, "Teal"]]) {
 }
 sql += `INSERT INTO team_event_stats (team_number, event_key, opr, synced_at) VALUES (254, '2026demo', 61.25, '${new Date().toISOString()}');\n`;
 sql += `INSERT INTO matches (tba_key, event_key, comp_level, match_number, red1, red2, blue1, blue2, played, created_at, updated_at) VALUES ('2026demo_qm1', '2026demo', 'qm', 1, 254, 1678, 971, 10101, 1, 'x', 'x');\n`;
-const payload = JSON.stringify({ auto_scored: 4, teleop_scored: 9, endgame: "full" });
-sql += `INSERT INTO observations (client_record_id, match_key, team_number, event_key, alliance, payload, schema_version, review_state, observed_at, created_at, updated_at) VALUES ('r1', '2026demo_qm1', 254, '2026demo', 'red', '${payload}', 1, 'approved', 'x', 'x', 'x');\n`;
+const payload = JSON.stringify({ auto_scored: 4, teleop_scored: 9, endgame: "full", notes: "Fast intake, slow climb" });
+const seen = new Date().toISOString();
+sql += `INSERT INTO observations (client_record_id, match_key, team_number, event_key, alliance, payload, schema_version, review_state, scouter_id, submitting_team, observed_at, created_at, updated_at) VALUES ('r1', '2026demo_qm1', 254, '2026demo', 'red', '${payload}', 1, 'approved', 1, 10101, '${seen}', '${seen}', '${seen}');\n`;
 writeFileSync(`${D}/seed.sql`, sql);
 execFileSync("sqlite3", [`${D}/t.db`, `.read ${D}/seed.sql`]);
 
@@ -58,7 +60,8 @@ const go = async (url, ms = 1500) => { await send("Page.navigate", { url }); awa
 const check = (label, ok, detail = "") => console.log(`${ok ? "PASS" : "FAIL"}  ${label}${detail ? "  — " + detail : ""}`);
 const page = `({ url: location.pathname + location.search, device: !!document.getElementById('device-page'), shell: !!document.getElementById('offline-shell'),
   h1: document.querySelector('h1')?.textContent, text: document.querySelector('main')?.textContent.replace(/\\s+/g, ' '),
-  signIn: !!document.querySelector('a[href="/sign-in"]'), bg: getComputedStyle(document.body).backgroundColor })`;
+  signIn: !!document.querySelector('a[href="/sign-in"]'), bg: getComputedStyle(document.body).backgroundColor,
+  tabs: [...document.querySelectorAll('.nav-links a')].map(a => a.getAttribute('href').split('?')[0]) })`;
 await send("Page.enable"); await send("Runtime.enable"); await send("Log.enable");
 for (const url of [local, LAN && `http://${LAN}:${PORT}`].filter(Boolean)) await send("Network.setCookie", { name: "tt_session", value: session, url });
 
@@ -114,6 +117,20 @@ check("the lookup form works offline", other.device && other.h1 === "1678 · Cit
 await go(`${local}/teams?event=2026demo&team=4`);
 const missing = await evaluate(page);
 check("a team the copy lacks says so", missing.device && /no team 4 on this server/.test(missing.text), missing.text.slice(0, 200));
+
+// 5b. The other pages a scout reads (C6), from the tab bar, for team 10101.
+check("the tab bar is there, without the lead's pages", made.tabs.includes("/notes") && !made.tabs.includes("/lead-scout"), JSON.stringify(made.tabs));
+await evaluate(`document.querySelector('.nav-links a[href^="/notes"]').click()`);
+await sleep(1500);
+const notes = await evaluate(page);
+check("notes are made on the device, with our team's", notes.device && notes.url === "/notes?event=2026demo" && /Fast intake, slow climb/.test(notes.text) && /Sam/.test(notes.text), notes.text.slice(0, 300));
+await go(`${local}/?event=2026demo`);
+const home = await evaluate(page);
+check("home says whose copy it is", home.device && /copy of team 10101's data/.test(home.text) && /Citrus/.test(home.text) && !home.signIn, home.text.slice(0, 300));
+await go(`${local}/graph?event=2026demo`);
+const graph = await evaluate(page);
+const drawn = await evaluate(`!!document.querySelector('.uplot, canvas')`);
+check("the graph is made on the device, and drawn", graph.device && /Scouting: 1 approved observation/.test(graph.text) && drawn, JSON.stringify({ drawn, text: graph.text.slice(0, 200) }));
 
 // 6. A page the device cannot make is the shell.
 await go(`${local}/lead-scout?event=2026demo`);

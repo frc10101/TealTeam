@@ -5,28 +5,33 @@
 //! the event's clock. Which notes are readable is U13's rule and nothing else;
 //! the filters only narrow that. Everything is in the URL, so a narrowed view
 //! can be bookmarked or linked to, as the team profile does.
+//!
+//! The device makes this page too (C6), over its copy, for the team the copy
+//! was cut for: the snapshot holds no other team's notes (S10).
 
 use std::collections::HashMap;
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use tracing::warn;
 use tt_core::connectivity::describe_age;
 use tt_core::notes::{self, Filter, Notes, Order};
 use tt_core::records::MatchRecord;
-use tt_core::season::FieldKind;
-use tt_core::user::User;
-use tt_repo::{Repo, StoredObservation};
+use tt_core::season::{FieldKind, SeasonSchema};
+use tt_repo::{LocalRepo, StoredObservation};
 use tt_templates::{FilterOption, Nav, NoteEntry, NotesPage, team_href};
 
 use crate::events::EventContext;
-use crate::startup::AppState;
 
-pub async fn page(
-    state: &AppState,
+/// The notes `viewer_team` wrote at the event `context` selected, narrowed
+/// by `query`'s `team`, `scout`, `q`, and `order`.
+pub async fn page<R: LocalRepo>(
+    repo: &R,
+    season: &SeasonSchema,
     nav: Nav,
-    viewer: &User,
+    viewer_team: Option<i32>,
     context: &EventContext,
     query: &HashMap<String, String>,
+    now: DateTime<Utc>,
 ) -> NotesPage {
     let storage_ready = nav.storage_ready;
     let typed = |name: &str| query.get(name).map(|v| v.trim()).unwrap_or_default();
@@ -54,7 +59,7 @@ pub async fn page(
         waiting: 0,
     };
 
-    let Some(own_team) = viewer.team_number else {
+    let Some(own_team) = viewer_team else {
         page.unavailable = "Notes are read only by the team whose scouts wrote them. Your \
                             account has no team, so none are shown."
             .into();
@@ -79,9 +84,9 @@ pub async fn page(
     }
 
     let loaded = async {
-        let approved = state.repo.approved_observations(&event.key).await?;
-        let pending = state.repo.pending_observations(&event.key).await?;
-        let matches = state.repo.event_matches(&event.key).await?;
+        let approved = repo.approved_observations(&event.key).await?;
+        let pending = repo.pending_observations(&event.key).await?;
+        let matches = repo.event_matches(&event.key).await?;
         tt_repo::Result::Ok((approved, pending, matches))
     };
     let (approved, pending, matches) = match loaded.await {
@@ -93,8 +98,7 @@ pub async fn page(
         }
     };
     // Names are a nicety: without them the notes still read.
-    let roster = state
-        .repo
+    let roster = repo
         .event_teams(&event.key)
         .await
         .inspect_err(|e| warn!("roster for {}: {e}", event.key))
@@ -102,7 +106,7 @@ pub async fn page(
 
     let readable = |o: &&StoredObservation| {
         Notes::for_viewer(Some(own_team), o.submitting_team).shown()
-            && !notes::written(&state.season, &o.payload).is_empty()
+            && !notes::written(season, &o.payload).is_empty()
     };
     page.waiting = pending.iter().filter(readable).count();
     let mut observed: Vec<&StoredObservation> = approved.iter().filter(readable).collect();
@@ -161,15 +165,13 @@ pub async fn page(
 
     // With one text field on the form, its label says nothing the heading
     // does not.
-    let one_field = state
-        .season
+    let one_field = season
         .fields()
         .filter(|f| matches!(f.kind, FieldKind::Text { .. }))
         .count()
         <= 1;
-    let now = Utc::now();
     for o in observed {
-        let written = notes::written(&state.season, &o.payload);
+        let written = notes::written(season, &o.payload);
         page.total += written.len();
         let recorded = o.observed_at.or(o.created_at);
         for (field, text) in written {
@@ -196,7 +198,7 @@ pub async fn page(
                 ago: recorded
                     .map(|at| describe_age(now - at))
                     .unwrap_or_default(),
-                filter_href: tt_pages::notes_href(&event.key, o.team_number),
+                filter_href: crate::notes_href(&event.key, o.team_number),
                 profile_href: team_href(&event.key, o.team_number),
             });
         }

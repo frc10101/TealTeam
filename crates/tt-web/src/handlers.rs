@@ -22,7 +22,7 @@ use chrono::Utc;
 use serde::Deserialize;
 use tt_core::user::{self, Roles};
 use tt_repo::{NewUser, Repo};
-use tt_templates::{AccountPage, HomePage, LeadScoutPage, Nav, Page, SignInPage, SignUpPage};
+use tt_templates::{AccountPage, LeadScoutPage, Nav, Page, SignInPage, SignUpPage};
 
 use crate::assignments::{self, GridParams};
 use crate::auth::{
@@ -31,8 +31,6 @@ use crate::auth::{
 };
 use crate::coach;
 use crate::events::{self, EventContext, EventParam};
-use crate::graph;
-use crate::notes;
 use crate::picklist;
 use crate::ranking::{self, RankingParams};
 use crate::refused::{self, ResolvedParam};
@@ -77,14 +75,11 @@ async fn event_page(
     requested: Option<&str>,
 ) -> (Nav, EventContext) {
     // Each event judged by its own calendar (Q5).
-    let context = events::resolve(&*state.repo, user, requested, Utc::now()).await;
+    let team = user.and_then(|u| u.team_number);
+    let context = events::resolve(&*state.repo, team, requested, Utc::now()).await;
     let mut nav = nav_for(state, user).await;
     nav.event = context.switcher();
     (nav, context)
-}
-
-fn team_display(team_number: Option<i32>) -> String {
-    team_number.map(|n| n.to_string()).unwrap_or_default()
 }
 
 // ── Home ────────────────────────────────────────────────────────────────────
@@ -96,14 +91,7 @@ pub async fn home(
 ) -> Response {
     let (nav, context) = event_page(&state, user.as_ref(), requested.as_deref()).await;
     let team = user.as_ref().and_then(|u| u.team_number);
-    html(HomePage {
-        title: "Home".into(),
-        nav,
-        team_display: team_display(team),
-        season_name: state.season.name.clone(),
-        season_year: state.season.season,
-        event: events::panel(&*state.repo, &context, team).await,
-    })
+    html(tt_pages::home::page(&*state.repo, &state.season, nav, team, &context).await)
 }
 
 // ── Sign in ─────────────────────────────────────────────────────────────────
@@ -636,7 +624,18 @@ pub async fn notes(
     Query(query): Query<HashMap<String, String>>,
 ) -> Response {
     let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
-    html(notes::page(&state, nav, &user, &context, &query).await)
+    html(
+        tt_pages::notes::page(
+            &*state.repo,
+            &state.season,
+            nav,
+            user.team_number,
+            &context,
+            &query,
+            Utc::now(),
+        )
+        .await,
+    )
 }
 
 // ── Graph (U21) ─────────────────────────────────────────────────────────────
@@ -650,7 +649,17 @@ pub async fn graph(
     Query(query): Query<Vec<(String, String)>>,
 ) -> Response {
     let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
-    html(graph::page(&state, nav, &context, &query).await)
+    html(
+        tt_pages::graph::page(
+            &*state.repo,
+            &state.season,
+            nav,
+            &context,
+            &query,
+            Utc::now(),
+        )
+        .await,
+    )
 }
 
 // ── Pick list (U20) ─────────────────────────────────────────────────────────

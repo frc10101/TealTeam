@@ -32,7 +32,7 @@
     <meta name="tt-form" content="{{ nav.version.form }}">
     {% endif %}
   </head>
-  <body{% if nav.signed_in %} class="has-tabs"{% endif %}>
+  <body{% if nav.signed_in || nav.from_device %} class="has-tabs"{% endif %}>
     <a class="skip-link" href="#main">Skip to content</a>
 
     <header class="nav">
@@ -64,8 +64,10 @@
 
         {# The sections. On a phone they are a tab bar along the bottom of the
            screen, where a thumb reaches (U16); wider, they sit in the header.
-           Signed out there is nowhere to go but here, so there is no bar. #}
-        {% if nav.signed_in %}
+           Signed out there is nowhere to go but here, so there is no bar. A
+           page made on the device (C5) has one: the others it can make are a
+           tap away, and the rest get the offline shell. #}
+        {% if nav.signed_in || nav.from_device %}
           <nav class="nav-links" aria-label="Main">
             <a href="/{{ nav.event.query() }}">Home</a>
             <a href="/submission{{ nav.event.query() }}">Scout</a>
@@ -141,7 +143,7 @@
     <script src="/static/js/shell.js" defer></script>
     <script src="/static/js/tabs.js" defer></script>
     {% if nav.signed_in %}<script src="/static/js/persist.js" defer></script>{% endif %}
-    {% if nav.signed_in || nav.offline_shell %}<script src="/static/js/agenda.js" defer></script>{% endif %}
+    {% if nav.signed_in || nav.offline_shell || nav.from_device %}<script src="/static/js/agenda.js" defer></script>{% endif %}
     {% if nav.signed_in || nav.offline_shell %}<script src="/static/js/token.js" data-user="{{ nav.user_id }}" defer></script>{% endif %}
     {% block scripts %}{% endblock %}
   </body>
