@@ -17,6 +17,7 @@
 //!   5. Probe it. **Failure is logged, not fatal**; the app serves degraded.
 //!   6. Start upstream sync in the background, if storage is up. **Never
 //!      awaited**: a venue with no internet must not delay the first page.
+//!      With it, the watch for a tethered phone (S6).
 //!   7. Bind and serve. Failure to bind is fatal -- there is nothing to serve on.
 
 use anyhow::Context;
@@ -142,6 +143,11 @@ pub async fn run() -> anyhow::Result<()> {
             state.repo.clone(),
             state.upstream.clone(),
             config.first_sync_on_boot,
+        );
+        crate::tether::spawn(
+            state.repo.clone(),
+            state.upstream.clone(),
+            crate::tether::Watch::new(config.tether_interfaces.clone()),
         );
     } else {
         warn!("upstream sync not started: storage is down");

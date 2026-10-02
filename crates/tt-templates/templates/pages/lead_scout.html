@@ -95,6 +95,10 @@
     <dl class="detail" id="upstream-status" data-live="/lead-scout{{ nav.event.query() }}" data-live-every="30">
       <dt>Server's internet</dt>
       <dd><span class="badge {{ upstream.uplink_class }}">{{ upstream.uplink_label }}</span></dd>
+      {% if !upstream.tether.is_empty() %}
+        <dt>Phone tether</dt>
+        <dd>{{ upstream.tether }}</dd>
+      {% endif %}
       <dt>Last sync</dt>
       <dd>{{ upstream.last_sync }}{% if upstream.stale %} <span class="badge badge-amber">stale</span>{% endif %}</dd>
       {% if !upstream.last_bundle.is_empty() %}

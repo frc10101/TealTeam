@@ -806,6 +806,9 @@ pub struct UpstreamPanel {
     /// Who pushed the newest upstream bundle, from where, when, and what it
     /// brought (S5). Empty when nobody has.
     pub last_bundle: String,
+    /// "plugged in (usb0)" or "not plugged in" (S6). Empty when the server
+    /// is not watching for a tethered phone.
+    pub tether: String,
 }
 
 // ── Assignments (L1) ────────────────────────────────────────────────────────

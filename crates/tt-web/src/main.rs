@@ -30,6 +30,7 @@ mod standings;
 mod startup;
 mod sync;
 mod teams;
+mod tether;
 mod token;
 mod upstream;
 

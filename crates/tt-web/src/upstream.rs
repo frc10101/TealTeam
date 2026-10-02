@@ -8,6 +8,8 @@
 //!     event is live, every three hours otherwise.
 //!   - **When a lead scout asks**, `POST /api/frc/sync` (I13): the FIRST sync
 //!     again, then a nudge that wakes the loop.
+//!   - **When the phone is plugged in** (S6): the same, by itself, as soon as
+//!     its tether holds the default route. See `tether`.
 //!   - **On demand**, `tt-web bulk-load` (I8): the full snapshot, run at the
 //!     shop before anyone leaves.
 //!
@@ -21,6 +23,7 @@
 
 use std::io::Write;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{Context, bail};
 use chrono::{DateTime, Utc};
@@ -38,6 +41,8 @@ use tt_upstream::journal::Recorder;
 use tt_upstream::sync::{self, SyncReport};
 use tt_upstream::tba::TbaClient;
 
+use crate::tether::Tether;
+
 /// The configured upstream clients and the state they share. One per process,
 /// held in `AppState` so the manual sync and the background loop are talking
 /// about the same uplink.
@@ -52,6 +57,11 @@ pub struct Upstream {
     /// full sync is a hundred-odd requests; two lead scouts pressing the button
     /// at once should not make it two hundred.
     first_sync: Mutex<()>,
+    /// A FIRST event sync has completed since the server started. Until one
+    /// has, a phone plugged in (S6) retries it before waking the loop.
+    events_synced: AtomicBool,
+    /// Where the phone is, as the tether watch last saw it (S6).
+    tether: std::sync::Mutex<Tether>,
 }
 
 impl Upstream {
@@ -68,7 +78,31 @@ impl Upstream {
             uplink,
             wake: Arc::new(Notify::new()),
             first_sync: Mutex::new(()),
+            events_synced: AtomicBool::new(false),
+            tether: std::sync::Mutex::new(Tether::Unwatched),
         }
+    }
+
+    pub fn tether(&self) -> Tether {
+        // Advisory, like the uplink's snapshot: a poisoned lock is no reason
+        // to fail a page.
+        self.tether.lock().map(|t| t.clone()).unwrap_or_default()
+    }
+
+    pub fn set_tether(&self, now: Tether) {
+        if let Ok(mut tether) = self.tether.lock() {
+            *tether = now;
+        }
+    }
+
+    pub fn mark_events_synced(&self) {
+        self.events_synced.store(true, Ordering::SeqCst);
+    }
+
+    /// Resolves when something wakes the background loop.
+    #[cfg(test)]
+    pub async fn woken(&self) {
+        self.wake.notified().await;
     }
 
     /// Read `FIRST_*` and `TBA_AUTH_KEY`. Call after the `.env` files load.
@@ -148,6 +182,9 @@ async fn boot_sync(repo: &SqliteRepo, upstream: &Upstream) {
             if !report.is_empty() {
                 upstream.uplink.record_sync();
             }
+            if report.problems.is_empty() {
+                upstream.mark_events_synced();
+            }
             info!("event sync at boot: {}", report.summary());
         }
         Ok(Err(e)) if e.is_offline() => {
@@ -219,7 +256,12 @@ pub async fn sync_now(repo: &SqliteRepo, upstream: &Upstream) -> ManualSync {
         (Some(first), Ok(_one_at_a_time)) => {
             let run = sync::sync_events(repo, first, upstream.tba.as_ref(), &upstream.filters);
             match tokio::time::timeout(sync::MANUAL_SYNC_TIMEOUT, run).await {
-                Ok(Ok(r)) => report.merge(r),
+                Ok(Ok(r)) => {
+                    if r.problems.is_empty() {
+                        upstream.mark_events_synced();
+                    }
+                    report.merge(r)
+                }
                 Ok(Err(e)) => report.problems.push(e.to_string()),
                 Err(_) => report.problems.push(format!(
                     "Stopped after {:?}; what it stored is kept",
@@ -247,6 +289,20 @@ pub async fn sync_now(repo: &SqliteRepo, upstream: &Upstream) -> ManualSync {
         event_teams: report.event_teams,
         problems: report.problems,
         tba_pass_started,
+    }
+}
+
+/// The phone's tether just took the default route (S6): sync as "Sync now"
+/// would, but fetch the event list only if no event sync has landed since the
+/// server started. Usually that is a Pi that booted at the venue with no
+/// internet. Otherwise wake the loop, whose requests carry ETags and cost the
+/// phone's data plan almost nothing (I9).
+pub async fn tether_up(repo: &SqliteRepo, upstream: &Upstream) {
+    if upstream.first.is_some() && !upstream.events_synced.load(Ordering::SeqCst) {
+        let outcome = sync_now(repo, upstream).await;
+        info!("sync over the tether: {}", outcome.headline());
+    } else if upstream.tba.is_some() {
+        upstream.wake.notify_one();
     }
 }
 
@@ -284,6 +340,7 @@ pub fn panel(
         result_ok: outcome.is_some_and(|o| o.ok),
         result_problems: outcome.map(|o| o.problems.clone()).unwrap_or_default(),
         last_bundle: String::new(),
+        tether: upstream.tether().describe(),
     }
 }
 
@@ -560,6 +617,17 @@ mod tests {
         assert!(!panel.stale, "never synced already says it");
         assert!(!panel.first_configured && !panel.tba_configured);
         assert!(panel.result_headline.is_empty());
+    }
+
+    #[test]
+    fn the_card_says_where_the_phone_is_only_while_watching() {
+        let upstream = Upstream::disabled();
+        assert!(panel(&upstream, None, Utc::now()).tether.is_empty());
+        upstream.set_tether(Tether::Up("usb0".into()));
+        assert_eq!(
+            panel(&upstream, None, Utc::now()).tether,
+            "plugged in (usb0)"
+        );
     }
 
     #[test]

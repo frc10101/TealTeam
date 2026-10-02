@@ -36,6 +36,9 @@ pub struct Config {
     /// Where `tt-web backup` copies to when no folder is named: a USB stick,
     /// or whoever's laptop open decision 6 settles on.
     pub backup_copy_to: Option<PathBuf>,
+    /// The interfaces a USB-tethered phone appears as (S6). Empty: do not
+    /// watch for one.
+    pub tether_interfaces: Vec<String>,
 }
 
 /// Runtime mode.
@@ -117,6 +120,7 @@ impl Config {
             first_sync_on_boot: flag("FIRST_SYNC_ON_BOOT", get("FIRST_SYNC_ON_BOOT"), true)?,
             backup_dir: path(get("BACKUP_DIR")),
             backup_copy_to: path(get("BACKUP_COPY_TO")),
+            tether_interfaces: interfaces(get("TETHER_INTERFACES")),
         })
     }
 }
@@ -126,6 +130,21 @@ fn path(raw: Option<String>) -> Option<PathBuf> {
     raw.map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
         .map(PathBuf::from)
+}
+
+/// `TETHER_INTERFACES`: names separated by commas or spaces. Blank means the
+/// two `tealteam-uplink.nmconnection` matches; `off` means none.
+fn interfaces(raw: Option<String>) -> Vec<String> {
+    let raw = raw.unwrap_or_default();
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "" => crate::tether::DEFAULT_INTERFACES.map(String::from).to_vec(),
+        "off" | "none" | "false" | "no" => Vec::new(),
+        _ => raw
+            .split(|c: char| c == ',' || c.is_whitespace())
+            .filter(|name| !name.is_empty())
+            .map(String::from)
+            .collect(),
+    }
 }
 
 /// Parse an on/off setting. Blank means the default; anything unrecognised is
@@ -244,6 +263,22 @@ mod tests {
             Some(PathBuf::from("/srv/tealteam/backups"))
         );
         assert_eq!(config.backup_copy_to, None);
+    }
+
+    #[test]
+    fn the_tether_is_watched_on_the_uplink_profiles_interfaces_unless_told_otherwise() {
+        let watched = |raw: &str| {
+            Config::from_lookup(lookup(&[("TETHER_INTERFACES", raw)]))
+                .unwrap()
+                .tether_interfaces
+        };
+        assert_eq!(watched(""), ["usb0", "eth1"]);
+        assert_eq!(watched("usb0, usb1 eth2"), ["usb0", "usb1", "eth2"]);
+        assert!(watched("off").is_empty());
+        assert_eq!(
+            Config::from_lookup(lookup(&[])).unwrap().tether_interfaces,
+            ["usb0", "eth1"]
+        );
     }
 
     #[test]

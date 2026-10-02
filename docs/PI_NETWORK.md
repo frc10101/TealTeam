@@ -52,6 +52,21 @@ deploy/pi/network/status.sh
 
 **The app's port is assumed to be 8080**, the default. If `PORT` is set to something else, change `port80.nft` to match and rerun `setup.sh`.
 
+## The server follows the phone (S6)
+
+Plugging the phone in is all anyone does. The server watches the kernel's routing table (`/proc/net/route`) every 3 seconds, and the moment the default route goes through `usb0` or `eth1`, it syncs:
+
+- **If no event sync has worked since the server started**, which is the usual case for a Pi booted at the venue with no internet, it fetches the event list and rosters first, as the Lead Scout page's **Sync now** does.
+- **Then, or otherwise only, it wakes the TBA loop**, which would have waited up to two minutes during an event, or three hours if it booted with no events stored. Those requests carry ETags (I9), so a pass that finds nothing new costs the phone's data almost nothing.
+
+It waits for the route, not the link: `usb0` comes up a few seconds before the phone answers DHCP, and syncing then would only find no internet. A phone already plugged in when the server starts is the boot sync's job. Unplugging needs nothing: the next request fails, the card says "No internet", and the loop keeps its cadence until the phone is back.
+
+The Lead Scout page's upstream card has a **Phone tether** line: `plugged in (usb0)` or `not plugged in`. The server's log says `phone tether up on usb0; syncing now`, then `sync over the tether: …` when it fetched the event list.
+
+`TETHER_INTERFACES` in the server's `.env` changes the names it watches for, separated by commas, and `off` stops it. Unset is `usb0, eth1`, the same as `tealteam-uplink.nmconnection`; keep the two in step. It watches only when the server has FIRST or TBA credentials, and never off Linux. It reads IPv4 routes only. Android and iPhone tethering both hand out IPv4, but a phone that gave only IPv6 would not be noticed. The loop would still find it at its next pass.
+
+> **Not tested on a Pi or with a phone.** What ran here: unit tests of the routing table parser on rows written the way the kernel prints them, this machine's own `/proc/net/route`, and the watch against a routing-table file the tests rewrite. Plugging the phone in fetched the event list from a stub FIRST server, a second time only woke the loop, and a phone present at start started nothing. Step 6 below is where it gets checked for real.
+
 **Being conservative about Wi-Fi:** the Pi's Wi-Fi as a *client* of the shop's network is not an access point, and the route metric keeps it behind the phone. For events, `sudo nmcli radio wifi off` turns the radio off entirely, and `on` turns it back on at the shop.
 
 ## What to verify
@@ -63,7 +78,7 @@ At the shop, with the real switch, cables, adapters, and phones:
 3. A laptop on the switch gets a `10.101.0.x` lease with no gateway, and opens `http://tealteam.local`.
 4. **Resolution on each platform** (RI-N3): an iPhone, an Android phone (with Chrome), a Mac, and a Windows laptop, each wired through the switch. On each, note whether `tealteam.local` resolved by mDNS or by the DNS fallback, and which needed `10.101.0.1`.
 5. An Android phone on the switch **keeps its cellular internet** while it reaches the server over Ethernet. Android may not route to a wired network it decides "has no internet". If so, that is the first thing to fix.
-6. An Android phone tethered by USB: `usb0` comes up, `ip route` shows the default via `usb0` at metric 50, and a manual sync on the Lead Scout page succeeds. Then the same with an iPhone (`eth1`).
+6. An Android phone tethered by USB: `usb0` comes up, `ip route` shows the default via `usb0` at metric 50, and **without pressing anything** the Lead Scout page says **Phone tether: plugged in (usb0)** and its last sync is seconds old. `journalctl -u tealteam` shows `phone tether up on usb0; syncing now`. Then the same with an iPhone (`eth1`). Note how long the route took to appear after tethering was switched on.
 7. Pull the tether mid-sync: the server says "No internet" and keeps serving.
 8. `nmcli connection show` lists no Wi-Fi AP. Create one by hand and confirm `status.sh` fails and `setup.sh` deletes it.
 9. Time it: set up and tear down twice, by a student who did not write this (P9).

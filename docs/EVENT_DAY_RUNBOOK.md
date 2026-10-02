@@ -12,7 +12,7 @@
 2. **Power on in order:** switch first, then the Pi. Wait for the Pi's green light to settle (about a minute).
 3. **The server starts by itself** at boot. Confirm with `systemctl status tealteam`: it should say `active (running)`. If not, `sudo systemctl restart tealteam`, and `journalctl -u tealteam -n 50` says why.
 4. **Check:** in the TealTeam folder, `deploy/pi/network/status.sh`. Every line should be `ok`. Any `FAIL` names the fix. `no uplink` is fine for now.
-5. **Uplink (optional):** the phone's owner plugs it into the Pi and turns on **USB tethering**. Run `status.sh` again: it should say *internet via the tethered phone*. Without it, scouting still works; only rankings stop updating.
+5. **Uplink (optional):** the phone's owner plugs it into the Pi and turns on **USB tethering**. Run `status.sh` again: it should say *internet via the tethered phone*. The server syncs by itself within seconds; the Lead Scout page says **Phone tether: plugged in**. Without it, scouting still works; only rankings stop updating.
 6. **Confirm from a tablet:** plug it into the switch and open **http://tealteam.local**. If that fails, try **http://tealteam**, then **http://10.101.0.1**. The sign-in page means it works. Write down which address worked on this model.
 7. **Lead scout:** sign in, pick the event, check the rankings say how old they are.
 
