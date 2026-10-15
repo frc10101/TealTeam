@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "dgSpecHash": "TRefuQRvkTw=",
+  "success": true,
+  "projectFilePath": "/Users/maxmccormick/GitHub/TealTeam/dotnet/TealTeam.Web/TealTeam.Web.csproj",
+  "expectedPackageFiles": [
+    "/Users/maxmccormick/.nuget/packages/bcrypt.net-next/4.0.3/bcrypt.net-next.4.0.3.nupkg.sha512",
+    "/Users/maxmccormick/.nuget/packages/dapper/2.1.66/dapper.2.1.66.nupkg.sha512",
+    "/Users/maxmccormick/.nuget/packages/npgsql/9.0.3/npgsql.9.0.3.nupkg.sha512"
+  ],
+  "logs": []
+}
