@@ -24,9 +24,10 @@ use tt_core::user::{self, Roles};
 use tt_repo::{NewUser, Repo};
 use tt_templates::{AccountPage, LeadScoutPage, LinkChips, Nav, Page, SignInPage, SignUpPage};
 
+use crate::admin;
 use crate::assignments::{self, GridParams};
 use crate::auth::{
-    Auth, Coach, LeadScout, MaybeAuth, SESSION_COOKIE, Strategist, clear_session_cookie,
+    Admin, Auth, Coach, LeadScout, MaybeAuth, SESSION_COOKIE, Strategist, clear_session_cookie,
     device_uuid, hash_password, new_session, session_cookie, verify_password,
 };
 use crate::coach;
@@ -1127,4 +1128,21 @@ pub async fn drive_coach(
 ) -> Response {
     let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
     html(coach::page(&state, &user, nav, &context).await)
+}
+
+// ── Admin database viewer (U17) ─────────────────────────────────────────────
+
+/// `GET /admin/db?table=&page=`: a read-only browse of the tables an admin may
+/// see. The retired viewer had no guard at all (REBUILD_SPEC.md 12.4); this
+/// one is unreachable without the `Admin` extractor below.
+pub async fn admin_db(
+    State(state): State<AppState>,
+    Admin(user): Admin,
+    EventParam(requested): EventParam,
+    Query(query): Query<HashMap<String, String>>,
+) -> Response {
+    let (nav, _) = event_page(&state, Some(&user), requested.as_deref()).await;
+    let table = query.get("table").map(String::as_str);
+    let page = query.get("page").and_then(|p| p.parse().ok());
+    html(admin::page(&state, nav, table, page).await)
 }

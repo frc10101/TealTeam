@@ -128,6 +128,9 @@ pub struct LeadScout(pub User);
 pub struct Coach(pub User);
 /// A user who may read and change the pick list: a lead scout or a coach.
 pub struct Strategist(pub User);
+/// A user who may see the database viewer and anything else unrestricted
+/// (U17). The retired viewer had no check at all.
+pub struct Admin(pub User);
 
 /// What a failed guard does.
 ///
@@ -220,10 +223,7 @@ macro_rules! role_guard {
 role_guard!(LeadScout, can_lead);
 role_guard!(Coach, can_coach);
 role_guard!(Strategist, can_pick);
-
-// NOTE: an `Admin` guard belongs here too, but it would be dead code until the
-// database viewer lands (U17) -- and that viewer shipping *unguarded* is exactly
-// the defect this module exists to prevent. Add it with the route.
+role_guard!(Admin, can_admin);
 
 #[cfg(test)]
 mod tests {

@@ -1,0 +1,71 @@
+{#
+  The admin database diagnostic viewer (U17): a read-only browser over the
+  tables an admin is allowed to see. The retired viewer had no guard at all
+  and exposed every user's email and every session row to anyone who knew the
+  URL (REBUILD_SPEC.md 12.4). This one is reached only through the `Admin`
+  extractor, `sessions` and `token_key` never appear in the table list below,
+  and emails are masked wherever a row shows one. There is no form on this
+  page: it has nothing to submit.
+#}
+{% extends "layout.html" %}
+{% block content %}
+<section class="card">
+  <div class="card-header">
+    <h1>Database</h1>
+  </div>
+  <div class="card-body stack">
+    {% if !unavailable.is_empty() %}
+      <p>{{ unavailable }}</p>
+    {% else %}
+      <p class="hint">Read-only, admin-only. Session tokens and the offline-token signing key are never shown here.</p>
+      <div class="table-scroll">
+        <table class="data-table admin-tables cards" role="table">
+          <caption class="visually-hidden">Tables this view may show</caption>
+          <thead><tr><th scope="col">Table</th><th scope="col" class="num">Rows</th></tr></thead>
+          <tbody>
+            {% for table in tables %}
+              <tr{% if table.selected %} class="current"{% endif %}>
+                <td data-label="Table"><a href="{{ table.href }}">{{ table.name }}</a></td>
+                <td class="num" data-label="Rows">{{ table.row_count }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </div>
+</section>
+
+{% if let Some(view) = selected %}
+<section class="card">
+  <div class="card-header">
+    <h2>{{ view.name }} <span class="muted">({{ view.total }})</span></h2>
+  </div>
+  <div class="card-body stack">
+    {% if view.rows.is_empty() %}
+      <p class="muted">No rows.</p>
+    {% else %}
+      <div class="table-scroll">
+        <table class="data-table admin-rows cards" role="table">
+          <caption class="visually-hidden">{{ view.name }}, {{ view.total }} row(s)</caption>
+          <thead>
+            <tr>{% for column in view.columns %}<th scope="col">{{ column }}</th>{% endfor %}</tr>
+          </thead>
+          <tbody>
+            {% for row in view.rows %}
+              <tr>{% for cell in row.cells %}<td data-label="{{ cell.label }}">{{ cell.value }}</td>{% endfor %}</tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if view.has_prev || view.has_next %}
+        <p class="pager">
+          {% if view.has_prev %}<a href="{{ view.prev_href }}">&larr; Previous</a>{% endif %}
+          {% if view.has_next %}<a href="{{ view.next_href }}">Next &rarr;</a>{% endif %}
+        </p>
+      {% endif %}
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}

@@ -8,8 +8,7 @@ Ordered by dependency and by value delivered per unit of work — not by source-
 
 The Rust implementation is active and the core server, SQLite repository, upstream integrations, offline client foundation, QR handoff, and browser read-only pages are implemented. The remaining required software work is:
 
-1. **U17** — implement the guarded, read-only admin database diagnostic view.
-2. **C6** — migrate the remaining prioritized read-only pages to the offline client.
+1. **C6** — migrate the remaining prioritized read-only pages to the offline client.
 
 P1 (the DS3231 RTC), Pi deployment validation, real-device testing, and event acceptance are operational follow-up rather than software blockers. The retired Go, .NET, and Render ports are not part of the current repository.
 
@@ -220,7 +219,7 @@ This is the highest-leverage cluster in either source document. It removes the 5
 | U14 | **Provenance badges** (`n=`, `scouted_at`, `synced ago`) on every aggregate | RI-U7 | S | **Done** — rankings, the team profile, and the drive coach panel |
 | U15 | **Remove synchronous upstream calls from page renders.** `/teams` and the team-select fallback both blocked a render on the network | RS §12.7 | M | **Done** — no render calls upstream; `no_page_asks_upstream_even_when_storage_has_nothing` holds it |
 | U16 | Mobile pass: bottom nav, 44px touch targets, card layouts under 600px | RI-U10 · RS §7 | M | **Done** — tab bar under 40rem, `.cards` tables, no target under 44px |
-| U17 | DB viewer — **guard with `is_admin` and exclude `sessions`**. The old one was completely unguarded and exposed every user's email and all session rows | RS §12.4 | S | **Decided — rebuild as a read-only admin diagnostic view** |
+| U17 | DB viewer — **guard with `is_admin` and exclude `sessions`**. The old one was completely unguarded and exposed every user's email and all session rows | RS §12.4 | S | **Done** — `/admin/db`, behind the new `Admin` extractor (`crate::auth`). `tt_repo_sqlite::admin` leaves `sessions` and `token_key` out of the table list and out of direct lookup, and masks `email`/`password_hash` wherever they appear; every statement is a `SELECT` |
 
 ### Upstream data
 

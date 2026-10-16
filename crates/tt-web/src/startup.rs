@@ -251,6 +251,7 @@ pub fn router(state: AppState) -> Router {
         .route("/lead-scout/scan", get(handlers::scan_page))
         .route("/drive-coach", get(handlers::drive_coach))
         .route("/pick-list", get(handlers::pick_list))
+        .route("/admin/db", get(handlers::admin_db))
         // Forms
         .route("/api/auth/login", post(handlers::login))
         .route("/api/auth/signup", post(handlers::signup))
@@ -1020,6 +1021,7 @@ mod flow_tests {
             "/lead-scout",
             "/lead-scout/assignments",
             "/drive-coach",
+            "/admin/db",
         ] {
             let response = get(&state, path, None).await;
             assert_eq!(response.status(), StatusCode::SEE_OTHER, "{path}");
@@ -1045,7 +1047,12 @@ mod flow_tests {
         .await;
         let scout = session_cookie_from(&response).expect("session");
 
-        for path in ["/lead-scout", "/lead-scout/assignments", "/drive-coach"] {
+        for path in [
+            "/lead-scout",
+            "/lead-scout/assignments",
+            "/drive-coach",
+            "/admin/db",
+        ] {
             let response = get(&state, path, Some(&scout)).await;
             assert_eq!(response.status(), StatusCode::SEE_OTHER, "{path}");
             assert_eq!(
@@ -1066,6 +1073,7 @@ mod flow_tests {
             "/lead-scout/assignments",
             "/drive-coach",
             "/submission",
+            "/admin/db",
         ] {
             let response = get(&state, path, Some(&admin)).await;
             assert_eq!(response.status(), StatusCode::OK, "{path}");
@@ -1088,6 +1096,61 @@ mod flow_tests {
         let body = text(get(&state, "/", Some(&scout)).await).await;
         assert!(!body.contains("/lead-scout"));
         assert!(!body.contains("/drive-coach"));
+        assert!(!body.contains("/admin/db"));
+    }
+
+    // ── Admin database viewer (U17) ─────────────────────────────────────────
+
+    #[tokio::test]
+    async fn the_database_viewer_never_shows_sessions_or_the_token_key() {
+        let state = migrated_state().await;
+        let admin = signed_up(&state).await;
+
+        let body = text(get(&state, "/admin/db", Some(&admin)).await).await;
+        assert!(
+            body.contains(">users<"),
+            "ordinary tables still list: {body}"
+        );
+        assert!(!body.contains(">sessions<"), "{body}");
+        assert!(!body.contains(">token_key<"), "{body}");
+
+        // Asking for one directly, not only picking it from the list, is
+        // refused the same way: skipping exactly this check is how the
+        // retired viewer leaked every session row (REBUILD_SPEC.md 12.4).
+        for hidden in ["sessions", "token_key"] {
+            let direct =
+                text(get(&state, &format!("/admin/db?table={hidden}"), Some(&admin)).await).await;
+            assert!(
+                !direct.contains("<h2>"),
+                "{hidden} must not render a table view: {direct}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn the_database_viewer_masks_emails_and_has_no_form_to_write_with() {
+        let state = migrated_state().await;
+        let admin = signed_up(&state).await; // sam@example.com
+
+        let body = text(get(&state, "/admin/db?table=users", Some(&admin)).await).await;
+        assert!(!body.contains("sam@example.com"), "{body}");
+        assert!(body.contains("••••••"), "a masked cell: {body}");
+        assert!(
+            body.contains("Sam"),
+            "a non-secret column still shows: {body}"
+        );
+
+        // Nothing in the page's content can mutate anything, even though the
+        // header's sign-out form (present on every signed-in page) does post.
+        let main = body
+            .split("<main")
+            .nth(1)
+            .and_then(|s| s.split("</main>").next())
+            .unwrap_or_default();
+        assert!(
+            !main.contains("<form"),
+            "the viewer must be read-only: {main}"
+        );
     }
 
     // ── Password change ─────────────────────────────────────────────────────

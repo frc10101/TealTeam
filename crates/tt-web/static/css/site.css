@@ -397,6 +397,11 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
 .weights { grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); }
 .weights .field > p { margin: 0; }
 
+/* ── Admin database viewer (U17) ─────────────────────────────────────────── */
+
+.admin-tables tr.current td { color: var(--teal-300); }
+.pager { display: flex; gap: 1rem; }
+
 /* ── Team profile (U11) ──────────────────────────────────────────────────── */
 
 .subhead { margin: 0.5rem 0 0; font-size: 1rem; color: var(--teal-300); }
