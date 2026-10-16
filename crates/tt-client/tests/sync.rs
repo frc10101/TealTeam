@@ -543,3 +543,67 @@ async fn the_pis_rows_win_and_deletions_arrive() {
         pi.paths()
     );
 }
+
+/// C7's browser scope: `pull_only` never pushes, even with an outbox
+/// waiting, but still applies a batch with a deletion in it and advances the
+/// cursor exactly as `sync` does; and a schema mismatch on the pull alone
+/// (nothing queued to push through first) stops it the same way.
+#[tokio::test]
+async fn pull_only_never_pushes_but_applies_and_advances_the_cursor() {
+    let device = device("pull-only").await;
+    let schema = device.schema().unwrap().unwrap();
+    // Something waits in the outbox; a browser page must never send it.
+    device
+        .queue_observation(&observation(MINE, 254, 7), at(5))
+        .await
+        .unwrap();
+
+    let changes = json!([
+        echo(50, PIS, 254, 7, "approved"),
+        { "seq": 51, "entity": "assignment", "entity_pk": "2026here_qm1:1678", "op": "upsert",
+          "event_key": "2026here",
+          "row": {
+              "match_key": "2026here_qm1", "team_number": 1678, "event_key": "2026here",
+              "scouter_id": 7, "device_id": null, "assigned_by": 2,
+              "updated_at": "2026-03-14T10:07:00.000Z",
+          } },
+        // A deletion in the same batch: the pull-only path must apply it too.
+        { "seq": 52, "entity": "assignment", "entity_pk": "2026here_qm1:1678", "op": "delete",
+          "event_key": "2026here", "row": null },
+    ]);
+    let pi = Pi::answers([pulled(schema, changes, 52)]);
+    let client = SyncClient::new(&pi, vec!["2026here".into()]);
+    let report = client.pull_only(&device, at(10)).await.unwrap();
+
+    assert_eq!(
+        pi.paths(),
+        vec![format!(
+            "/api/sync/pull?schema={schema}&changes=0&upstream=0&event=2026here"
+        )],
+        "no push, ever, from the browser's pull-only client"
+    );
+    assert_eq!((report.applied, report.stopped), (3, None));
+    assert_eq!(device.cursor(CHANGES_SOURCE).unwrap(), 52);
+    assert!(
+        device
+            .event_assignments("2026here")
+            .await
+            .unwrap()
+            .is_empty(),
+        "upserted, then deleted, in the one batch"
+    );
+    // The outbox is untouched: pull-only owns no push, so it owns no echo.
+    assert!(device.is_queued(MINE).unwrap());
+
+    // The Pi on another schema stops a pull-only sync the same way a push
+    // would: no partial apply, no crash.
+    let pi = Pi::answers([Ok((409, json!({ "action": "reload" })))]);
+    let client = SyncClient::new(&pi, vec![]);
+    let report = client.pull_only(&device, at(11)).await.unwrap();
+    assert_eq!(report.stopped, Some(Stop::Reload));
+    assert_eq!(
+        device.cursor(CHANGES_SOURCE).unwrap(),
+        52,
+        "a refused pull moves no cursor"
+    );
+}

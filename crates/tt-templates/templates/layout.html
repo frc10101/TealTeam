@@ -150,6 +150,11 @@
     {% if nav.signed_in || nav.offline_shell || nav.from_device %}<script src="/static/js/agenda.js" defer></script>{% endif %}
     {% if nav.signed_in || nav.offline_shell %}<script src="/static/js/token.js" data-user="{{ nav.user_id }}" defer></script>{% endif %}
     {% if nav.signed_in || nav.offline_shell %}<script src="/static/js/courier.js" data-lead="{{ nav.can_lead }}" defer></script>{% endif %}
+    {# The browser pull sync client (C7): nothing to push, so only on a live
+       page with a session worth syncing for -- not the shell or a page
+       already made from the device's own copy. #}
+    {% if nav.signed_in %}<script src="/static/js/snapshot.js" defer></script>{% endif %}
+    {% if nav.signed_in %}<script src="/static/js/sync.js" defer></script>{% endif %}
     {% block scripts %}{% endblock %}
   </body>
 </html>

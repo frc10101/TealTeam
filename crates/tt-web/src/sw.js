@@ -23,6 +23,11 @@
 //     the wasm module fetches from TBA with this device's signal and hands
 //     the Pi what it fetched. One at a time, since it writes the device's
 //     copy, and the asker gets the same answer as a tick already running.
+//   * Any signed-in page may ask for a pull sync (C7, static/js/sync.js): the
+//     wasm module applies whatever changed on the Pi to the device's copy --
+//     there is nothing of the browser's own to push, so this never does. It
+//     may also ask where to open the live stream (S8) for this device's own
+//     cursors, which only the wasm module can read.
 //
 // Registered by static/js/shell.js, and only in a secure context.
 
@@ -102,15 +107,59 @@ function courierTick(bearer) {
   return ticking;
 }
 
+// One pull at a time, same reasoning as the courier tick: it writes the
+// device's copy, and a page that asks again while one is under way gets the
+// same answer.
+let pulling = null;
+function pull(bearer) {
+  if (typeof wasm_bindgen === "undefined") return Promise.resolve(null);
+  if (!pulling) {
+    pulling = client()
+      .then(() => wasm_bindgen.pull(bearer || null))
+      .then((report) => (report === null ? null : JSON.parse(report)))
+      .catch((e) => {
+        console.warn("TealTeam: pulling this device's copy up to date:", e);
+        return null;
+      })
+      .finally(() => {
+        pulling = null;
+      });
+  }
+  return pulling;
+}
+
+function streamUrl() {
+  if (typeof wasm_bindgen === "undefined") return Promise.resolve(null);
+  return client()
+    .then(() => wasm_bindgen.streamUrl())
+    .catch((e) => {
+      console.warn("TealTeam: reading this device's sync cursors:", e);
+      return null;
+    });
+}
+
 self.addEventListener("message", (event) => {
   const data = event.data || {};
-  if (data.type !== "tt-courier") return;
   const port = event.ports && event.ports[0];
-  event.waitUntil(
-    courierTick(data.bearer).then((report) => {
-      if (port) port.postMessage(report);
-    }),
-  );
+  if (data.type === "tt-courier") {
+    event.waitUntil(
+      courierTick(data.bearer).then((report) => {
+        if (port) port.postMessage(report);
+      }),
+    );
+  } else if (data.type === "tt-sync") {
+    event.waitUntil(
+      pull(data.bearer).then((report) => {
+        if (port) port.postMessage(report);
+      }),
+    );
+  } else if (data.type === "tt-stream-url") {
+    event.waitUntil(
+      streamUrl().then((url) => {
+        if (port) port.postMessage(url);
+      }),
+    );
+  }
 });
 
 self.addEventListener("install", (event) => {
