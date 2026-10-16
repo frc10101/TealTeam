@@ -1,19 +1,19 @@
-# The Pi's network at an event
+# Pi event LAN — wired only
 
-How scouts reach the server, and how the server reaches the internet (P4, P6). The files are in `deploy/pi/network/`, and `setup.sh` installs all of them. Storage (the SSD, WAL) is a separate document.
+The Pi provides a wired Ethernet event LAN. No Wi-Fi, hotspot, mesh, cellular tether, 802.11, or other radio network is used for event data. USB tethering may be used off-site for synchronization. Storage (the SSD, WAL) is a separate document.
 
 > **None of this has run on a Pi yet.** The scripts pass ShellCheck. The nftables ruleset loads, twice, in a scratch network namespace. The Avahi file is well-formed XML, and `setup.sh --dry-run` runs. Nothing else is tested. Work through [What to verify](#what-to-verify) at the shop before the first event.
 
 ## The shape
 
 ```
-   phones, tablets, laptops ──(Ethernet, USB-C adapters)──▶ unmanaged switch ──▶ Pi eth0  10.101.0.1
-                                                                                  Pi usb0  ◀── one phone, USB-tethered
+   Lenovo Chromebooks ──(Ethernet)──▶ unmanaged switch ──▶ Pi eth0  10.101.0.1
+                                                                         Pi has no event uplink
 ```
 
-- **Clients are wired.** Every client plugs into an unmanaged switch cabled to the Pi's `eth0`. Laptops use their own port; phones and tablets use a USB-C-to-Ethernet adapter. Ethernet is unambiguously allowed at events.
-- **There is no Wi-Fi access point, and nothing here can make one.** Rule E143 bars teams from setting up their own wireless in the venue. `setup.sh` deletes any access-point or ad-hoc Wi-Fi profile it finds, and `status.sh` fails if one comes back.
-- **The internet comes from one phone, USB-tethered.** One person owns it. A phone acting as a phone is not "setting up wireless communication". The server works without it: the tether only carries TBA and FIRST syncs.
+- **Clients are wired.** Lenovo Chromebooks connect to the switch and Pi through Ethernet. Phones remain off the event LAN unless they are physically connected with Ethernet.
+- **There is no wireless client network.** Do not use Wi-Fi, hotspots, mesh, 802.11, or any radio-based data transfer.
+- **No event uplink.** The Pi serves the local snapshot. Synchronize upstream off-site, using an approved internet connection.
 
 **The rules are not settled.** P2 (confirming 2026's E143 wording, and asking the FTA) is still open. This follows the plan's recommendation, which is to design for the compliant path. If the FTA objects to the tethered phone, unplug it. Nothing else changes.
 
@@ -27,7 +27,7 @@ How scouts reach the server, and how the server reaches the internet (P4, P6). T
 | `tealteam-http.service.avahi` | `/etc/avahi/services/tealteam.service` | Advertises the app as an `_http._tcp` service on port 80 |
 | `port80.nft` + `tealteam-port80.service` | `/etc/tealteam/`, `/etc/systemd/system/` | Redirects port 80 on `eth0` (and on the Pi itself) to the app's 8080, so the URL has no port and the app needs no privilege |
 
-`setup.sh` also sets the hostname to `tealteam`, which is where `tealteam.local` comes from, and installs `dnsmasq`, `avahi-daemon`, `avahi-utils`, and `nftables` if they are missing. It ranks any shop Wi-Fi client profile at metric 600, below the phone.
+`setup.sh` also sets the hostname to `tealteam`, which is where `tealteam.local` comes from, and installs `dnsmasq`, `avahi-daemon`, `avahi-utils`, and `nftables` if they are missing. Wi-Fi is not part of the event setup.
 
 ### Why clients get no gateway
 

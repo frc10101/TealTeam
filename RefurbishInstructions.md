@@ -31,11 +31,11 @@ Each of the five problem areas below is broken into:
 
 | # | Area | Original proposal | Verdict | Recommended direction |
 | --- | --- | --- | --- | --- |
-| 1 | Internet access | Pi 5 local server, Ethernet primary + Wi-Fi AP secondary, HaLow to pit, QR transfer | **Partly blocked** | Pi 5 and Ethernet: yes, already half-built. **Wi-Fi AP violates FRC event rules.** Use USB tethering, QR sneakernet, and a phone uplink instead. HaLow only as a Pi-to-Pi backhaul, never for client devices. |
+| 1 | Internet access | Pi 5 local server, Ethernet primary + Wi-Fi AP secondary, QR transfer | **Replaced** | Use a wired Ethernet LAN for team Chromebooks. No Wi-Fi, hotspot, mesh, 802.11, or other radio data transfer. Phones remain off-LAN secondary clients and sync later. |
 | 2 | Poor UI | Graph view like AdvantageScope, drag-to-add metrics, separate notes menu | **Sound, under-specified** | Correct instinct. Add: assignment-driven team selection instead of lists, tap-to-add as the primary interaction (drag is a desktop metaphor), and a **season-schema-driven form system** — the `scouting_data` table is hardcoded to the 2022 game **in all three ports**. |
 | 3 | Poor sync | Timestamped delta sync, courier sync via scout devices, server fan-out | **Sound, and simpler than proposed** | Use an append-only change log, not per-table watermarks — watermarks cannot see deletions and have a commit-ordering race. **Both TBA and FIRST allow direct browser requests**, so no relay server is needed: any client with signal fetches upstream itself and pushes a SQLite bundle to the Pi. ~90% of the tedious data is pulled before the event anyway. |
 | 4 | Offline mode | Rewrite the client in Rust + WebAssembly | **Right direction, blocked by coupling** | The Rust port exists but is a *faithful* port — ~187 inline `sqlx::query` calls sit inside handlers and cannot cross to `wasm32`. The work is a ports-and-adapters refactor behind a `Repo` trait, not more Rust. Askama compiles to wasm, so the whole render layer comes along free. A Service Worker is still required — WASM alone does not make anything offline. |
-| 5 | Poor communication | Two chat rooms in a collapsible side panel | **Sound, build it in-app** | Build it inside TealTeam rather than adopting Matrix/Mattermost, specifically so messages can be linked to a match and team. Requires an offline outbox, hybrid logical clocks for ordering, and a moderation model, because the users are minors. |
+| 5 | Poor communication | Two chat rooms in a collapsible side panel | **Vetoed** | No chat or messaging features will be implemented. |
 
 ---
 
@@ -43,28 +43,28 @@ Each of the five problem areas below is broken into:
 
 These are the invariants. Any solution that violates one of these is dead on arrival.
 
-### C1. You may not run your own Wi-Fi access point in the venue
+### C1. No wireless or radio data transfer at the event
 
-This is the single most important constraint in this document, and the original notes plan around it incorrectly.
+This is the single most important constraint in this document. Wired Ethernet/LAN remains permitted; wireless and radio-based client networking does not.
 
-FRC event rules prohibit teams from setting up their own wireless communication in the venue. The historical wording is, in substance: *teams may not set up their own 802.11a/b/g/n/ac (2.4 GHz or 5 GHz) wireless communication, such as access points or ad-hoc networks, in the venue.* In the 2026 manual this lives in **Section 14.3, Wireless Rules (E143)**. The intent is to protect the field's radio spectrum, which is what robots use to stay in communication during matches.
+The event design must not use Wi-Fi, hotspots, mesh networks, 802.11, or other radio-based data transfer. Ethernet switches and LAN cabling are the primary client path.
 
 Consequences:
 
-- The "separate Wi-Fi connection point for occasional mobile users" in the original notes is **not permissible** as written.
-- Personal hotspots, travel routers, and mesh nodes are all covered by the same intent.
-- **Ethernet is explicitly fine.** A switch and a spool of cable is a fully compliant network.
-- Enforcement varies. Some FTAs will not notice a low-power AP; some will issue a warning and make you shut it down mid-event. Designing around "we probably won't get caught" means designing a system that can be switched off by a volunteer at the worst possible moment.
+- The "separate Wi-Fi connection point" is removed.
+- Team Chromebooks connect to the Pi over wired Ethernet.
+- Phones that are not wired use local storage, QR/physical transfer, and later internet synchronization.
+- A USB-tethered phone may provide the Pi with an upstream connection only where permitted.
 
-> **Action:** Confirm the exact current wording of E143 in the 2026 manual before finalizing the network design, and ask the FTA at your first event what they will tolerate. Design for the compliant path; treat any allowance as a bonus.
+> **Action:** Confirm the exact current wording of E143 and the venue's wireless/radio restrictions with the FTA. Do not make event operation depend on a Wi-Fi or other radio exception.
 
 ### C2. Venue power is unreliable and the Pi has no clock
 
 A Raspberry Pi has **no battery-backed real-time clock**. Without internet, a Pi that loses power comes back believing it is whenever it last shut down. A sync design built on timestamps that runs on a server with a wrong clock will silently corrupt the ordering of every record.
 
-### C3. Devices are phones, and screens are small
+### C3. Primary devices are team-owned Lenovo Chromebooks, with mobile fallback
 
-Design target is a 360 px-wide viewport in a scout's hand, in a loud arena, possibly with gloves on, with roughly 15 seconds of attention between matches. Not a laptop.
+The primary event clients are team-owned Lenovo Chromebooks running Chrome and connected to the Pi over wired Ethernet. Phones are secondary disconnected clients: they must support local lookup and review, preserve drafts or queued data without the Pi, and synchronize when they regain internet access after leaving the venue. The interface still needs to work at a compact viewport and under event-day time pressure.
 
 ### C4. The game changes every January
 
@@ -88,15 +88,15 @@ The server was hosted in the cloud last season, which caused connection failures
 
 ### Proposed Solution
 
-1. Run a primary scouting network on laptops over Ethernet.
-2. Add a separate Wi-Fi connection point for occasional mobile users and for quickly pulling information.
+1. Run primary scouting on team Chromebooks over wired Ethernet.
+2. Support phones as off-LAN secondary clients through local storage, QR handoff, physical media, and deferred sync.
 3. Both paths need an offline mode that lets a user search existing data without querying the server.
-4. Possibly use Wi-Fi HaLow to move data to the pit, with a QR code generator there as a fallback transmission method.
+4. Use a QR code generator to move data to the pit when a direct connection is unavailable.
 5. Run the server on a Raspberry Pi 5 — easy to set up, powerful enough to handle communications and a small network.
 
 ### Verdict
 
-**Partly blocked.** The Pi 5 decision is correct and is already half-implemented in this repo. The Ethernet-primary decision is correct and is the only fully rules-compliant option. The Wi-Fi access point is **not permissible** under C1. The HaLow idea is technically real but does not do what the notes assume it does. QR transfer is the right fallback and should be promoted from "possibly" to "definitely."
+**Partly blocked.** The Pi 5 decision is correct and is already half-implemented in this repo. The Ethernet-primary decision is correct and is the only fully rules-compliant option. The Wi-Fi access point is **not permissible** under C1. QR transfer is the right fallback and should be promoted from "possibly" to "definitely."
 
 ### Technology Options — Server Hardware
 
@@ -115,28 +115,18 @@ This is where the original plan needs the most revision.
 
 | Transport | Compliant? | Throughput | Client support | Verdict |
 | --- | --- | --- | --- | --- |
-| **Ethernet switch + cable** | Yes, unambiguously | 1 Gbps | Laptops natively; phones/tablets via a $15 USB-C-to-Ethernet adapter | **Primary transport.** Boring and correct. |
-| **USB-C Ethernet adapter for phones** | Yes | 100 Mbps+ | Android: works out of the box. iPhone 15+/iPad USB-C: works. Older Lightning iPhones: needs a powered adapter | **This is the answer to "occasional mobile users"**, and it replaces the Wi-Fi AP. |
+| **Ethernet switch + cable** | Yes, unambiguously | 1 Gbps | Lenovo Chromebooks natively where equipped; otherwise via a USB-C-to-Ethernet adapter | **Primary transport.** Boring and correct. |
+| **USB-C Ethernet adapter for Chromebooks** | Yes | 100 Mbps+ | Use only for Chromebook models without a built-in Ethernet port | **Use where required by the team's Chromebook hardware.** |
 | **Wi-Fi AP on the Pi** | **No** — violates C1 | 100+ Mbps | Universal | **Do not build this** as the event path. Keep the capability for practice sessions at the shop, gated behind a config flag that defaults off. |
-| **Wi-Fi HaLow (802.11ah, 900 MHz)** | Arguable — outside the named 2.4/5 GHz bands, but it is still 802.11 and an FTA will not know what it is | 150 kbps to ~15 Mbps depending on range and bandwidth | **Zero.** No phone, tablet, or laptop has a HaLow radio | **Not usable for client access.** See below. |
 | **QR codes (screen to camera)** | Yes — it is light, not radio | ~2-3 KB per frame, ~10-40 KB/s with animated codes | Any device with a camera | **Build this.** It is the compliant sneakernet and it always works. |
 | **USB drive / physical device rotation** | Yes | Unlimited | Universal | Ugly, reliable, worth having as the last resort. |
 | **One phone's cellular data, USB-tethered to the Pi** | Yes — a phone being a phone is not "setting up wireless communication in the venue" | Whatever the carrier gives you | The Pi sees it as a USB network interface | **Best answer for intermittent internet.** See Section 3. |
 
-#### On Wi-Fi HaLow specifically
-
-HaLow hardware is real and buyable in 2026 — the Alfa Network AHPI7292S Pi HAT, Morse Micro MM6108 and MM8108 modules, and the Quectel FGH100M-H (available on a Seeed XIAO carrier for around $20-30) all have FCC certification. So the technology is not vaporware.
-
-But the plan in the original notes assumes HaLow can serve scout devices, and it cannot. **No consumer phone, tablet, or laptop has a HaLow radio.** To put a scout's phone on HaLow you would need a HaLow-to-Ethernet bridge box for every single client. That is not a scouting system, that is a hardware project.
-
-Where HaLow *does* work is exactly the narrow case the notes mention in passing: **a point-to-point backhaul link between two fixed boxes** — a Pi in the stands and a Pi (or a bridge) in the pit, where running Ethernet across a public walkway is not allowed. For that, one HaLow link at ~1-5 Mbps over a few hundred meters through a crowd is genuinely good; sub-GHz penetrates bodies and metal far better than 2.4 GHz.
-
-Ranked honestly:
+The supported transports are:
 
 1. **Ethernet from stands to pit**, if the venue will let you tape down a cable. Free, fast, compliant. Ask first.
 2. **QR sneakernet.** A scout walks to the pit anyway. Compliant, zero hardware, zero spectrum.
-3. **HaLow point-to-point bridge.** ~$80 of hardware, a weekend of setup, and an unresolved rules question. Only worth it if 1 and 2 both fail.
-4. LoRa — sometimes suggested for this. At 0.3-50 kbps with strict duty-cycle limits, it can carry "match 34 is starting" and nothing else. Not a data transport.
+3. **USB drive / physical device rotation.** Reliable last resort when neither Ethernet nor QR is available.
 
 ### Recommended Architecture
 
@@ -607,7 +597,7 @@ Classifying the data this way is what lets you avoid a general-purpose conflict 
 | | Pros | Cons | Verdict |
 | --- | --- | --- | --- |
 | **Server-Sent Events** | One-directional, which is exactly the shape of the problem; plain HTTP; auto-reconnect with `Last-Event-ID` built into the browser; `axum::response::Sse` with a `tokio` broadcast channel is a few dozen lines | Text only; 6-connection-per-origin limit on HTTP/1.1 (irrelevant here) | **Recommended.** |
-| **WebSockets** | Bidirectional; lower per-message overhead; needed for typing indicators and presence | You write your own reconnect, heartbeat, and backoff; more code to get wrong | Adopt only if the chat features in Section 5 demand it. |
+| **WebSockets** | Bidirectional; lower per-message overhead | You write your own reconnect, heartbeat, and backoff; more code to get wrong | Not needed; TealTeam has no chat or messaging features. |
 | **Polling every 15-30 s** | Simplest possible; stateless; survives anything | Latency; wasteful, though on a LAN nobody cares | **Good enough fallback** — and worth keeping as the degraded mode. |
 
 Start with SSE for push and keep polling as the automatic fallback when the event stream will not stay open.
@@ -626,7 +616,7 @@ Promote this from "possibly" to a real subsystem, because it is the only transpo
 | Fountain code | Port `txqr`-style LT coding, or ship plain chunked frames first | RaptorQ if you need the efficiency, which you probably do not |
 | Decode (browser) | **`BarcodeDetector` API** where available — native, fast, zero bundle | `zxing-wasm` or `jsQR` as fallback |
 
-**Browser support caveat:** `BarcodeDetector` is available in Chrome and Edge on Android, ChromeOS, and macOS, but **not in Safari on iOS**. Ship `zxing-wasm` (~300 KB, loaded lazily only when the scanner opens) as the fallback so iPhones work. Test on an actual iPhone before the event.
+**Browser support caveat:** `BarcodeDetector` is available in ChromeOS Chrome and some mobile browsers. Keep `zxing-wasm` as the fallback for Chromebook models or mobile browsers without the native API. Validate the supported phone browser(s) for local lookup, storage, QR handoff, and deferred synchronization.
 
 **Ergonomics matter more than the codec.** Show a progress ring (`38 / 60 frames`), keep the screen at full brightness, and give an unmistakable success state. A scanner that silently half-works is worse than one that fails loudly.
 
@@ -946,7 +936,7 @@ fn visible_to(change: &Change, scope: &Scope) -> bool {
     }
     match change.team_scope {
         None => true,                        // public: teams, matches, rankings
-        Some(t) => t == scope.team_number,   // private: notes, assignments, chat
+        Some(t) => t == scope.team_number,   // private: notes and assignments
     }
 }
 ```
@@ -1052,9 +1042,13 @@ Two things this obliges you to do: run WAL mode (`PRAGMA journal_mode=WAL`) and 
 | O19 | Migrate the Pi to SQLite (WAL, single writer); retire the Postgres container | L |
 
 
-## 5. Communication
+## 5. Communication — vetoed
 
-### Issue
+### Status
+
+**Chat and messaging are explicitly vetoed.** TealTeam will not implement chat rooms, direct messages, message streams, message outboxes, message context chips, or chat moderation. This section is retained only as historical source material for the rejected proposal.
+
+### Historical issue
 
 Distance and environment make communication hard — scout to scout, and scout to strategist. That communication matters: scouts exchange relevant information that never makes it into a form, and strategists need to ask scouts to watch for specific things during a match.
 
@@ -1062,9 +1056,9 @@ Distance and environment make communication hard — scout to scout, and scout t
 
 Two separate chat rooms — one for scout-to-strategist, one for scout-to-scout — in a collapsible side panel with tabs to switch between them. Every user can post in both; no role-based posting restrictions.
 
-### Verdict
+### Historical verdict
 
-**Sound, and worth building in-app rather than adopting.** The open-posting decision is right: role-locked chat in a 15-person team creates more friction than it prevents. Two rooms is the right number — one is noisy, four is dead.
+The former plan recommended building two in-app chat rooms. That recommendation is superseded by the veto above.
 
 ### Build vs. Adopt
 
@@ -1276,7 +1270,7 @@ None of this requires the workspace refactor. All of it ships before kickoff.
 | O17, O18 Snapshot bootstrap + version handshake | Fast cold start; safe mid-event deploys |
 | U5, U6 Graph view + notes panel | Unreadable metrics |
 | U8, U9 Deduplication + event context | Duplicated data, limiting event selection |
-| M1-M7 Chat | Communication |
+| M1-M7 Chat | Communication — vetoed |
 | O12, O13 Offline auth + conflict review | Role gating offline |
 | S5 QR transfer | Pit-to-stands with no cable |
 | O14 `yrs` pick list | Collaborative alliance selection |
@@ -1286,7 +1280,6 @@ None of this requires the workspace refactor. All of it ships before kickoff.
 | Item | Why |
 | --- | --- |
 | Wi-Fi access point on the Pi | Violates FRC event rules (C1). Shop-practice only, default off. |
-| Wi-Fi HaLow | No client device supports it. Revisit only as a pit-to-stands Pi-to-Pi bridge, and only if Ethernet and QR both fail. |
 | Go and .NET ports | Being retired in favour of Rust. Until they are gone, every feature costs three times what it should. |
 | A client-side SPA / Leptos rewrite | Unnecessary. Askama compiles to wasm and Unpoly fetches fragments over HTTP, so the existing UI can be served by wasm handlers without a framework or a client router. |
 | IndexedDB as the browser store | Key-value only; you would hand-write every join. SQLite-WASM on OPFS lets your existing SQL mostly port. |
@@ -1299,14 +1292,13 @@ None of this requires the workspace refactor. All of it ships before kickoff.
 
 Decisions that need a human before Phase 2 starts.
 
-1. **Rules.** What is the exact 2026 E143 text, and what will your FTA actually tolerate? This determines the entire network topology.
-2. **Devices.** What are scouts actually holding — team-owned tablets, or personal phones? Personal phones means iOS is in scope, which affects `BarcodeDetector`, `navigator.vibrate`, and storage eviction.
+1. **Rules — resolved by project policy.** No Wi-Fi, 802.11, Bluetooth, hotspot, mesh, cellular tether, or other radio-based data transfer. Wired Ethernet is the event client path; QR codes and physical media are the offline handoff paths. Exact rule citation and FTA confirmation remain useful validation, but do not block the architecture.
+2. **Devices — resolved.** Primary scouts use team-owned Lenovo Chromebooks running Chrome over wired Ethernet. Phones are supported as disconnected secondary clients for local lookup/review and deferred sync after leaving the venue; validate the supported mobile browser(s), Chromebook models, and any required Ethernet adapters.
 3. **Port retirement timeline.** When do Go and .NET actually get deleted, and who does it? Until then every feature in this plan costs three times what it should, and the shared-schema constraint blocks the season-schema redesign in Section 2C.
-4. **Season schema.** Who owns writing the JSON schema each January, and what is the deadline relative to Kickoff?
-5. **Chat moderation.** Which mentor owns the log review, and what is the retention policy?
-6. **Multi-team.** Is TealTeam only for team 10101, or are you sharing it with alliance partners at events? This changes the scoping model, the auth model, and the chat design substantially.
-7. **Off-site backup.** With Render retired, the Pi holds the only authoritative copy. Whose laptop receives the between-blocks `rsync`, and who checks that it actually ran?
-8. **Scope of the wasm split.** Is the goal every route running browser-side, or just enough for a scout to enter data and search team info offline? The second is far cheaper and probably sufficient — Section 4's migration path lets you stop at any point.
+4. **Season schema — resolved.** The lead scout and programming lead review and approve the JSON schema together, finalizing it at Kickoff. Later changes require an explicit versioned update and rebuild rather than an event-day edit.
+5. **Multi-team — resolved.** TealTeam is for Team 10101 only; alliance-partner accounts and shared event tenancy are out of scope.
+6. **Off-site backup — not required for product completion.** Timed SSD backups, USB backup, and restore verification are available; assigning a laptop owner for an off-site copy is optional operations work.
+7. **Scope of the wasm split — resolved.** Browser-side routes are read-only lookup/review views with pull synchronization; browser-side writes and administrative workflows remain on the Pi/server.
 
 ---
 
@@ -1315,9 +1307,6 @@ Decisions that need a human before Phase 2 starts.
 - [2026 FIRST Robotics Competition Game Manual](https://firstfrc.blob.core.windows.net/frc2026/Manual/HTML/2026GameManual.htm) — Section 14.3, Wireless Rules (E143)
 - [FRC Event Rules Manual (2019)](https://firstfrc.blob.core.windows.net/frc2019/EventRules/EventRulesManual.pdf) — historical wording of the venue wireless prohibition
 - [FMS Whitepaper](https://fms-manual.readthedocs.io/en/latest/fms-whitepaper/fms-whitepaper.html) — field network and spectrum rationale
-- [Evaluating 802.11ah HaLow using the ESP32-S3 and FGH100M-H](https://www.beyondlogic.org/evaluating-802-11ah-halow-using-the-esp32-s3-fgh100m-h/) — HaLow hardware availability and real-world throughput
-- [Quectel Wi-Fi HaLow module FCC/CE certifications](https://www.quectel.com/news-and-pr/wi-fi-halow-module-ce-fcc-certifications-morse-micro/) — HaLow module certification status
-- [Alfa AHPI7292S Wi-Fi HaLow Pi HAT](https://store.rakwireless.com/products/choose-other-wireless-module-with-wisgate-connect) — Raspberry Pi HaLow hardware
 - [Yjs vs Automerge vs Loro: CRDT Libraries 2026](https://www.pkgpulse.com/guides/yjs-vs-automerge-vs-loro-crdt-libraries-2026) — CRDT library comparison
 - [Local-First Software in 2026](https://verity.salient.community/research/local-first-software-in-2026.html) — sync engine landscape, ElectricSQL and PowerSync positioning
 - [Local-First Software: Principles, Patterns, and Technologies](https://wal.sh/research/local-first) — local-first architecture patterns
