@@ -14,6 +14,12 @@ The Rust implementation is active and the core server, SQLite repository, upstre
 
 P1 (the DS3231 RTC), Pi deployment validation, real-device testing, and event acceptance are operational follow-up rather than software blockers. The retired Go, .NET, and Render ports are not part of the current repository.
 
+An FTC/BIOBUZZ migration is not included in the current FRC work items. The
+scope, sequencing, and safety rules for a future FTC qualifier beta are in
+[FTC_BIOBUZZ_MIGRATION.md](FTC_BIOBUZZ_MIGRATION.md). In particular, do not
+treat adding an FTC season JSON as sufficient: the current match model and
+upstream integrations are FRC-shaped.
+
 ## How to read this
 
 | Column | Meaning |
