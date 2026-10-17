@@ -24,6 +24,11 @@
         </p>
       {% when ErrorKind::ServerFault %}
         <p>The server hit a problem. Try again, and if it keeps happening, tell your lead scout.</p>
+      {% when ErrorKind::NotOnThisBuild %}
+        <p>
+          This build of TealTeam is for an FTC event and has no FIRST or Blue
+          Alliance connection, so this page is switched off.
+        </p>
     {% endmatch %}
     <p><a class="btn btn-primary" href="/">Go to the home page</a></p>
     <p class="muted">{{ status }} · {{ path }}</p>

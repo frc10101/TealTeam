@@ -84,6 +84,11 @@ pub async fn render(path: String, query: String) -> JsValue {
 /// when it named none, those on today.
 #[wasm_bindgen]
 pub async fn courier(bearer: Option<String>) -> JsValue {
+    // No fetching upstream on a build with it switched off (F4): the Pi gives
+    // out no key either, but a tablet must not try with one it kept.
+    if !tt_core::upstream::UPSTREAM_ENABLED {
+        return JsValue::NULL;
+    }
     let repo = match opfs::open().await {
         Ok(repo) => repo,
         Err(RepoError::Unavailable(_)) => return JsValue::NULL,

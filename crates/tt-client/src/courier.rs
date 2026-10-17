@@ -194,8 +194,9 @@ impl<T: Transport> Courier<T> {
                 Err(_) => Ok(false),
             },
             // No longer a lead scout: whatever this device fetched next
-            // could not be pushed.
-            403 => {
+            // could not be pushed. Or a Pi with upstream switched off for
+            // its build (F4), which has no key to give.
+            403 | 404 => {
                 repo.keep_upstream_key(None, None)?;
                 Ok(false)
             }

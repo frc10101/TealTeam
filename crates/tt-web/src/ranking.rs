@@ -57,6 +57,7 @@ pub async fn page(
     let mut page = RankingsPage {
         title: "Rankings".into(),
         nav,
+        tba_ranks: state.upstream.enabled,
         event_name: String::new(),
         unavailable: String::new(),
         errors: Vec::new(),

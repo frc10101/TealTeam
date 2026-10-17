@@ -17,7 +17,8 @@
 //!   5. Probe it. **Failure is logged, not fatal**; the app serves degraded.
 //!   6. Start upstream sync in the background, if storage is up. **Never
 //!      awaited**: a venue with no internet must not delay the first page.
-//!      With it, the watch for a tethered phone (S6).
+//!      With it, the watch for a tethered phone (S6). Neither runs on a build
+//!      with upstream switched off (F4, `tt_core::upstream::UPSTREAM_ENABLED`).
 //!   7. Bind and serve. Failure to bind is fatal -- there is nothing to serve on.
 
 use anyhow::Context;
@@ -231,6 +232,19 @@ pub fn router(state: AppState) -> Router {
     use crate::handlers;
     use axum::routing::post;
 
+    // Only for FIRST and TBA data. With upstream switched off for this build
+    // (F4), each answers "not available on this build" (`upstream::frc_only`).
+    let frc_only = Router::new()
+        .route("/drive-coach", get(handlers::drive_coach))
+        .route("/lead-scout/rankings/enter", get(handlers::rankings_entry))
+        .route("/api/rankings/manual", post(handlers::save_rankings))
+        .route("/api/frc/sync", post(handlers::manual_sync))
+        .route("/api/upstream/key", get(crate::bundle::key))
+        .route_layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            upstream::frc_only,
+        ));
+
     Router::new()
         // Pages
         .route("/", get(handlers::home))
@@ -246,10 +260,8 @@ pub fn router(state: AppState) -> Router {
         .route("/lead-scout/submissions/{id}", get(handlers::review_page))
         .route("/lead-scout/refused/{id}", get(handlers::refused_page))
         .route("/lead-scout/rankings", get(handlers::rankings))
-        .route("/lead-scout/rankings/enter", get(handlers::rankings_entry))
         .route("/lead-scout/weights", get(handlers::weights))
         .route("/lead-scout/scan", get(handlers::scan_page))
-        .route("/drive-coach", get(handlers::drive_coach))
         .route("/pick-list", get(handlers::pick_list))
         .route("/admin/db", get(handlers::admin_db))
         // Forms
@@ -263,7 +275,6 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/submission", post(handlers::submit_observation))
         .route("/api/device/heartbeat", post(handlers::device_heartbeat))
-        .route("/api/frc/sync", post(handlers::manual_sync))
         .route(
             "/api/assignments/match",
             post(handlers::save_match_assignments),
@@ -282,7 +293,6 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/devices/{id}/rename", post(handlers::rename_device))
         .route("/api/weights", post(handlers::save_weights))
-        .route("/api/rankings/manual", post(handlers::save_rankings))
         .route("/api/pick-list", post(handlers::change_pick_list))
         .route(
             "/api/pick-list/doc",
@@ -298,7 +308,6 @@ pub fn router(state: AppState) -> Router {
                 crate::bundle::MAX_BUNDLE_BYTES,
             )),
         )
-        .route("/api/upstream/key", get(crate::bundle::key))
         .route("/api/weights/reset", post(handlers::reset_weights))
         .route("/api/refused/{id}/record", post(handlers::record_refused))
         .route("/api/refused/{id}/dismiss", post(handlers::dismiss_refused))
@@ -319,6 +328,7 @@ pub fn router(state: AppState) -> Router {
         .route("/status", get(health_page))
         // Compiled in (P5): the binary is the whole deploy.
         .route("/static/{*path}", get(crate::assets::serve))
+        .merge(frc_only)
         // Every error a browser would otherwise get as a blank or plain-text
         // screen becomes a page with the nav on it (U10).
         .layer(axum::middleware::from_fn_with_state(
@@ -1431,6 +1441,95 @@ mod flow_tests {
             0,
             "no render may call upstream"
         );
+    }
+
+    // ── Upstream switched off for this build (F4) ───────────────────────────
+
+    #[tokio::test]
+    async fn this_build_never_reaches_upstream_and_its_frc_pages_say_so() {
+        use crate::upstream::test_support::{hanging_stub, upstream_everywhere};
+        use std::sync::atomic::Ordering;
+
+        // What the server builds at boot, whatever the environment holds.
+        let booted = Upstream::from_env();
+        assert!(!booted.enabled);
+        assert!(booted.first.is_none() && booted.tba.is_none());
+
+        // Clients pointed at a stub that counts every request, then switched
+        // off: the switch holds even with credentials configured.
+        let (base, calls) = hanging_stub().await;
+        let mut off = upstream_everywhere(&base);
+        off.enabled = false;
+        let state = AppState {
+            upstream: Arc::new(off),
+            ..migrated_state().await
+        };
+        seed_event(&state, "2026now", "This Weekend", (-1, 1), &[10101, 254]).await;
+        seed_match(&state, 1, false).await;
+        let admin = signed_up(&state).await;
+
+        // Nothing is started: no boot fetch, no TBA loop, no tether watch.
+        assert!(upstream::spawn(state.repo.clone(), state.upstream.clone(), true).is_none());
+        let watch = crate::tether::Watch::new(vec!["usb0".into()]);
+        assert!(crate::tether::spawn(state.repo.clone(), state.upstream.clone(), watch).is_none());
+        // A phone plugged in, a sync asked for, a bulk load: none fetch.
+        upstream::tether_up(&state.repo, &state.upstream).await;
+        let manual = upstream::sync_now(&state.repo, &state.upstream).await;
+        assert!(!manual.ok && !manual.tba_pass_started, "{manual:?}");
+        let mut out = Vec::new();
+        let loaded = upstream::bulk_load(&state.repo, &state.upstream, &mut out).await;
+        assert!(loaded.unwrap_err().to_string().contains("not available"));
+
+        let send = |method: &str, uri: &str, accept: &str| {
+            Request::builder()
+                .method(method)
+                .uri(uri)
+                .header(header::COOKIE, &admin)
+                .header(header::ACCEPT, accept)
+                .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                .body(Body::empty())
+                .unwrap()
+        };
+        // A browser gets a page saying so, with the nav to go on from.
+        for (method, uri) in [
+            ("GET", "/drive-coach?event=2026now"),
+            ("GET", "/lead-scout/rankings/enter?event=2026now"),
+            ("POST", "/api/frc/sync?event=2026now"),
+            ("POST", "/api/rankings/manual?event=2026now"),
+        ] {
+            let response = router(state.clone())
+                .oneshot(send(method, uri, "text/html"))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::NOT_FOUND, "{uri}");
+            let body = text(response).await;
+            assert!(body.contains("Not available on this build"), "{uri}");
+            assert!(body.contains(r#"href="/submission"#), "{uri}: the nav");
+        }
+        // A lead scout's tablet asking for the TBA key (S7) is refused.
+        let key = router(state.clone())
+            .oneshot(send("GET", "/api/upstream/key", "*/*"))
+            .await
+            .unwrap();
+        assert_eq!(key.status(), StatusCode::NOT_FOUND);
+        let key = text(key).await;
+        assert!(!key.contains("\"tba\""), "{key}");
+        assert!(key.contains("not available on this build"), "{key}");
+
+        // Navigation no longer leads there, and no page says FIRST or TBA.
+        for uri in [
+            "/?event=2026now",
+            "/lead-scout?event=2026now",
+            "/lead-scout/rankings?event=2026now",
+        ] {
+            let body = text(get(&state, uri, Some(&admin)).await).await;
+            for gone in ["/drive-coach", "/lead-scout/rankings/enter", "Sync now"] {
+                assert!(!body.contains(gone), "{uri} shows {gone}");
+            }
+            assert!(!body.contains("Blue Alliance"), "{uri}");
+        }
+
+        assert_eq!(calls.load(Ordering::SeqCst), 0, "nothing reached upstream");
     }
 
     // ── Event selection and summary (U2, U3) ────────────────────────────────

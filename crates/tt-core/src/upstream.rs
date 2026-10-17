@@ -22,6 +22,16 @@
 //! direct field access; that is the bug.
 
 use serde::{Deserialize, Deserializer};
+
+/// Whether this build talks to FIRST and The Blue Alliance at all.
+///
+/// **Off on the `ftc-biobuzz` branch** (FTC_BETA_PLAN.md, F4): an FTC-only
+/// build for one event, with no upstream to sync from. Off means the Pi makes
+/// no FIRST or TBA client (so no boot fetch, no TBA loop, no sync over a
+/// tethered phone, no bulk load), gives no lead scout's tablet a key to fetch
+/// with (S7), and a tablet's worker does not fetch on its own. The FRC-only
+/// pages built on that data answer "not available on this build".
+pub const UPSTREAM_ENABLED: bool = false;
 use std::collections::HashMap;
 
 use crate::matches::CompLevel;

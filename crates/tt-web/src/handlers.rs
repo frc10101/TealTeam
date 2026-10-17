@@ -67,6 +67,8 @@ fn html(page: impl Page) -> Response {
 pub(crate) async fn nav_for(state: &AppState, user: Option<&tt_core::user::User>) -> Nav {
     let mut nav = Nav::for_user(user, state.repo.health().await.is_ready());
     nav.version = crate::shell::page_version(state);
+    // The drive coach panel is OPR and DPR: not on a build without upstream (F4).
+    nav.can_coach &= state.upstream.enabled;
     // The chip's "N need review" (C10b): for a lead, every refused entry
     // waiting; for a scout, their own, which a lead has not got to yet.
     if let Some(user) = user.filter(|_| nav.storage_ready) {

@@ -41,12 +41,19 @@ use tt_upstream::journal::Recorder;
 use tt_upstream::sync::{self, SyncReport};
 use tt_upstream::tba::TbaClient;
 
+use crate::startup::AppState;
 use crate::tether::Tether;
 
 /// The configured upstream clients and the state they share. One per process,
 /// held in `AppState` so the manual sync and the background loop are talking
 /// about the same uplink.
 pub struct Upstream {
+    /// False on a build with upstream switched off
+    /// (`tt_core::upstream::UPSTREAM_ENABLED`): no clients, nothing spawned,
+    /// and the FRC-only routes answer "not available on this build"
+    /// ([`frc_only`]). Distinct from no credentials, which is a supported
+    /// FRC setup whose pages still work.
+    pub enabled: bool,
     pub first: Option<FirstClient>,
     pub tba: Option<TbaClient>,
     pub filters: EventFilters,
@@ -72,6 +79,7 @@ impl Upstream {
         uplink: Uplink,
     ) -> Self {
         Self {
+            enabled: true,
             first,
             tba,
             filters,
@@ -106,7 +114,13 @@ impl Upstream {
     }
 
     /// Read `FIRST_*` and `TBA_AUTH_KEY`. Call after the `.env` files load.
+    ///
+    /// On a build with upstream switched off, [`Upstream::off`] whatever the
+    /// environment says: the credentials are never read.
     pub fn from_env() -> Self {
+        if !tt_core::upstream::UPSTREAM_ENABLED {
+            return Self::off();
+        }
         let uplink = Uplink::new();
         Self::new(
             FirstClient::from_env(uplink.clone()),
@@ -124,7 +138,16 @@ impl Upstream {
         self
     }
 
-    /// No upstream at all.
+    /// Upstream switched off for this build: no clients, and
+    /// [`Upstream::enabled`] false.
+    pub fn off() -> Self {
+        Self {
+            enabled: false,
+            ..Self::new(None, None, EventFilters::all(), Uplink::new())
+        }
+    }
+
+    /// No credentials: an FRC server that scouts without upstream.
     #[cfg(test)]
     pub fn disabled() -> Self {
         Self::new(None, None, EventFilters::all(), Uplink::new())
@@ -140,6 +163,10 @@ pub fn spawn(
     upstream: Arc<Upstream>,
     sync_on_boot: bool,
 ) -> Option<JoinHandle<()>> {
+    if !upstream.enabled {
+        info!("upstream sync is off on this build; nothing fetched from FIRST or TBA");
+        return None;
+    }
     let boot = match &upstream.first {
         None => {
             info!("FIRST_API_USERNAME / FIRST_API_KEY not set; no event sync at boot");
@@ -198,6 +225,48 @@ async fn boot_sync(repo: &SqliteRepo, upstream: &Upstream) {
     }
 }
 
+// ── Switched off for this build (F4) ─────────────────────────────────────────
+
+/// What an FRC-only route answers on a build with upstream switched off.
+pub const NOT_ON_THIS_BUILD: &str = "not available on this build";
+
+/// Layer over the routes that exist only for FIRST and TBA data: the manual
+/// sync, the TBA key a lead scout's tablet fetches with (S7), the drive coach
+/// panel's OPR and DPR, and typing in TBA's rankings. With upstream switched
+/// off, a browser gets a page saying so, with the nav on it; a script or a
+/// tablet's worker gets a JSON 404, which tells a courier to forget any key.
+pub async fn frc_only(
+    axum::extract::State(state): axum::extract::State<AppState>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use axum::http::{StatusCode, header};
+    use axum::response::IntoResponse;
+    use tt_templates::{ErrorPage, Page};
+
+    if state.upstream.enabled {
+        return next.run(request).await;
+    }
+    let refused = (
+        StatusCode::NOT_FOUND,
+        [(header::CACHE_CONTROL, "no-store")],
+        axum::Json(serde_json::json!({ "error": NOT_ON_THIS_BUILD })),
+    );
+    if !crate::handlers::wants_html(request.headers()) {
+        return refused.into_response();
+    }
+    let user = crate::auth::current_user(&state, request.headers()).await;
+    let nav = crate::handlers::nav_for(&state, user.as_ref()).await;
+    let page = ErrorPage::not_on_this_build(request.uri().path().to_owned(), nav);
+    match page.render_html() {
+        Ok(html) => (StatusCode::NOT_FOUND, axum::response::Html(html)).into_response(),
+        Err(e) => {
+            warn!("rendering the not-on-this-build page: {e}");
+            refused.into_response()
+        }
+    }
+}
+
 // ── Manual sync (I13) ───────────────────────────────────────────────────────
 
 /// What a manual sync did. Serialised as the JSON answer to
@@ -245,6 +314,17 @@ impl ManualSync {
 /// the event list was empty.
 pub async fn sync_now(repo: &SqliteRepo, upstream: &Upstream) -> ManualSync {
     let mut report = SyncReport::default();
+    if !upstream.enabled {
+        report.problems.push(NOT_ON_THIS_BUILD.into());
+        return ManualSync {
+            ok: false,
+            events: 0,
+            teams: 0,
+            event_teams: 0,
+            problems: report.problems,
+            tba_pass_started: false,
+        };
+    }
 
     match (&upstream.first, upstream.first_sync.try_lock()) {
         (None, _) => report
@@ -341,6 +421,7 @@ pub fn panel(
         result_problems: outcome.map(|o| o.problems.clone()).unwrap_or_default(),
         last_bundle: String::new(),
         tether: upstream.tether().describe(),
+        switched_off: !upstream.enabled,
     }
 }
 
@@ -354,6 +435,9 @@ pub async fn bulk_load(
     upstream: &Upstream,
     out: &mut impl Write,
 ) -> anyhow::Result<()> {
+    if !upstream.enabled {
+        bail!("bulk-load is {NOT_ON_THIS_BUILD}: this build has no FIRST or TBA sync");
+    }
     let Some(first) = &upstream.first else {
         bail!("FIRST_API_USERNAME and FIRST_API_KEY must be set to bulk-load");
     };

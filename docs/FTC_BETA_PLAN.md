@@ -148,6 +148,8 @@ table. That table goes in the PR description.
 | F5 | **Pick list, minimal.** Reuse the existing pick list and team pages. The only new work is labeling the schema score "scout estimate" and making sure the team page shows the BIOBUZZ fields. No new analytics before the event | The lead scout can rank the event's teams from the existing views |
 | F6 | Pin the commit, tag it `ftc-biobuzz-beta-1`, and build and install it on the Pi | The tag exists; the Pi reports that commit |
 
+**FTC beta (F4):** the switch is `tt_core::upstream::UPSTREAM_ENABLED = false`. In `docs/EVENT_DAY_RUNBOOK.md`, step 7's "check the rankings age" and the "Rankings stale (amber)" row assume TBA data and do not apply; step 5's no-tether rule is moot, because the Pi no longer watches for a tether.
+
 Estimate: F1 is the largest step and the riskiest. Do it first, and on its own commit.
 
 ---

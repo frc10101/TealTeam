@@ -406,6 +406,8 @@ pub enum ErrorKind {
     Refused,
     /// 5xx.
     ServerFault,
+    /// An FRC-only page on a build with FIRST and TBA switched off (F4).
+    NotOnThisBuild,
 }
 
 impl ErrorKind {
@@ -425,6 +427,7 @@ impl ErrorKind {
             Self::FormAddress => "Nothing to show here",
             Self::Refused => "That did not work",
             Self::ServerFault => "Something went wrong",
+            Self::NotOnThisBuild => "Not available on this build",
         }
     }
 }
@@ -451,6 +454,18 @@ impl ErrorPage {
             nav,
             kind,
             status,
+            path,
+        }
+    }
+
+    /// A 404 for an FRC-only page on a build without FIRST and TBA (F4).
+    pub fn not_on_this_build(path: String, nav: Nav) -> Self {
+        let kind = ErrorKind::NotOnThisBuild;
+        Self {
+            title: kind.heading().into(),
+            nav,
+            kind,
+            status: 404,
             path,
         }
     }
@@ -485,6 +500,9 @@ pub struct LeadScoutPage {
 pub struct RankingsPage {
     pub title: String,
     pub nav: Nav,
+    /// Say where Rank comes from and link typing it in. False on a build
+    /// with upstream switched off (F4), which has neither.
+    pub tba_ranks: bool,
     pub event_name: String,
     /// Why there is no table, when there is not.
     pub unavailable: String,
@@ -811,6 +829,8 @@ pub struct UpstreamPanel {
     /// "plugged in (usb0)" or "not plugged in" (S6). Empty when the server
     /// is not watching for a tethered phone.
     pub tether: String,
+    /// Upstream is switched off for this build (F4): the card is not shown.
+    pub switched_off: bool,
 }
 
 // ── Assignments (L1) ────────────────────────────────────────────────────────

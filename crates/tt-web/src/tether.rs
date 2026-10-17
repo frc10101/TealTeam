@@ -142,6 +142,10 @@ pub fn spawn(
     upstream: Arc<Upstream>,
     watch: Watch,
 ) -> Option<JoinHandle<()>> {
+    if !upstream.enabled {
+        info!("upstream sync is off on this build; not watching for a tethered phone");
+        return None;
+    }
     if watch.interfaces.is_empty() {
         info!("TETHER_INTERFACES is off; not watching for a tethered phone");
         return None;

@@ -412,6 +412,27 @@ async fn the_tablet_leaves_fetching_to_a_pi_with_its_own_uplink_and_stops_withou
 }
 
 #[tokio::test]
+async fn a_pi_with_upstream_switched_off_takes_the_key_and_the_tablet_fetches_nothing() {
+    // F4: a build with no upstream answers the key with a 404.
+    let (base, tba) = tba().await;
+    let (pi, device) = Pi::new("switched-off").await;
+    let (_, fresh_log) = log_ids();
+    let courier = Courier::new(&pi, vec!["2026here".into()]);
+
+    // A key kept from before, then a Pi that has none to give.
+    pi.answers_key(200, key(&base, true));
+    courier.tick(&device, at(10), &fresh_log).await.unwrap();
+    pi.answers_key(404, json!({ "error": "not available on this build" }));
+    let tick = courier.tick(&device, at(20), &fresh_log).await.unwrap();
+    assert!(!tick.key, "{tick:?}");
+    assert_eq!(
+        tick.skipped.as_deref(),
+        Some("this device has no key to fetch with")
+    );
+    assert_eq!(tba.full.load(Ordering::SeqCst), 0, "nothing reached TBA");
+}
+
+#[tokio::test]
 async fn with_no_signal_nothing_is_queued_and_the_next_tick_tries_again() {
     let (pi, device) = Pi::new("no-signal").await;
     let (_, fresh_log) = log_ids();
