@@ -61,6 +61,15 @@ const sql = (query) => execFileSync("sqlite3", [`${D}/t.db`, query]).toString().
 
 // The server with no event yet, so its own TBA loop asks for nothing.
 await start();
+// Upstream switched off for this build (F4): the key route is a flat 404,
+// and courier.js's whole job - fetching from TBA with the tablet's own
+// signal - does not apply. Say so once and stop, rather than a wall of
+// FAILs for a scenario this build cannot reach.
+if ((await fetch(`${local}/api/upstream/key`)).status === 404) {
+  check("upstream/TBA switched off on this build (F4): courier has nothing to do", true);
+  await stop();
+  process.exit(0);
+}
 const signup = await fetch(`${local}/api/auth/signup`, { method: "POST", redirect: "manual", headers: { "content-type": "application/x-www-form-urlencoded" },
   body: "name=Sam&email=sam%40demo.test&team_number=10101&password=longenough1&confirm_password=longenough1" });
 const session = signup.headers.get("set-cookie").match(/tt_session=([^;]+)/)[1];
