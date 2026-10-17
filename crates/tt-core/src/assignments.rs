@@ -162,6 +162,14 @@ fn run_through(duties: &[Vec<(i32, AssigneeKey)>], i: usize, key: AssigneeKey) -
 /// fewer assignees than robots, the rest of the match stays open, and the grid
 /// shows it.
 ///
+/// **With fewer assignees than robots, the robots watched go to the teams
+/// watched least** (F1b). FTC teams play five or six qualification matches,
+/// and an event may have two scouts in the stands: filling slots in station
+/// order would see red 1 every match and some teams never. So the open robots
+/// are taken by how many times their team has been assigned at the event so
+/// far, counting what this call hands out, ties in station order. `ours`, the
+/// lead scout's own team, goes last: we already know our robot.
+///
 /// **Each robot goes to whoever has had the fewest matches** at the event so
 /// far, counting what is already assigned and what this call has handed out,
 /// ties in pool order -- so a scout who sat one out starts the next, and one
@@ -175,9 +183,14 @@ pub fn distribute(
     existing: &[Assignment],
     pool: &[AssigneeKey],
     limit: Option<usize>,
+    ours: Option<i32>,
 ) -> Vec<Pick> {
     let mut duties = duties(schedule, existing);
     let mut loads = loads(&duties);
+    let mut watched: HashMap<i32, usize> = HashMap::new();
+    for (team, _) in duties.iter().flatten() {
+        *watched.entry(*team).or_insert(0) += 1;
+    }
     let fill: Vec<usize> = (0..schedule.len())
         .filter(|&i| !schedule[i].played)
         .take(limit.unwrap_or(usize::MAX))
@@ -186,10 +199,12 @@ pub fn distribute(
     let mut picks = Vec::new();
     for i in fill {
         let m = &schedule[i];
-        let open: Vec<i32> = m
+        let mut open: Vec<i32> = m
             .teams()
             .filter(|t| !duties[i].iter().any(|(team, _)| team == t))
             .collect();
+        // Stable too: ties stay in station order.
+        open.sort_by_key(|t| (Some(*t) == ours, watched.get(t).copied().unwrap_or(0)));
         let mut free: Vec<AssigneeKey> = pool
             .iter()
             .copied()
@@ -202,9 +217,13 @@ pub fn distribute(
                 loads.get(key).copied().unwrap_or(0),
             )
         });
-        for (team, key) in open.into_iter().zip(free) {
+        let mut chosen: Vec<(i32, AssigneeKey)> = open.into_iter().zip(free).collect();
+        // Handed out in station order, whichever robots were chosen.
+        chosen.sort_by_key(|(team, _)| m.teams().position(|t| t == *team));
+        for (team, key) in chosen {
             duties[i].push((team, key));
             *loads.entry(key).or_insert(0) += 1;
+            *watched.entry(team).or_insert(0) += 1;
             picks.push(Pick {
                 match_key: m.key.clone(),
                 team_number: team,
@@ -672,7 +691,7 @@ mod tests {
     fn more_scouts_than_robots_cover_every_robot_and_keep_rotating() {
         let matches = [scheduled(1, [1, 2], [3, 4]), scheduled(2, [5, 6], [7, 8])];
         let pool: Vec<_> = (1..=6).map(scout).collect();
-        let picks = distribute(&matches, &[], &pool, None);
+        let picks = distribute(&matches, &[], &pool, None, None);
 
         assert_eq!(picks.len(), 2 * ROBOTS_PER_MATCH);
         let first: Vec<_> = picked(&picks, 1).iter().map(|p| p.1).collect();
@@ -686,7 +705,7 @@ mod tests {
     fn nobody_is_handed_two_robots_in_one_match() {
         let matches = [scheduled(1, [1, 2], [3, 4])];
         let pool = [scout(1), scout(2), scout(3)];
-        let picks = distribute(&matches, &[], &pool, None);
+        let picks = distribute(&matches, &[], &pool, None, None);
 
         assert_eq!(
             picked(&picks, 1),
@@ -700,7 +719,7 @@ mod tests {
         let matches = [scheduled(1, [1, 2], [3, 4])];
         // Sam (scout 1) already has team 4.
         let existing = [assigned("2026mabil_qm1", 4)];
-        let picks = distribute(&matches, &existing, &[scout(1), scout(2)], None);
+        let picks = distribute(&matches, &existing, &[scout(1), scout(2)], None, None);
 
         assert_eq!(picked(&picks, 1), [(1, scout(2))]);
     }
@@ -710,7 +729,7 @@ mod tests {
         let matches = [scheduled(1, [1, 2], [3, 4])];
         // Team 99 left the match; Sam is free to take a robot that is in it.
         let existing = [assigned("2026mabil_qm1", 99)];
-        let picks = distribute(&matches, &existing, &[scout(1)], None);
+        let picks = distribute(&matches, &existing, &[scout(1)], None, None);
         assert_eq!(picked(&picks, 1), [(1, scout(1))]);
     }
 
@@ -719,8 +738,8 @@ mod tests {
         let mut playoff = scheduled(1, [1, 2], [3, 4]);
         playoff.red = [None; ALLIANCE_SIZE];
         playoff.blue = [None; ALLIANCE_SIZE];
-        assert!(distribute(&[playoff], &[], &[scout(1)], None).is_empty());
-        assert!(distribute(&[scheduled(2, [1, 2], [3, 4])], &[], &[], None).is_empty());
+        assert!(distribute(&[playoff], &[], &[scout(1)], None, None).is_empty());
+        assert!(distribute(&[scheduled(2, [1, 2], [3, 4])], &[], &[], None, None).is_empty());
     }
 
     fn season(played: i32, to_come: i32) -> Vec<MatchRecord> {
@@ -776,7 +795,7 @@ mod tests {
     #[test]
     fn only_the_next_unplayed_matches_are_filled() {
         let schedule = season(2, 3);
-        let picks = distribute(&schedule, &[], &[scout(1)], Some(2));
+        let picks = distribute(&schedule, &[], &[scout(1)], Some(2), None);
         let keys: Vec<_> = picks.iter().map(|p| p.match_key.as_str()).collect();
         assert_eq!(keys, ["2026mabil_qm3", "2026mabil_qm4"]);
     }
@@ -786,8 +805,95 @@ mod tests {
         // Sam scouted both played matches; Alex none.
         let schedule = season(2, 1);
         let existing = [to(1, 1, sam()), to(2, 1, sam())];
-        let picks = distribute(&schedule, &existing, &[scout(1), scout(2)], None);
-        assert_eq!(picked(&picks, 3), [(1, scout(2)), (2, scout(1))]);
+        let picks = distribute(&schedule, &existing, &[scout(1), scout(2)], None, None);
+        // Alex, the lighter, takes the first robot chosen; team 1 has been
+        // watched twice already, so 2 and 3 are the robots chosen.
+        assert_eq!(picked(&picks, 3), [(2, scout(2)), (3, scout(1))]);
+    }
+
+    /// Twelve teams, six rounds of three matches: every team plays six,
+    /// with different partners and stations each round.
+    fn twelve_teams() -> Vec<MatchRecord> {
+        let mut n = 0;
+        let mut schedule = Vec::new();
+        for (round, step) in [1, 5, 7, 11, 1, 5].into_iter().enumerate() {
+            // `step` is coprime with 12, so each round is every team once.
+            let order: Vec<i32> = (0..12)
+                .map(|i| (i * step + round as i32) % 12 + 1)
+                .collect();
+            for chunk in order.chunks(ROBOTS_PER_MATCH) {
+                n += 1;
+                let mut m = scheduled(n, [0; ALLIANCE_SIZE], [0; ALLIANCE_SIZE]);
+                m.red = std::array::from_fn(|i| Some(chunk[i]));
+                m.blue = std::array::from_fn(|i| Some(chunk[ALLIANCE_SIZE + i]));
+                schedule.push(m);
+            }
+        }
+        schedule
+    }
+
+    fn times_watched(picks: &[Pick], team: i32) -> usize {
+        picks.iter().filter(|p| p.team_number == team).count()
+    }
+
+    #[test]
+    fn two_scouts_see_every_team_at_least_twice() {
+        let schedule = twelve_teams();
+        assert!((1..=12).all(|t| {
+            schedule
+                .iter()
+                .filter(|m| m.alliance_of(t).is_some())
+                .count()
+                == 6
+        }));
+        let picks = distribute(&schedule, &[], &[scout(1), scout(2)], None, None);
+
+        assert_eq!(picks.len(), 2 * schedule.len(), "both scouts every match");
+        for team in 1..=12 {
+            let seen = times_watched(&picks, team);
+            assert!(seen >= 2, "team {team} watched {seen} times");
+        }
+        for m in &schedule {
+            let scouts: Vec<_> = picks
+                .iter()
+                .filter(|p| p.match_key == m.key)
+                .map(|p| p.assignee)
+                .collect();
+            assert!(doubled(&scouts).is_empty(), "{}: {scouts:?}", m.key);
+        }
+    }
+
+    #[test]
+    fn our_own_robot_is_watched_last() {
+        let schedule = twelve_teams();
+        let picks = distribute(&schedule, &[], &[scout(1), scout(2)], None, Some(7));
+        assert_eq!(times_watched(&picks, 7), 0, "we already know our robot");
+        for team in (1..=12).filter(|t| *t != 7) {
+            assert!(times_watched(&picks, team) >= 2, "team {team}");
+        }
+
+        // With a scout per robot, ours is watched too.
+        let pool: Vec<_> = (1..=ROBOTS_PER_MATCH as i64).map(scout).collect();
+        let picks = distribute(&schedule, &[], &pool, None, Some(7));
+        assert_eq!(times_watched(&picks, 7), 6);
+    }
+
+    #[test]
+    fn four_scouts_leave_nothing_open() {
+        let schedule = twelve_teams();
+        let pool: Vec<_> = (1..=4).map(scout).collect();
+        let picks = distribute(&schedule, &[], &pool, None, Some(7));
+        assert_eq!(picks.len(), schedule.len() * ROBOTS_PER_MATCH);
+        let all = with_picks(&[], &picks);
+        for m in &schedule {
+            assert!(
+                m.teams().all(|t| all
+                    .iter()
+                    .any(|a| a.match_key == m.key && a.team_number == t)),
+                "{} has an open robot",
+                m.key
+            );
+        }
     }
 
     #[test]
@@ -799,7 +905,7 @@ mod tests {
             .flat_map(|m| (1..=robots).map(move |s| to(m, s as i32, named(s, "x"))))
             .collect();
         let pool: Vec<_> = (1..=robots + 1).map(scout).collect();
-        let picks = distribute(&schedule, &existing, &pool, None);
+        let picks = distribute(&schedule, &existing, &pool, None, None);
         assert_eq!(picks.len(), 30 * ROBOTS_PER_MATCH);
 
         let all = with_picks(&existing, &picks);
@@ -823,7 +929,7 @@ mod tests {
     #[test]
     fn with_no_one_to_rest_a_long_run_is_still_handed_out() {
         let schedule = season(0, 8);
-        let picks = distribute(&schedule, &[], &[scout(1)], None);
+        let picks = distribute(&schedule, &[], &[scout(1)], None, None);
         assert_eq!(picks.len(), 8, "an open robot helps nobody");
     }
 

@@ -696,7 +696,7 @@ pub async fn clear_all(
 
 /// `POST /api/assignments/auto?event=`: hand every open robot in the next
 /// `matches` unplayed matches (all of them when blank) to the ticked
-/// `assignee`s, per [`assignments::distribute`].
+/// `assignee`s, per [`assignments::distribute`], the lead's own team last.
 pub async fn distribute(
     state: &AppState,
     user: &User,
@@ -748,7 +748,7 @@ pub async fn distribute(
         warn!("loading {event} for auto-distribute: {e}");
         refuse(NOT_SAVED)
     })?;
-    let picks = assignments::distribute(&matches, &existing, &pool, limit);
+    let picks = assignments::distribute(&matches, &existing, &pool, limit, user.team_number);
     let set: Vec<NewAssignment> = picks
         .into_iter()
         .map(|p| NewAssignment {
