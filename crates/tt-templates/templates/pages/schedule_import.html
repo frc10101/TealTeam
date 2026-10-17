@@ -1,0 +1,86 @@
+{% extends "layout.html" %}
+{#
+  Seeding the schedule by hand (F3): this build has no upstream, so the
+  event, its teams, and its qualification matches come from here. Paste the
+  posted schedule (or pick the CSV file), import, check it against the
+  printed sheet. Re-running replaces the schedule and keeps every
+  observation. A refused import names every bad row and keeps what was
+  typed.
+#}
+{% block content %}
+{% if !errors.is_empty() %}
+  <div class="alert alert-error" role="alert">
+    {% if refused %}<p>Nothing was imported.</p>{% endif %}
+    <ul>{% for error in errors %}<li>{{ error }}</li>{% endfor %}</ul>
+  </div>
+{% endif %}
+{% if !report.is_empty() %}
+  <div class="alert alert-success" role="status">
+    <ul>{% for line in report %}<li>{{ line }}</li>{% endfor %}</ul>
+    {% if !surrogates.is_empty() %}
+      <p><strong>Surrogates ({{ surrogates.len() }}):</strong></p>
+      <ul>{% for slot in surrogates %}<li>{{ slot }}</li>{% endfor %}</ul>
+    {% endif %}
+    <p><a href="{{ assignments_href }}">Assign scouts</a></p>
+  </div>
+{% endif %}
+
+<section class="card">
+  <div class="card-header">
+    <h1>Match schedule{% if !event_name.is_empty() %} · {{ event_name }}{% endif %}</h1>
+  </div>
+  <div class="card-body stack">
+    {% if let Some(stored) = stored %}
+      <p class="muted">Stored now: {{ stored.teams }} teams · {{ stored.matches }} matches.</p>
+    {% endif %}
+    <form class="stack" method="post" action="{{ post_href }}">
+      <fieldset class="stack">
+        <legend>Event</legend>
+        <label class="form-label" for="code">Event code</label>
+        <input class="form-input" id="code" name="code" value="{{ code }}" required
+               autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="USMIBIO">
+        <label class="form-label" for="name">Event name</label>
+        <input class="form-input" id="name" name="name" value="{{ name }}" required placeholder="BIOBUZZ Qualifier">
+        <label class="form-label" for="timezone">Time zone (IANA)</label>
+        <input class="form-input" id="timezone" name="timezone" value="{{ timezone }}" required
+               autocapitalize="off" autocomplete="off" spellcheck="false" placeholder="America/Detroit">
+        <label class="form-label" for="date">Date</label>
+        <input class="form-input" id="date" name="date" type="date" value="{{ date }}">
+        <p class="hint">The event in the header is filled in. Type another code to make a new event.</p>
+      </fieldset>
+
+      <label class="form-label" for="schedule">Qualification schedule (CSV)</label>
+      <input class="form-input" type="file" accept=".csv,text/csv,text/plain" data-fills="schedule" hidden>
+      <textarea class="form-input" id="schedule" name="schedule"
+                rows="14" spellcheck="false" autocapitalize="off" autocomplete="off"
+                placeholder="{{ header }}&#10;1,10001,10006,10002,10008&#10;2,10003,10011,10002*,10012">{{ schedule }}</textarea>
+      <p class="hint">
+        First line <code>{{ header }}</code>, then one match per line. A
+        <code>*</code> after a team marks a surrogate.
+      </p>
+
+      <label class="form-label" for="roster">Roster (optional)</label>
+      <input class="form-input" type="file" accept=".csv,text/csv,text/plain" data-fills="roster" hidden>
+      <textarea class="form-input" id="roster" name="roster"
+                rows="6" spellcheck="false" autocapitalize="off" autocomplete="off"
+                placeholder="team,name&#10;10001,Teal Team">{{ roster }}</textarea>
+      <p class="hint">
+        <code>team,name</code>, one per line, to name the teams. Leave it empty
+        and the roster is every team in the schedule.
+      </p>
+
+      <button class="btn btn-primary" type="submit">Import schedule</button>
+      <p class="hint">Importing again replaces this event's schedule. Observations already recorded are kept.</p>
+    </form>
+
+    {% if !current.is_empty() %}
+      <details>
+        <summary>The stored schedule</summary>
+        <pre>{{ current }}</pre>
+      </details>
+    {% endif %}
+    <p><a class="back" href="{{ back_href }}">Back to Lead Scout</a></p>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}<script src="/static/js/csv-file.js" defer></script>{% endblock %}

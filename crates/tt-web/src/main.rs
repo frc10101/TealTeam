@@ -24,6 +24,7 @@ mod push;
 mod ranking;
 mod refused;
 mod review;
+mod schedule;
 mod scouting;
 mod shell;
 mod snapshot;

@@ -26,6 +26,7 @@ pub mod ranking;
 pub mod record_id;
 pub mod records;
 pub mod review;
+pub mod schedule;
 pub mod season;
 pub mod standings;
 pub mod timezone;

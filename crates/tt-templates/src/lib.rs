@@ -580,6 +580,38 @@ pub struct RankingsEntryPage {
     pub back_href: String,
 }
 
+/// Seeding an event's teams and qualification schedule by hand (F3).
+#[derive(Template)]
+#[template(path = "pages/schedule_import.html")]
+pub struct ScheduleImportPage {
+    pub title: String,
+    pub nav: Nav,
+    /// Every bad row of a refused import, or anything else that stopped it.
+    pub errors: Vec<String>,
+    /// This is an import coming back refused, so nothing was stored.
+    pub refused: bool,
+    /// What the import that led here did, line by line; empty otherwise.
+    pub report: Vec<String>,
+    /// The slots marked `*`, as `"Q4 blue1: 10002"`.
+    pub surrogates: Vec<String>,
+    /// `match,red1,…`: the header the schedule must start with.
+    pub header: String,
+    pub code: String,
+    pub name: String,
+    pub timezone: String,
+    pub date: String,
+    pub schedule: String,
+    pub roster: String,
+    /// The selected event's name, when there is one to replace.
+    pub event_name: String,
+    pub stored: Option<StoredCounts>,
+    /// The stored schedule in the import's format; empty when there is none.
+    pub current: String,
+    pub post_href: String,
+    pub back_href: String,
+    pub assignments_href: String,
+}
+
 /// The point values behind the scouting score (L12).
 #[derive(Template)]
 #[template(path = "pages/weights.html")]

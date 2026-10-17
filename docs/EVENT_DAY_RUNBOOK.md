@@ -15,6 +15,8 @@
 5. **Do not enable a phone tether at the event.** The Pi operates without an uplink; rankings and upstream data use the latest local snapshot.
 6. **Confirm from a Chromebook:** plug it into the switch and open **http://tealteam.local**. If needed, use **http://tealteam** or **http://10.101.0.1**.
 7. **Lead scout:** sign in, pick the event, and check the rankings age. Phones that are not wired use local data and sync later away from the event.
+8. **Seeding the schedule (FTC beta, F3):** once the qualification schedule is posted, open **Lead Scout → Match schedule**. Enter the event code, name and IANA time zone (e.g. `America/Detroit`), then paste or pick the CSV (`match,red1,red2,blue1,blue2`; a `*` marks a surrogate). The roster is optional.
+   Nothing is imported until every row is good, and each bad row is named. Check every match against the printed sheet and note the surrogates in the report. If the schedule changes, import again: it replaces the matches and keeps every observation. Then re-run auto-assign.
 
 ## Between match blocks: back up to the stick
 

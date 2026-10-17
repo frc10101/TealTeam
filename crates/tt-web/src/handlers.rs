@@ -37,6 +37,7 @@ use crate::picklist;
 use crate::ranking::{self, RankingParams};
 use crate::refused::{self, ResolvedParam};
 use crate::review::{self, ReviewedParam};
+use crate::schedule;
 use crate::scouting::{self, ScoutParams};
 use crate::standings;
 use crate::startup::AppState;
@@ -810,6 +811,38 @@ pub async fn save_rankings(
         Ok(next) => Redirect::to(&next).into_response(),
         Err(errors) => {
             html(standings::page(&state, nav, &context, Some(text.to_string()), errors, None).await)
+        }
+    }
+}
+
+/// `GET /lead-scout/schedule` (F3): seed the event's teams and matches.
+pub async fn schedule_page(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
+) -> Response {
+    let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
+    html(schedule::page(&state, nav, &context, None, Vec::new(), None).await)
+}
+
+/// `POST /api/schedule/import`: all of it, or nothing. The page comes back
+/// either way: with the import's report, for the event it imported, or with
+/// every bad row and the text as typed.
+pub async fn import_schedule(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
+    Form(pairs): Form<Vec<(String, String)>>,
+) -> Response {
+    let posted = schedule::Posted::from_pairs(&pairs);
+    match schedule::import(&state, &user, &posted).await {
+        Ok(imported) => {
+            let (nav, context) = event_page(&state, Some(&user), Some(&imported.event_key)).await;
+            html(schedule::page(&state, nav, &context, None, Vec::new(), Some(imported)).await)
+        }
+        Err(errors) => {
+            let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
+            html(schedule::page(&state, nav, &context, Some(posted), errors, None).await)
         }
     }
 }

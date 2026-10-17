@@ -261,6 +261,7 @@ pub fn router(state: AppState) -> Router {
         .route("/lead-scout/refused/{id}", get(handlers::refused_page))
         .route("/lead-scout/rankings", get(handlers::rankings))
         .route("/lead-scout/weights", get(handlers::weights))
+        .route("/lead-scout/schedule", get(handlers::schedule_page))
         .route("/lead-scout/scan", get(handlers::scan_page))
         .route("/pick-list", get(handlers::pick_list))
         .route("/admin/db", get(handlers::admin_db))
@@ -293,6 +294,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/devices/{id}/rename", post(handlers::rename_device))
         .route("/api/weights", post(handlers::save_weights))
+        .route("/api/schedule/import", post(handlers::import_schedule))
         .route("/api/pick-list", post(handlers::change_pick_list))
         .route(
             "/api/pick-list/doc",
@@ -5281,5 +5283,248 @@ mod flow_tests {
         );
         assert_ne!(get(&state, uri, None).await.status(), StatusCode::OK);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ── Seeding the schedule by hand (F3) ────────────────────────────────────
+
+    const REHEARSAL: &str = include_str!("../../../docs/FTC_BETA_REHEARSAL_SCHEDULE.csv");
+
+    fn schedule_form(code: &str, schedule: &str, roster: &str) -> String {
+        form_urlencoded::Serializer::new(String::new())
+            .append_pair("code", code)
+            .append_pair("name", "Dress Rehearsal")
+            .append_pair("timezone", "America/Detroit")
+            .append_pair("date", "")
+            .append_pair("schedule", schedule)
+            .append_pair("roster", roster)
+            .finish()
+    }
+
+    async fn import(state: &AppState, cookie: &str, schedule: &str) -> String {
+        let response = post(
+            state,
+            "/api/schedule/import",
+            &schedule_form("REHEARSE", schedule, ""),
+            Some(cookie),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        text(response).await
+    }
+
+    #[tokio::test]
+    async fn a_scout_cannot_seed_the_schedule() {
+        let state = migrated_state().await;
+        signed_up(&state).await;
+        let kim = with_kim(&state).await;
+        let response = post(
+            &state,
+            "/api/schedule/import",
+            &schedule_form("REHEARSE", REHEARSAL, ""),
+            Some(&kim),
+        )
+        .await;
+        assert_ne!(response.status(), StatusCode::OK);
+        assert!(state.repo.list_events().await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_malformed_schedule_is_refused_row_by_row_and_nothing_is_imported() {
+        let state = migrated_state().await;
+        let admin = signed_up(&state).await;
+        let page = text(get(&state, "/lead-scout/schedule", Some(&admin)).await).await;
+        assert!(
+            page.contains("match,red1,red2,blue1,blue2"),
+            "the header is shown"
+        );
+
+        let bad = "match,red1,red2,blue1,blue2\n\
+                   1,10001,10002,10003,10004\n\
+                   2,10001,10002\n\
+                   3,10001,ten,10003,10004\n\
+                   4,10001,10002,10003,10003\n\
+                   1,10005,10006,10007,10008\n";
+        let body = import(&state, &admin, bad).await;
+        assert!(body.contains("Nothing was imported."), "{body}");
+        for line in [
+            "Line 3: expected 5 columns",
+            "Line 4 (Q3): red2 “ten” is not a team number.",
+            "Line 5 (Q4): team 10003 is in the match twice (blue1 and blue2).",
+            "Line 6 (Q1): match 1 is already on line 2.",
+        ] {
+            assert!(body.contains(line), "{line} missing from {body}");
+        }
+        assert!(
+            body.contains("3,10001,ten,10003,10004"),
+            "the text comes back as typed"
+        );
+
+        let body = post(
+            &state,
+            "/api/schedule/import",
+            &schedule_form("REHEARSE", REHEARSAL, "10001,Alpha\n10002\n"),
+            Some(&admin),
+        )
+        .await;
+        let body = text(body).await;
+        assert!(
+            body.contains("team 10006 (red2) is not on the roster."),
+            "{body}"
+        );
+        assert!(state.repo.list_events().await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn the_rehearsal_schedule_imports_like_a_sync_and_names_its_surrogates() {
+        let state = migrated_state().await;
+        let admin = signed_up(&state).await;
+        let body = import(&state, &admin, REHEARSAL).await;
+        assert!(
+            body.contains("Imported 16 matches and 12 teams for Dress Rehearsal."),
+            "{body}"
+        );
+        assert!(body.contains("Surrogates (3)"), "{body}");
+        for slot in ["Q4 blue1: 10002", "Q7 blue2: 10009", "Q8 blue2: 10012"] {
+            assert!(body.contains(slot), "{slot}");
+        }
+
+        let event = state
+            .repo
+            .event("2026rehearse")
+            .await
+            .unwrap()
+            .expect("event");
+        assert_eq!(event.timezone.as_deref(), Some("America/Detroit"));
+        assert!(event.start_date.is_some());
+        assert_eq!(
+            state.repo.event_teams("2026rehearse").await.unwrap().len(),
+            12
+        );
+        let matches = state.repo.event_matches("2026rehearse").await.unwrap();
+        assert_eq!(matches.len(), 16);
+        assert_eq!(matches[3].blue, [Some(10002), Some(10005)]);
+        assert!(matches.iter().all(|m| !m.played));
+        // Through the upstream log, as a sync's would: what tablets pull.
+        let logged = state
+            .repo
+            .latest_upstream("tba", "/event/2026rehearse/matches")
+            .await
+            .unwrap()
+            .expect("logged");
+        assert!(logged.entry.body.contains("frc10002"));
+
+        let page = text(get(&state, "/lead-scout?event=2026rehearse", Some(&admin)).await).await;
+        assert!(page.contains("/lead-scout/schedule?event=2026rehearse"));
+        let page = text(
+            get(
+                &state,
+                "/lead-scout/schedule?event=2026rehearse",
+                Some(&admin),
+            )
+            .await,
+        )
+        .await;
+        assert!(
+            page.contains(r#"value="REHEARSE""#),
+            "the event fills the form"
+        );
+        assert!(
+            page.contains("4,10007,10008,10002,10005"),
+            "the stored schedule is shown"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_reimport_replaces_the_schedule_and_keeps_the_observations() {
+        let state = migrated_state().await;
+        let admin = format!("{}; {DEVICE}", signed_up(&state).await);
+        post(&state, "/api/device/heartbeat", "", Some(&admin)).await;
+        import(&state, &admin, REHEARSAL).await;
+
+        // Q15 is watched, then dropped; Q16 is dropped unwatched.
+        let response = post(
+            &state,
+            "/api/submission?event=2026rehearse",
+            &format!("match=2026rehearse_qm15&team=10007&record_id={RECORD_ID}&{GOOD_ANSWERS}"),
+            Some(&admin),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        let response = post(
+            &state,
+            "/api/assignments/auto?event=2026rehearse",
+            "assignee=u%3A1&matches=",
+            Some(&admin),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        let before = stored_assignments(&state).await;
+        assert!(before.iter().any(|a| a.0 == "2026rehearse_qm1"));
+
+        // The day's change: Q1 reshuffled, Q15 and Q16 gone.
+        let changed: String = REHEARSAL
+            .lines()
+            .filter(|l| !l.starts_with("15,") && !l.starts_with("16,"))
+            .map(|l| {
+                if l.starts_with("1,") {
+                    "1,10012,10011,10010,10009".to_string()
+                } else {
+                    l.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let body = import(&state, &admin, &changed).await;
+        assert!(body.contains("Imported 14 matches"), "{body}");
+        assert!(
+            body.contains("Removed 1 match no longer on the schedule."),
+            "{body}"
+        );
+        assert!(body.contains("Kept Q15"), "{body}");
+        assert!(body.contains("1 observation"), "{body}");
+
+        let q1 = state
+            .repo
+            .match_by_key("2026rehearse_qm1")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(q1.red, [Some(10012), Some(10011)]);
+        assert!(
+            state
+                .repo
+                .match_by_key("2026rehearse_qm16")
+                .await
+                .unwrap()
+                .is_none()
+        );
+        let observations: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM observations")
+            .fetch_one(state.repo.pool())
+            .await
+            .unwrap();
+        assert_eq!(observations, 1, "the observation survives");
+        // Nobody is left assigned to a robot that is no longer in its match.
+        for (match_key, team, ..) in stored_assignments(&state).await {
+            let m = state
+                .repo
+                .match_by_key(&match_key)
+                .await
+                .unwrap()
+                .expect("match");
+            assert!(m.teams().any(|t| t == team), "{match_key} {team}");
+        }
+
+        // And auto-assign hands the new Q1 out.
+        post(
+            &state,
+            "/api/assignments/auto?event=2026rehearse",
+            "assignee=u%3A1&matches=",
+            Some(&admin),
+        )
+        .await;
+        let after = stored_assignments(&state).await;
+        let q1: Vec<_> = after.iter().filter(|a| a.0 == "2026rehearse_qm1").collect();
+        assert_eq!(q1.len(), 1, "{after:?}");
+        assert!([10012, 10011, 10010, 10009].contains(&q1[0].1));
     }
 }
