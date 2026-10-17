@@ -14,7 +14,8 @@ use tt_core::user::User;
 use tt_pages::teams::latest_scouted;
 use tt_repo::{Repo, StoredObservation};
 use tt_templates::{
-    Nav, RankingView, RankingsPage, SortLink, THIN_BELOW, WeightGroup, WeightInput, WeightsPage,
+    Nav, RankingView, RankingsPage, SCORE_LABEL, SortLink, THIN_BELOW, WeightGroup, WeightInput,
+    WeightsPage,
 };
 
 use crate::events::EventContext;
@@ -185,7 +186,7 @@ pub async fn page(
         ("Rank", SortKey::Rank, true),
         ("Team", SortKey::Number, false),
         ("Name", SortKey::Name, false),
-        ("Score", SortKey::Points, true),
+        (SCORE_LABEL, SortKey::Points, true),
     ]
     .into_iter()
     .map(|(label, key, numeric)| SortLink {

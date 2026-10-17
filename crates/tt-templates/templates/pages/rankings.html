@@ -15,8 +15,11 @@
       <p>{{ unavailable }}</p>
     {% else %}
       <p class="hint">
-        Score is the average of a team's approved observations, with how many
-        there were beside it{% if !latest_scouted.is_empty() %}; the latest was recorded {{ latest_scouted }}{% endif %}.
+        Score is a scout estimate: what scouts saw one robot do, at the point
+        values below. Most FTC points come from what the alliance does
+        together, so it is not the robot's share of the match score. It is the
+        average of a team's approved observations, with how many there were
+        beside it{% if !latest_scouted.is_empty() %}; the latest was recorded {{ latest_scouted }}{% endif %}.
         Fewer than three is marked thin.
         {% if pending > 0 %}{{ pending }} more {% if pending == 1 %}is{% else %}are{% endif %} waiting for review and not counted yet.{% endif %}
       </p>
@@ -43,7 +46,7 @@
         <thead>
           <tr>
             {% for column in columns %}
-              <th scope="col"{% if column.numeric %} class="num"{% endif %}{% if column.current %} aria-sort="{% if column.label == "Score" %}descending{% else %}ascending{% endif %}"{% endif %}>
+              <th scope="col"{% if column.numeric %} class="num"{% endif %}{% if column.current %} aria-sort="{% if column.label == crate::SCORE_LABEL %}descending{% else %}ascending{% endif %}"{% endif %}>
                 <a href="{{ column.href }}"{% if column.current %} class="current"{% endif %}>{{ column.label }}</a>
               </th>
             {% endfor %}
@@ -56,7 +59,7 @@
               <td class="num" data-label="Rank">{{ row.rank }}</td>
               <th scope="row">{{ row.team }}</th>
               <td class="name">{{ row.name }}</td>
-              <td class="num" data-label="Score">{% if row.score.is_empty() %}—{% else %}{{ row.score }}{% endif %}</td>
+              <td class="num" data-label="{{ crate::SCORE_LABEL }}">{% if row.score.is_empty() %}—{% else %}{{ row.score }}{% endif %}</td>
               <td class="num{% if row.thin %} thin{% endif %}" data-label="n">{{ row.n }}{% if row.thin && row.n > 0 %} <span class="badge badge-gray">thin</span>{% endif %}</td>
             </tr>
           {% endfor %}

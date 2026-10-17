@@ -489,4 +489,55 @@ mod tests {
             ("San Jose, CA · USA", "1999")
         );
     }
+
+    /// F5: the BIOBUZZ form reads on the team page as a lead scout needs it
+    /// for the pick list -- choices tallied, counts averaged, toggles as how
+    /// often, and the free-text fields left to the notes card.
+    #[test]
+    fn the_biobuzz_fields_read_on_the_team_page() {
+        use tt_core::season::{Payload, Value, current_season};
+        let season = current_season().unwrap();
+        let payload = |status: &str, role: &str, made: i64, leave: bool| -> Payload {
+            [
+                ("robot_status", Value::Text(status.into())),
+                ("flower_role", Value::Text(role.into())),
+                ("launch_made", Value::Count(made)),
+                ("auto_leave", Value::Flag(leave)),
+                ("rule_incidents", Value::Text("hit the HIVE".into())),
+            ]
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v))
+            .collect()
+        };
+        let payloads = [
+            payload("played", "took_ownership", 12, true),
+            payload("played", "attempted", 6, true),
+            payload("disabled", "none", 0, false),
+        ];
+        let refs: Vec<&Payload> = payloads.iter().collect();
+        let sections = summary_sections(&tt_core::profile::summarize(&season, &refs), 3);
+        let line = |label: &str| {
+            sections
+                .iter()
+                .flat_map(|s| &s.fields)
+                .find(|f| f.label == label)
+                .map(|f| f.text.clone())
+                .unwrap_or_else(|| panic!("{label} is not on the team page"))
+        };
+        assert_eq!(line("Robot status"), "Played 2 · Disabled 1");
+        // A tie keeps the form's order.
+        assert_eq!(
+            line("FLOWER role"),
+            "None 1 · Attempted 1 · Took ownership (top) 1"
+        );
+        assert_eq!(line("Teleop launches made"), "avg 6.0 · best 12");
+        assert_eq!(line("Left the perimeter wall"), "2 of 3");
+        assert!(
+            !sections
+                .iter()
+                .flat_map(|s| &s.fields)
+                .any(|f| f.label == "Rule incidents" || f.label == "Anything the numbers miss"),
+            "free text is the notes card's, shown only to the writer's team"
+        );
+    }
 }

@@ -68,7 +68,7 @@ impl Metric {
 pub fn metrics(schema: &SeasonSchema) -> Vec<Metric> {
     let mut all = vec![Metric {
         key: POINTS.into(),
-        label: "Scouting points".into(),
+        label: "Scouting points (scout estimate)".into(),
         source: Source::Points,
     }];
     for field in schema.fields() {
@@ -279,6 +279,11 @@ mod tests {
         assert_eq!(
             metric(&schema, "f.teleop_park").label,
             "Parked at the end (1 = yes)"
+        );
+        assert_eq!(
+            metric(&schema, POINTS).label,
+            "Scouting points (scout estimate)",
+            "FTC points are mostly the alliance's: one robot's is an estimate"
         );
     }
 

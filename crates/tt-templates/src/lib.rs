@@ -550,6 +550,11 @@ pub struct RankingView {
 /// Fewer observations than this and a score is marked as thin.
 pub const THIN_BELOW: usize = 3;
 
+/// The scouting score's column. A scout estimate, never the robot's share of
+/// the match score: most FTC points come from what the alliance does together
+/// (FTC_BETA_PLAN.md F5).
+pub const SCORE_LABEL: &str = "Score (scout estimate)";
+
 /// Typing the rankings in off the audience display (I14).
 #[derive(Template)]
 #[template(path = "pages/rankings_entry.html")]

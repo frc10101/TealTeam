@@ -3801,10 +3801,14 @@ mod flow_tests {
             (scored(&state, GOOD_ANSWERS, &none) + scored(&state, FEW_ANSWERS, &none)) as f64 / 2.0;
 
         let body = text(get(&state, "/lead-scout/rankings", Some(&admin)).await).await;
+        assert!(
+            body.contains(">Score (scout estimate)</a>"),
+            "the score is labelled an estimate"
+        );
         let row = ranking_row(&body, 254);
         assert!(
             row.contains(&format!(
-                "<td class=\"num\" data-label=\"Score\">{average:.1}</td>"
+                "<td class=\"num\" data-label=\"Score (scout estimate)\">{average:.1}</td>"
             )),
             "{row}"
         );
@@ -3813,7 +3817,7 @@ mod flow_tests {
         // 10101's only observation is pending: listed, unscored, and counted
         // as waiting.
         let row = ranking_row(&body, 10101);
-        assert!(row.contains("<td class=\"num\" data-label=\"Score\">—</td>"));
+        assert!(row.contains("<td class=\"num\" data-label=\"Score (scout estimate)\">—</td>"));
         assert!(body.contains("1 more is waiting for review and not counted yet."));
     }
 
