@@ -78,17 +78,17 @@ mod tests {
         assert!(repo.weight_overrides().await.unwrap().is_empty());
 
         let mut first = WeightOverrides::new();
-        first.set("teleop_scored", "__each", 3);
-        first.set("endgame", "full", 10);
+        first.set("launch_made", "__each", 3);
+        first.set("flower_role", "took_ownership", 10);
         repo.replace_weight_overrides(&first, Utc::now())
             .await
             .unwrap();
         assert_eq!(repo.weight_overrides().await.unwrap(), first);
 
-        // Saving the form again replaces everything: endgame went back to its
+        // Saving the form again replaces everything: the FLOWER role went back to its
         // default, so it is no longer stored.
         let mut second = WeightOverrides::new();
-        second.set("teleop_scored", "__each", 5);
+        second.set("launch_made", "__each", 5);
         repo.replace_weight_overrides(&second, Utc::now())
             .await
             .unwrap();

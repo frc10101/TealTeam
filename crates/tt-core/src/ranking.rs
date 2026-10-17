@@ -144,7 +144,7 @@ pub struct WeightSlot {
     /// The option's key, or [`COUNTER_UNIT`] / [`TOGGLE_ON`].
     pub option_key: String,
     pub field_label: String,
-    /// `"Center"`, `"per piece"`, or `"when ticked"`.
+    /// `"Played"`, `"each"`, or `"when ticked"`.
     pub option_label: String,
     /// What the season schema says.
     pub default: i64,
@@ -177,7 +177,7 @@ pub fn weight_slots(schema: &SeasonSchema) -> Vec<WeightSlot> {
                 .map(|o| slot(field, &o.key, &o.label, o.points))
                 .collect(),
             FieldKind::Counter { points_each, .. } => {
-                vec![slot(field, COUNTER_UNIT, "per piece", *points_each)]
+                vec![slot(field, COUNTER_UNIT, "each", *points_each)]
             }
             FieldKind::Toggle { points } => vec![slot(field, TOGGLE_ON, "when ticked", *points)],
             FieldKind::Text { .. } => Vec::new(),
@@ -242,11 +242,11 @@ mod tests {
     #[test]
     fn a_score_is_an_average_not_a_sum() {
         let schema = current_season().unwrap();
-        // teleop is 2 points a piece.
+        // GARDEN is 1 point an element.
         let heavy: Vec<Payload> = (0..4)
-            .map(|_| payload(&[("teleop_scored", Value::Count(5))]))
+            .map(|_| payload(&[("garden_delivered", Value::Count(5))]))
             .collect();
-        let light = payload(&[("teleop_scored", Value::Count(10))]);
+        let light = payload(&[("garden_delivered", Value::Count(10))]);
         let mut observations: Vec<Scored> = heavy
             .iter()
             .map(|p| Scored {
@@ -268,12 +268,12 @@ mod tests {
                 TeamScore {
                     team_number: 1,
                     n: 4,
-                    average: 10.0
+                    average: 5.0
                 },
                 TeamScore {
                     team_number: 2,
                     n: 1,
-                    average: 20.0
+                    average: 10.0
                 },
             ],
             "scouted four times does not beat scoring more"
@@ -283,7 +283,7 @@ mod tests {
     #[test]
     fn another_form_version_is_left_out_and_overrides_apply() {
         let schema = current_season().unwrap();
-        let p = payload(&[("teleop_scored", Value::Count(5))]);
+        let p = payload(&[("garden_delivered", Value::Count(5))]);
         let observations = [
             Scored {
                 team_number: 1,
@@ -297,7 +297,7 @@ mod tests {
             },
         ];
         let mut overrides = WeightOverrides::new();
-        overrides.set("teleop_scored", COUNTER_UNIT, 3);
+        overrides.set("garden_delivered", COUNTER_UNIT, 3);
 
         let scores = team_scores(&schema, &overrides, &observations);
         assert_eq!(scores[0].n, 1);
@@ -307,7 +307,7 @@ mod tests {
     #[test]
     fn a_team_seen_only_on_another_form_has_no_score_rather_than_zero() {
         let schema = current_season().unwrap();
-        let p = payload(&[("teleop_scored", Value::Count(5))]);
+        let p = payload(&[("garden_delivered", Value::Count(5))]);
         let observations = [Scored {
             team_number: 254,
             payload: &p,
@@ -324,25 +324,31 @@ mod tests {
     fn an_average_keeps_its_fraction_and_can_go_negative() {
         let schema = current_season().unwrap();
         let (three, four) = (
-            payload(&[("teleop_scored", Value::Count(3))]),
-            payload(&[("teleop_scored", Value::Count(4))]),
+            payload(&[("garden_delivered", Value::Count(3))]),
+            payload(&[("garden_delivered", Value::Count(4))]),
         );
-        let broke = payload(&[("broke_down", Value::Flag(true))]);
+        let fouls = payload(&[("fouls_observed", Value::Count(1))]);
         let seen = |team_number, payload| Scored {
             team_number,
             payload,
             schema_version: schema.version,
         };
-        let observations = [seen(1, &three), seen(1, &four), seen(2, &broke)];
+        let observations = [seen(1, &three), seen(1, &four), seen(2, &fouls)];
 
-        let scores = team_scores(&schema, &WeightOverrides::new(), &observations);
-        assert_eq!(scores[0].average, 7.0, "(6 + 8) / 2");
-        assert!(scores[1].average < 0.0, "a breakdown costs points");
+        // No field costs points in the file; a lead can make fouls cost.
+        let mut overrides = WeightOverrides::new();
+        overrides.set("fouls_observed", COUNTER_UNIT, -5);
+        let scores = team_scores(&schema, &overrides, &observations);
+        assert_eq!(scores[0].average, 3.5, "(3 + 4) / 2");
+        assert!(
+            scores[1].average < 0.0,
+            "a foul the lead weighted costs points"
+        );
 
         let odd = [seen(3, &three), seen(3, &four), seen(3, &four)];
         let scores = team_scores(&schema, &WeightOverrides::new(), &odd);
         assert!(
-            (scores[0].average - 22.0 / 3.0).abs() < 1e-9,
+            (scores[0].average - 11.0 / 3.0).abs() < 1e-9,
             "not integer division: {}",
             scores[0].average
         );
@@ -394,15 +400,18 @@ mod tests {
     fn every_scored_value_has_a_weight_and_text_has_none() {
         let schema = current_season().unwrap();
         let slots = weight_slots(&schema);
-        let teleop = slots
+        let garden = slots
             .iter()
-            .find(|s| s.field_key == "teleop_scored")
+            .find(|s| s.field_key == "garden_delivered")
             .expect("counter");
-        assert_eq!(
-            (teleop.option_label.as_str(), teleop.default),
-            ("per piece", 2)
+        assert_eq!((garden.option_label.as_str(), garden.default), ("each", 1));
+        assert_eq!(garden.input_name(), "weight_garden_delivered____each");
+        assert!(
+            slots
+                .iter()
+                .any(|s| s.field_key == "launch_made" && s.default == 0),
+            "an unweighted counter can still be tuned on the day (D5)"
         );
-        assert_eq!(teleop.input_name(), "weight_teleop_scored____each");
         assert!(slots.iter().any(|s| s.option_key == TOGGLE_ON));
         assert!(!slots.iter().any(|s| s.field_key == "notes"));
     }
@@ -420,8 +429,8 @@ mod tests {
         let overrides = read_weights(
             &schema,
             &form(&[
-                ("weight_teleop_scored____each", " 3 "),
-                ("weight_auto_scored____each", "4"),
+                ("weight_garden_delivered____each", " 3 "),
+                ("weight_launch_made____each", "0"),
                 ("weight_nonsense__x", "99"),
             ]),
         )
@@ -429,8 +438,8 @@ mod tests {
         let stored: Vec<_> = overrides.iter().collect();
         assert_eq!(
             stored,
-            [("teleop_scored", COUNTER_UNIT, 3)],
-            "auto kept its default of 4"
+            [("garden_delivered", COUNTER_UNIT, 3)],
+            "launches kept their default of 0"
         );
     }
 
@@ -441,14 +450,14 @@ mod tests {
             let errors = read_weights(
                 &schema,
                 &form(&[
-                    ("weight_teleop_scored____each", "3"),
-                    ("weight_auto_scored____each", bad),
+                    ("weight_garden_delivered____each", "3"),
+                    ("weight_launch_made____each", bad),
                 ]),
             )
             .unwrap_err();
             assert_eq!(errors.len(), 1, "{bad:?}");
-            assert!(errors.contains_key("weight_auto_scored____each"));
+            assert!(errors.contains_key("weight_launch_made____each"));
         }
-        assert!(read_weights(&schema, &form(&[("weight_auto_scored____each", "-100")])).is_ok());
+        assert!(read_weights(&schema, &form(&[("weight_launch_made____each", "-100")])).is_ok());
     }
 }

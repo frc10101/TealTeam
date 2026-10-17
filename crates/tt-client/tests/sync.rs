@@ -111,7 +111,7 @@ async fn device(test: &str) -> ClientRepo {
 
 fn observation(id: &str, team: i32, scouter: i64) -> NewObservation {
     let mut payload = Payload::new();
-    payload.insert("teleop_scored".into(), Value::Count(9));
+    payload.insert("launch_made".into(), Value::Count(9));
     payload.insert("notes".into(), Value::Text("tippy".into()));
     NewObservation {
         client_record_id: id.into(),
@@ -205,7 +205,7 @@ fn echo(seq: i64, id: &str, team: i32, scouter: i64, state: &str) -> JsonValue {
         "row": {
             "client_record_id": id, "match_key": "2026here_qm1", "team_number": team,
             "event_key": "2026here", "alliance": "red",
-            "payload": { "notes": "tippy", "teleop_scored": 9 }, "schema_version": 1,
+            "payload": { "launch_made": 9, "notes": "tippy" }, "schema_version": 1,
             "scouter_id": scouter, "device_id": 3, "submitting_team": 10101,
             "review_state": state, "review_note": null, "reviewed_by": null,
             "reviewed_at": null, "observed_at": "2026-03-14T10:05:00.000Z",

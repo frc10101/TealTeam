@@ -323,9 +323,9 @@ mod tests {
             "form_version": 1,
             "saved_at": saved_at.timestamp_millis(),
             "answers": {
-                "f.starting_position": "center",
-                "f.teleop_scored": "9",
-                "f.broke_down": true,
+                "f.robot_status": "played",
+                "f.launch_made": "9",
+                "f.teleop_park": true,
                 "f.notes": "tippy on the ramp",
             },
         })
@@ -407,9 +407,9 @@ mod tests {
             saved.observed_at.map(|t| t.timestamp_millis()),
             Some(watched.timestamp_millis())
         );
-        assert_eq!(saved.payload["teleop_scored"], Value::Count(9));
-        assert_eq!(saved.payload["broke_down"], Value::Flag(true));
-        assert_eq!(saved.payload["no_show"], Value::Flag(false));
+        assert_eq!(saved.payload["launch_made"], Value::Count(9));
+        assert_eq!(saved.payload["teleop_park"], Value::Flag(true));
+        assert_eq!(saved.payload["auto_park"], Value::Flag(false));
         // The refusal waits for a lead, as a push's does (C10).
         let open = state.repo.open_refusals().await.unwrap();
         assert_eq!(open.len(), 1);

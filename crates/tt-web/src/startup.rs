@@ -582,7 +582,7 @@ mod flow_tests {
 
         let body = text(get(&state, "/", Some(&cookie)).await).await;
         assert!(body.contains("Sam"), "home page should greet the user");
-        assert!(body.contains("Rebuilt"), "and name the season");
+        assert!(body.contains("BIOBUZZ"), "and name the season");
     }
 
     #[tokio::test]
@@ -1710,8 +1710,8 @@ mod flow_tests {
 
     /// What a browser posts: every counter (untouched ones at their rendered
     /// 0), ticked boxes only, and the text.
-    const GOOD_ANSWERS: &str = "f.starting_position=center&f.auto_scored=0&f.teleop_scored=9\
-                                &f.broke_down=on&f.penalties=0&f.notes=tippy+on+the+ramp";
+    const GOOD_ANSWERS: &str = "f.robot_status=played&f.auto_launch_made=0&f.launch_made=9\
+                                &f.teleop_park=on&f.fouls_observed=0&f.notes=tippy+on+the+ramp";
 
     #[tokio::test]
     async fn a_pull_streams_changes_and_deletions_and_holds_back_other_teams_notes_and_lists() {
@@ -1785,8 +1785,8 @@ mod flow_tests {
             theirs.get("notes").is_none(),
             "not Kim's team's note: {theirs}"
         );
-        assert_eq!(theirs["teleop_scored"], 9, "the numbers are shared");
-        assert_eq!(theirs["starting_position"], "center");
+        assert_eq!(theirs["launch_made"], 9, "the numbers are shared");
+        assert_eq!(theirs["robot_status"], "played");
 
         assert_eq!(of(&sams, "pick_list_entry").len(), 1);
         assert!(
@@ -1883,7 +1883,7 @@ mod flow_tests {
         assert!(seen.contains("event: change"), "{seen}");
         assert!(seen.contains(RECORD_ID));
         assert!(
-            seen.contains(r#""teleop_scored":9"#),
+            seen.contains(r#""launch_made":9"#),
             "the numbers are shared"
         );
         assert!(!seen.contains("tippy"), "not Kim's team's note: {seen}");
@@ -2337,7 +2337,7 @@ mod flow_tests {
         );
         assert_eq!(
             row.get::<String, _>("payload"),
-            r#"{"auto_scored":0,"broke_down":true,"no_show":false,"notes":"tippy on the ramp","penalties":0,"starting_position":"center","teleop_scored":9}"#,
+            r#"{"auto_flower_pollen_pickup":false,"auto_launch_made":0,"auto_leave":false,"auto_park":false,"fouls_observed":0,"launch_made":9,"notes":"tippy on the ramp","robot_status":"played","teleop_park":true}"#,
             "untouched counters are zeros and unticked boxes are noes"
         );
         assert_eq!(row.get::<i64, _>("schema_version"), state.season.version);
@@ -2380,11 +2380,7 @@ mod flow_tests {
         let response = post(
             &state,
             "/api/submission",
-            &observation_form(
-                254,
-                RECORD_ID,
-                "f.teleop_scored=9o&f.notes=tippy+on+the+ramp",
-            ),
+            &observation_form(254, RECORD_ID, "f.launch_made=9o&f.notes=tippy+on+the+ramp"),
             Some(&cookies),
         )
         .await;
@@ -3490,7 +3486,7 @@ mod flow_tests {
             (
                 10101,
                 "0191f7ac-1234-7000-8000-0000000000bb",
-                "f.starting_position=left&f.auto_scored=0&f.teleop_scored=1&f.penalties=0",
+                "f.robot_status=disabled&f.auto_launch_made=0&f.launch_made=1&f.fouls_observed=0",
             ),
         ] {
             let saved = post(
@@ -3541,11 +3537,11 @@ mod flow_tests {
         .await;
         assert!(body.contains("<h1>Q2 · Team 254 · Red 2</h1>"), "{body}");
         assert!(body.contains("Recorded by Sam, just now."));
-        let position = body.find("<dt>Starting position</dt>").expect("listed");
+        let position = body.find("<dt>Robot status</dt>").expect("listed");
         assert!(
             body[position..]
                 .trim_start_matches(|c: char| c != '<')
-                .contains("<dd>Center</dd>")
+                .contains("<dd>Played</dd>")
         );
         assert!(body.contains("Approve and see the next"));
 
@@ -3572,7 +3568,7 @@ mod flow_tests {
         assert!(!teamless.contains("tippy"), "{teamless}");
         assert!(teamless.contains("Only scouts on team 10101 can read these notes."));
         assert!(
-            teamless.contains("<dd>Center</dd>"),
+            teamless.contains("<dd>Played</dd>"),
             "numbers and choices still show"
         );
 
@@ -3767,7 +3763,7 @@ mod flow_tests {
     }
 
     const FEW_ANSWERS: &str =
-        "f.starting_position=left&f.auto_scored=0&f.teleop_scored=1&f.penalties=0";
+        "f.robot_status=disabled&f.auto_launch_made=0&f.launch_made=1&f.fouls_observed=0";
 
     /// Team 254 in Q2: Sam's observation and Kim's, both approved; 10101: Sam's,
     /// still pending.
@@ -3893,12 +3889,12 @@ mod flow_tests {
     async fn changed_point_values_change_the_rankings() {
         let (state, admin) = ranked().await;
         let form = text(get(&state, "/lead-scout/weights", Some(&admin)).await).await;
-        assert!(form.contains(r#"name="weight_teleop_scored____each" value="2""#));
+        assert!(form.contains(r#"name="weight_launch_made____each" value="0""#));
 
         let response = post(
             &state,
             "/api/weights?event=2026now",
-            "weight_teleop_scored____each=5",
+            "weight_launch_made____each=5",
             Some(&admin),
         )
         .await;
@@ -3911,7 +3907,7 @@ mod flow_tests {
         assert!(saved.contains("1 changed from the season"));
 
         let mut overrides = tt_core::season::WeightOverrides::new();
-        overrides.set("teleop_scored", tt_core::season::COUNTER_UNIT, 5);
+        overrides.set("launch_made", tt_core::season::COUNTER_UNIT, 5);
         let average = (scored(&state, GOOD_ANSWERS, &overrides)
             + scored(&state, FEW_ANSWERS, &overrides)) as f64
             / 2.0;
@@ -3929,7 +3925,7 @@ mod flow_tests {
         let response = post(
             &state,
             "/api/weights",
-            "weight_teleop_scored____each=5&weight_auto_scored____each=500",
+            "weight_launch_made____each=5&weight_auto_launch_made____each=500",
             Some(&admin),
         )
         .await;
@@ -3937,7 +3933,7 @@ mod flow_tests {
         let body = text(response).await;
         assert!(body.contains("Nothing was saved."));
         assert!(
-            body.contains(r#"name="weight_auto_scored____each" value="500""#),
+            body.contains(r#"name="weight_auto_launch_made____each" value="500""#),
             "as typed"
         );
         assert!(body.contains("A whole number from -100 to 100."));
@@ -3963,7 +3959,7 @@ mod flow_tests {
             );
         }
         for uri in ["/api/weights", "/api/weights/reset"] {
-            let response = post(&state, uri, "weight_teleop_scored____each=9", Some(&scout)).await;
+            let response = post(&state, uri, "weight_launch_made____each=9", Some(&scout)).await;
             assert_eq!(location(&response), "/", "{uri}");
         }
         assert!(state.repo.weight_overrides().await.unwrap().is_empty());
@@ -4003,8 +3999,8 @@ mod flow_tests {
         // U12: both approved observations, one rule: a tally, most common
         // first, a tie in form order.
         assert!(body.contains("From 2 approved observations, the latest recorded just now."));
-        assert!(body.contains("<dt>Starting position</dt><dd>Left 1 · Center 1</dd>"));
-        assert!(body.contains("<dt>Pieces scored in teleop</dt><dd>avg 5.0 · best 9</dd>"));
+        assert!(body.contains("<dt>Robot status</dt><dd>Played 1 · Disabled 1</dd>"));
+        assert!(body.contains("<dt>Teleop launches made</dt><dd>avg 5.0 · best 9</dd>"));
         assert!(
             body.contains(r#"<p class="text-answer">tippy on the ramp</p>"#),
             "Sam's own team's notes"
@@ -4022,7 +4018,10 @@ mod flow_tests {
         let (state, sam) = ranked().await;
         let own = text(get(&state, "/teams?team=254", Some(&sam)).await).await;
         assert!(own.contains("Only notes by scouts on team 10101 are shown."));
-        assert!(own.contains("<p class=\"muted\">Q2 · Sam</p>"), "{own}");
+        assert!(
+            own.contains("<p class=\"muted\">Q2 · Sam · Anything the numbers miss</p>"),
+            "{own}"
+        );
         assert!(own.contains("tippy on the ramp"));
 
         // Lee, on 254, reads about their own robot, but not 10101's notes.
@@ -4096,7 +4095,7 @@ mod flow_tests {
         assert!(body.contains("1 more with notes is waiting for review."));
         assert!(body.contains("tippy on the ramp"));
         assert!(!body.contains("DEFENSE"), "not until it is approved");
-        assert!(body.contains("<span>Q2 · Sam</span>"));
+        assert!(body.contains("<span>Q2 · Sam · Anything the numbers miss</span>"));
         assert!(body.contains(" · 1 hour ago</span>"), "timestamped");
         assert!(
             body.contains(r#"href="/notes?event=2026now&#38;team=254""#),
@@ -4270,12 +4269,11 @@ mod flow_tests {
         assert!(body.contains(r#"name="team" value="254" checked>"#));
         assert!(body.contains(r#"name="metric" value="points" checked>"#));
         assert!(
-            body.contains(r#"name="metric" value="f.teleop_scored">"#),
+            body.contains(r#"name="metric" value="f.launch_made">"#),
             "offered, not on"
         );
         assert!(
-            !body.contains(r#"value="f.starting_position""#)
-                && !body.contains(r#"value="f.notes""#),
+            !body.contains(r#"value="f.robot_status""#) && !body.contains(r#"value="f.notes""#),
             "no points, no numbers"
         );
         assert!(
@@ -4315,7 +4313,7 @@ mod flow_tests {
             .iter()
             .map(|m| m["key"].as_str().unwrap())
             .collect();
-        let teleop = keys.iter().position(|k| *k == "f.teleop_scored").unwrap();
+        let teleop = keys.iter().position(|k| *k == "f.launch_made").unwrap();
         let points = teams[0]["points"].as_array().unwrap();
         assert_eq!(points[0]["match"], "Q1");
         assert_eq!(points[0]["v"][teleop], 1.0);
@@ -4345,14 +4343,14 @@ mod flow_tests {
 
         // An unknown team is ignored; OPR is per event, so flat.
         let page = "/graph?event=2026now&chosen=1&team=9999&team=254\
-                    &metric=f.teleop_scored&metric=opr";
+                    &metric=f.launch_made&metric=opr";
         let body = text(get(&state, page, Some(&sam)).await).await;
         assert!(!body.contains("Showing the team"), "the URL chose");
         assert!(
             body.contains(r#"<label class="chip" data-slot="2" title="OPR (TBA, per event)">"#)
         );
         assert!(body.contains(
-            r#"<th scope="col" class="num">Pieces scored in teleop</th><th scope="col" class="num">OPR (TBA, per event)</th>"#
+            r#"<th scope="col" class="num">Teleop launches made</th><th scope="col" class="num">OPR (TBA, per event)</th>"#
         ));
         assert!(body.contains(
             r#"<tr><th scope="row">Q1</th><td class="num">1</td><td class="num">41.26</td></tr>"#
@@ -4363,10 +4361,10 @@ mod flow_tests {
         assert!(body.contains("OPR, DPR, and CCWM: The Blue Alliance, synced just now."));
 
         let four = "/graph?event=2026now&chosen=1&team=254&metric=points\
-                    &metric=f.auto_scored&metric=f.teleop_scored&metric=f.penalties";
+                    &metric=f.auto_launch_made&metric=f.launch_made&metric=f.fouls_observed";
         let body = text(get(&state, four, Some(&sam)).await).await;
         assert!(body.contains("Only 3 metrics fit on one chart, so 1 more was left off."));
-        assert!(!body.contains(r#"name="metric" value="f.penalties" checked>"#));
+        assert!(!body.contains(r#"name="metric" value="f.fouls_observed" checked>"#));
 
         // Everything tapped off: an empty chart that says what to tap, not
         // the defaults back again.
@@ -4414,13 +4412,13 @@ mod flow_tests {
             "INSERT INTO observations (client_record_id, match_key, team_number, event_key, \
              alliance, payload, schema_version, review_state, observed_at, created_at, updated_at) \
              VALUES ('early-1', '2026early_qm7', 254, '2026early', 'red', \
-             '{\"teleop_scored\":20}', 1, 'approved', 'x', 'x', 'x')",
+             '{\"launch_made\":20}', 1, 'approved', 'x', 'x', 'x')",
         )
         .execute(state.repo.pool())
         .await
         .expect("an earlier observation");
 
-        let page = "/graph?event=2026now&chosen=1&team=254&metric=f.teleop_scored";
+        let page = "/graph?event=2026now&chosen=1&team=254&metric=f.launch_made";
         let one = text(get(&state, page, Some(&sam)).await).await;
         assert!(!one.contains("20</td>"), "this event only");
 

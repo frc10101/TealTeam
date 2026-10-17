@@ -300,9 +300,9 @@ mod tests {
 
     fn observation(id: &str, team: i32) -> NewObservation {
         let payload: Payload = [
-            ("starting_position", Value::Text("center".into())),
-            ("teleop_scored", Value::Count(9)),
-            ("broke_down", Value::Flag(true)),
+            ("robot_status", Value::Text("played".into())),
+            ("launch_made", Value::Count(9)),
+            ("teleop_park", Value::Flag(true)),
             ("notes", Value::Text("tippy on the ramp".into())),
         ]
         .into_iter()
@@ -740,10 +740,10 @@ mod tests {
         };
         assert_eq!(chip(&home(&kim).await), None, "nothing waits");
 
-        // Kim's tablet sent 99 scored in teleop, and the form stops at 60.
+        // Kim's tablet sent 99 launches in teleop, and the form stops at 60.
         let payload: Payload = [
-            ("starting_position", Value::Text("center".into())),
-            ("teleop_scored", Value::Count(99)),
+            ("robot_status", Value::Text("played".into())),
+            ("launch_made", Value::Count(99)),
             ("notes", Value::Text("Kim's own notes".into())),
         ]
         .into_iter()
@@ -762,7 +762,7 @@ mod tests {
             scouter_id: Some(2),
             device_id: None,
             submitting_team: Some(254),
-            reason: "Not saved: the answers do not fit the form (teleop_scored).".into(),
+            reason: "Not saved: the answers do not fit the form (launch_made).".into(),
         };
         state.repo.keep_refusal(&refusal, Utc::now()).await.unwrap();
         let id = state.repo.open_refusals().await.unwrap()[0].id;
@@ -789,7 +789,7 @@ mod tests {
             "{}",
             detail.body
         );
-        assert!(detail.body.contains(r#"name="f.teleop_scored" value="99""#));
+        assert!(detail.body.contains(r#"name="f.launch_made" value="99""#));
         assert!(
             detail
                 .body
@@ -806,20 +806,20 @@ mod tests {
         };
         // Untouched, it is refused for the same reason as the push.
         let again = record(
-            "match=2026now_qm2&team=1&answers=1&f.starting_position=center\
-             &f.teleop_scored=99&f.auto_scored=&f.penalties=",
+            "match=2026now_qm2&team=1&answers=1&f.robot_status=played\
+             &f.launch_made=99&f.auto_launch_made=&f.fouls_observed=",
         )
         .await;
         assert_eq!(again.status, 200);
         assert!(
-            again.body.contains("do not fit the form (teleop_scored"),
+            again.body.contains("do not fit the form (launch_made"),
             "{}",
             again.body
         );
         // Wrong in the form: said by the field, with what Sam typed kept.
         let again = record(
-            "match=2026now_qm2&team=1&answers=1&f.starting_position=center\
-             &f.teleop_scored=9x&f.auto_scored=&f.penalties=",
+            "match=2026now_qm2&team=1&answers=1&f.robot_status=played\
+             &f.launch_made=9x&f.auto_launch_made=&f.fouls_observed=",
         )
         .await;
         assert_eq!(again.status, 200);
@@ -833,19 +833,19 @@ mod tests {
 
         // Corrected. Notes Sam was sent in their place are not kept.
         let recorded = record(
-            "match=2026now_qm2&team=1&answers=1&f.starting_position=center\
-             &f.teleop_scored=12&f.auto_scored=&f.penalties=&f.notes=gone",
+            "match=2026now_qm2&team=1&answers=1&f.robot_status=played\
+             &f.launch_made=12&f.auto_launch_made=&f.fouls_observed=&f.notes=gone",
         )
         .await;
         assert_eq!(recorded.status, 303, "{}", recorded.body);
         let pending = state.repo.pending_observations("2026now").await.unwrap();
         let fixed = pending.iter().find(|o| o.team_number == 1).unwrap();
-        assert_eq!(fixed.payload["teleop_scored"], Value::Count(12));
+        assert_eq!(fixed.payload["launch_made"], Value::Count(12));
         assert_eq!(
             fixed.payload["notes"],
             Value::Text("Kim's own notes".into())
         );
-        assert_eq!(fixed.payload["broke_down"], Value::Flag(false));
+        assert_eq!(fixed.payload["teleop_park"], Value::Flag(false));
         assert_eq!(fixed.scouter_name.as_deref(), Some("Kim"));
         assert_eq!(chip(&home(&kim).await), None);
         assert_eq!(chip(&home(&sam).await), None);
@@ -857,7 +857,7 @@ mod tests {
         old.team_number = 254;
         old.schema_version = state.season.version - 1;
         old.payload = [
-            ("teleop_scored".to_string(), Value::Count(5)),
+            ("launch_made".to_string(), Value::Count(5)),
             ("hang_level".to_string(), Value::Text("l3".into())),
         ]
         .into();
@@ -888,8 +888,8 @@ mod tests {
                 Request::post(format!("/api/refused/{id}/record?event=2026now"))
                     .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded"),
                 Body::from(
-                    "match=2026now_qm2&team=254&answers=1&f.teleop_scored=5\
-                     &f.auto_scored=&f.penalties=&f.notes=",
+                    "match=2026now_qm2&team=254&answers=1&f.launch_made=5\
+                     &f.auto_launch_made=&f.fouls_observed=&f.notes=",
                 ),
             )
             .await;

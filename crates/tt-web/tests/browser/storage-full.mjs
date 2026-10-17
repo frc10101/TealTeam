@@ -88,7 +88,7 @@ const form = await evaluate(`!!document.getElementById("scout-form")`);
 check("the scouting page opens", form);
 await evaluate(`(() => {
   const f = document.getElementById("scout-form");
-  f.querySelector('[name="f.starting_position"][value="left"]').checked = true;
+  f.querySelector('[name="f.robot_status"][value="played"]').checked = true;
   f.querySelector('[name="f.notes"]').value = "storage full";
   f.querySelectorAll("input, textarea").forEach(el => el.dispatchEvent(new Event("input", { bubbles: true })));
   return true;

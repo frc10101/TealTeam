@@ -1,18 +1,23 @@
 {
   "season": 2026,
   "version": 1,
-  "name": "Rebuilt",
+  "name": "BIOBUZZ",
 
   "_comment": [
-    "The 2026 FRC game is REBUILT. These are the stats scouts record for it.",
+    "The 2026-2027 FTC game is BIOBUZZ presented by RTX. These are the stats",
+    "scouts record for it, built against the Competition Manual version TU05.",
+    "Rules change through Team Updates: re-check manual sections 10.5 and 13.6",
+    "before each event. See docs/FTC_BETA_PLAN.md section 3.",
+    "",
+    "Point values are given only where one robot directly earns them under",
+    "Table 10-2 (LEAVE 3, PARK 5, GARDEN 1 each). Everything else starts at 0;",
+    "launch weights stay 0 until the HIVE TIP threshold is measured, and a lead",
+    "scout tunes them on the day through the runtime overrides (L12). Counter",
+    "caps are first guesses, to be checked against match video.",
     "",
     "This file is the single source of truth for three things at once: the",
     "scouting form's fields, the validation applied to submitted payloads, and",
     "the point values used for team ranking. Change it here and all three follow.",
-    "",
-    "To adjust scoring without touching this file, a lead scout can override any",
-    "point value at runtime (scouting_point_weights / L12). Use that for in-season",
-    "tuning; use this file for the field set itself.",
     "",
     "Field keys are payload keys. Renaming one breaks existing data -- add a new",
     "field and bump 'version' instead. crates/tt-core/src/season.rs validates this",
@@ -26,110 +31,181 @@
       "label": "Match context",
       "fields": [
         {
-          "key": "starting_position",
-          "label": "Starting position",
+          "key": "robot_status",
+          "label": "Robot status",
+          "help": "Anything but Played: pick it and skip what the robot did not do.",
           "required": true,
           "type": "select",
           "options": [
-            { "key": "left",   "label": "Left",   "points": 0 },
-            { "key": "center", "label": "Center", "points": 0 },
-            { "key": "right",  "label": "Right",  "points": 0 }
+            { "key": "played",          "label": "Played",          "points": 0 },
+            { "key": "no_show",         "label": "No show",         "points": 0 },
+            { "key": "no_movement",     "label": "Never moved",     "points": 0 },
+            { "key": "disabled",        "label": "Disabled",        "points": 0 },
+            { "key": "tipped_over",     "label": "Tipped over",     "points": 0 },
+            { "key": "lost_connection", "label": "Lost connection", "points": 0 }
           ]
+        }
+      ]
+    },
+
+    {
+      "key": "auto",
+      "label": "Autonomous (first 30 s)",
+      "fields": [
+        {
+          "key": "auto_leave",
+          "label": "Left the perimeter wall",
+          "type": "toggle",
+          "points": 3
         },
         {
-          "key": "no_show",
-          "label": "Did not show / disabled all match",
-          "help": "Tick this and skip the rest.",
+          "key": "auto_launch_made",
+          "label": "Auto launches made",
+          "help": "Landed in the upward CELL.",
+          "type": "counter",
+          "min": 0,
+          "max": 15,
+          "points_each": 0
+        },
+        {
+          "key": "auto_launch_missed",
+          "label": "Auto launches missed",
+          "type": "counter",
+          "min": 0,
+          "max": 15,
+          "points_each": 0
+        },
+        {
+          "key": "auto_flower_pollen_pickup",
+          "label": "Took POLLEN from a FLOWER",
+          "help": "From a FLOWER's bottom opening.",
           "type": "toggle",
           "points": 0
+        },
+        {
+          "key": "auto_park",
+          "label": "Parked in auto",
+          "help": "Partly in the LOADING ZONE.",
+          "type": "toggle",
+          "points": 5
         }
       ]
     },
 
     {
-      "key": "scoring",
-      "label": "Scoring",
+      "key": "teleop",
+      "label": "Teleop",
       "fields": [
         {
-          "key": "auto_scored",
-          "label": "Pieces scored in auto",
-                    "type": "counter",
-          "min": 0,
-          "max": 20,
-          "points_each": 4
-        },
-        {
-          "key": "teleop_scored",
-          "label": "Pieces scored in teleop",
-                    "type": "counter",
+          "key": "launch_made",
+          "label": "Teleop launches made",
+          "help": "Landed in the upward CELL.",
+          "type": "counter",
           "min": 0,
           "max": 60,
-          "points_each": 2
+          "points_each": 0
         },
         {
-          "key": "endgame",
-          "label": "Endgame result",
-                    "type": "select",
-          "options": [
-            { "key": "none",    "label": "Nothing",  "points": 0 },
-            { "key": "partial", "label": "Partial",  "points": 3 },
-            { "key": "full",    "label": "Complete", "points": 6 }
-          ]
+          "key": "launch_missed",
+          "label": "Teleop launches missed",
+          "type": "counter",
+          "min": 0,
+          "max": 60,
+          "points_each": 0
+        },
+        {
+          "key": "garden_delivered",
+          "label": "Elements into own GARDEN",
+          "help": "Pushed or placed. A lower bound: opponents can remove them.",
+          "type": "counter",
+          "min": 0,
+          "max": 30,
+          "points_each": 1
         }
       ]
     },
 
     {
-      "key": "robot",
-      "label": "Robot and driver",
+      "key": "endgame",
+      "label": "Endgame (last 60 s)",
       "fields": [
         {
-          "key": "defense_rating",
-          "label": "Defense played",
-          "help": "How much and how well did they defend?",
+          "key": "flower_nectar_placed",
+          "label": "NECTAR placed in FLOWERS",
+          "help": "The alliance has 8 NECTAR.",
+          "type": "counter",
+          "min": 0,
+          "max": 8,
+          "points_each": 0
+        },
+        {
+          "key": "flower_pollen_placed",
+          "label": "POLLEN placed in FLOWERS",
+          "type": "counter",
+          "min": 0,
+          "max": 20,
+          "points_each": 0
+        },
+        {
+          "key": "flower_role",
+          "label": "FLOWER role",
           "type": "select",
           "options": [
-            { "key": "none",      "label": "None",           "points": 0 },
-            { "key": "some",      "label": "Some",           "points": 2 },
-            { "key": "heavy",     "label": "Heavy",          "points": 4 },
-            { "key": "shutdown",  "label": "Shut down a bot", "points": 6 }
+            { "key": "none",                 "label": "None",                 "points": 0 },
+            { "key": "attempted",            "label": "Attempted",            "points": 0 },
+            { "key": "placed_bottom_nectar", "label": "Placed bottom NECTAR", "points": 0 },
+            { "key": "took_ownership",       "label": "Took ownership (top)", "points": 0 }
           ]
         },
         {
-          "key": "driver_skill",
-          "label": "Driver skill",
-          "type": "select",
-          "options": [
-            { "key": "struggling", "label": "Struggling", "points": 0 },
-            { "key": "average",    "label": "Average",    "points": 2 },
-            { "key": "strong",     "label": "Strong",     "points": 4 },
-            { "key": "excellent",  "label": "Excellent",  "points": 6 }
-          ]
-        },
-        {
-          "key": "speed",
-          "label": "Speed across the field",
-          "type": "select",
-          "options": [
-            { "key": "slow",   "label": "Slow",   "points": 1 },
-            { "key": "medium", "label": "Medium", "points": 2 },
-            { "key": "fast",   "label": "Fast",   "points": 4 }
-          ]
-        },
-        {
-          "key": "broke_down",
-          "label": "Broke down or tipped",
-          "help": "Reliability matters more than peak scoring for alliance picks.",
+          "key": "teleop_park",
+          "label": "Parked at the end",
+          "help": "Partly in the LOADING ZONE.",
           "type": "toggle",
-          "points": -5
+          "points": 5
+        }
+      ]
+    },
+
+    {
+      "key": "play_style",
+      "label": "Play style",
+      "fields": [
+        {
+          "key": "defense_played",
+          "label": "Defense played",
+          "type": "select",
+          "options": [
+            { "key": "none",         "label": "None",         "points": 0 },
+            { "key": "some",         "label": "Some",         "points": 0 },
+            { "key": "primary_role", "label": "Primary role", "points": 0 }
+          ]
         },
         {
-          "key": "penalties",
-          "label": "Penalties drawn",
+          "key": "defended_against",
+          "label": "Defended against",
+          "type": "select",
+          "options": [
+            { "key": "not_defended", "label": "Not defended", "points": 0 },
+            { "key": "slowed",       "label": "Slowed",       "points": 0 },
+            { "key": "shut_down",    "label": "Shut down",    "points": 0 }
+          ]
+        },
+        {
+          "key": "fouls_observed",
+          "label": "Fouls seen",
+          "help": "What you saw. Official fouls come from the score sheet.",
           "type": "counter",
           "min": 0,
           "max": 10,
-          "points_each": -2
+          "points_each": 0
+        },
+        {
+          "key": "rule_incidents",
+          "label": "Rule incidents",
+          "help": "e.g. held 5+ elements, hit the HIVE, pin. Visible only to your own team.",
+          "type": "text",
+          "max_len": 500
         }
       ]
     },

@@ -245,9 +245,9 @@ mod tests {
         let groups = answers(
             &schema,
             &payload(&[
-                ("starting_position", Value::Text("center".into())),
-                ("teleop_scored", Value::Count(9)),
-                ("no_show", Value::Flag(false)),
+                ("robot_status", Value::Text("played".into())),
+                ("launch_made", Value::Count(9)),
+                ("auto_park", Value::Flag(false)),
                 ("notes", Value::Text("tippy".into())),
             ]),
             Notes::Shown,
@@ -258,12 +258,12 @@ mod tests {
             .map(|a| (a.label.as_str(), a.value.as_str()))
             .collect();
         assert!(
-            all.contains(&("Starting position", "Center")),
+            all.contains(&("Robot status", "Played")),
             "the option's label"
         );
-        assert!(all.contains(&("Pieces scored in teleop", "9")));
-        assert!(all.contains(&("Did not show / disabled all match", "No")));
-        assert!(all.contains(&("Pieces scored in auto", "—")), "left out");
+        assert!(all.contains(&("Teleop launches made", "9")));
+        assert!(all.contains(&("Parked in auto", "No")));
+        assert!(all.contains(&("Auto launches made", "—")), "left out");
         assert_eq!(groups.len(), schema.sections.len());
         assert!(groups.iter().flat_map(|g| &g.answers).any(|a| a.is_text));
     }
@@ -287,8 +287,8 @@ mod tests {
         let groups = answers(
             &schema,
             &payload(&[
-                ("starting_position", Value::Text("center".into())),
-                ("teleop_scored", Value::Count(9)),
+                ("robot_status", Value::Text("played".into())),
+                ("launch_made", Value::Count(9)),
                 ("notes", Value::Text("their driver panics".into())),
                 // From an older form: text, so it might be prose.
                 ("scout_opinion", Value::Text("do not pick".into())),
@@ -299,10 +299,11 @@ mod tests {
         let all: Vec<&Answer> = groups.iter().flat_map(|g| &g.answers).collect();
         let find = |label: &str| *all.iter().find(|a| a.label == label).expect(label);
 
-        assert_eq!(find("Starting position").value, "Center", "a choice shows");
-        assert!(!find("Starting position").hidden);
-        assert_eq!(find("Pieces scored in teleop").value, "9");
-        let notes = all.iter().find(|a| a.is_text).expect("the notes field");
+        assert_eq!(find("Robot status").value, "Played", "a choice shows");
+        assert!(!find("Robot status").hidden);
+        assert_eq!(find("Teleop launches made").value, "9");
+        let notes = find("Anything the numbers miss");
+        assert!(notes.is_text, "the notes field");
         assert!(notes.hidden && notes.value.is_empty());
         assert!(find("scout_opinion").hidden && find("scout_opinion").value.is_empty());
         assert_eq!(find("old_count").value, "3");

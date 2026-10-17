@@ -32,7 +32,7 @@ for (const t of teams) {
 for (let m = 1; m <= 12; m++) {
   sql += `INSERT INTO matches (tba_key, event_key, comp_level, match_number, red1, red2, blue1, blue2, played, created_at, updated_at) VALUES ('2026demo_qm${m}', '2026demo', 'qm', ${m}, 254, 1678, 971, 10101, 1, 'x', 'x');\n`;
   teams.forEach((t, i) => {
-    const payload = JSON.stringify({ starting_position: "left", no_show: false, auto_scored: (m + i) % 5, teleop_scored: 5 + ((m * (i + 2)) % 13), endgame: m % 3 ? "full" : "partial", broke_down: m === 7 && i === 1, penalties: (m + i) % 3 });
+    const payload = JSON.stringify({ robot_status: m === 7 && i === 1 ? "disabled" : "played", auto_leave: true, auto_launch_made: (m + i) % 5, launch_made: 5 + ((m * (i + 2)) % 13), garden_delivered: (m * (i + 1)) % 9, flower_role: m % 3 ? "took_ownership" : "attempted", teleop_park: m % 2 === 0, fouls_observed: (m + i) % 3 });
     sql += `INSERT INTO observations (client_record_id, match_key, team_number, event_key, alliance, payload, schema_version, review_state, observed_at, created_at, updated_at) VALUES ('r${m}-${t}', '2026demo_qm${m}', ${t}, '2026demo', '${i < 2 ? "red" : "blue"}', '${payload}', 1, 'approved', 'x', 'x', 'x');\n`;
   });
 }
@@ -70,11 +70,11 @@ check("uPlot draws the three best scouted, one metric", (await evaluate(lines)) 
 check("the Show button is hidden once the script runs", await evaluate(`document.querySelector("[data-graph-show]").hidden`));
 check("no horizontal scroll at 360px", await evaluate(`document.documentElement.scrollWidth <= 360`), String(await evaluate(`document.documentElement.scrollWidth`)));
 
-await tap(`[data-kind="metric"] input[value="f.teleop_scored"]`);
+await tap(`[data-kind="metric"] input[value="f.launch_made"]`);
 await sleep(200);
 check("tapping a metric adds a line per team", (await evaluate(lines)) === 6);
-check("and the URL keeps up", (await evaluate(`location.search`)).includes("metric=f.teleop_scored"), await evaluate(`location.search`));
-check("it takes the dashed style", (await evaluate(slotOf("metric", "f.teleop_scored"))) === "2");
+check("and the URL keeps up", (await evaluate(`location.search`)).includes("metric=f.launch_made"), await evaluate(`location.search`));
+check("it takes the dashed style", (await evaluate(slotOf("metric", "f.launch_made"))) === "2");
 
 const first = await evaluate(`document.querySelector('[data-kind="team"] .chip-row input:checked').value`);
 const kept = await evaluate(`[...document.querySelectorAll('[data-kind="team"] input:checked')].slice(1).map(i => i.value + ":" + i.closest(".chip").dataset.slot).join(",")`);
@@ -87,10 +87,10 @@ const other = await evaluate(`document.querySelector('.more-chips input').value`
 await tap(`.more-chips input[value="${other}"]`);
 check("a team from More teams takes the freed colour", (await evaluate(slotOf("team", other))) === "1", await evaluate(slotOf("team", other)));
 
-await tap(`[data-kind="metric"] input[value="f.auto_scored"]`);
-await tap(`[data-kind="metric"] input[value="f.penalties"]`);
+await tap(`[data-kind="metric"] input[value="f.auto_launch_made"]`);
+await tap(`[data-kind="metric"] input[value="f.fouls_observed"]`);
 check("a fourth metric is refused, and says why", (await evaluate(`document.getElementById("graph-status").textContent`)).startsWith("Up to 3 at once"));
-check("and stays off", (await evaluate(`document.querySelector('[data-kind="metric"] input[value="f.penalties"]').checked`)) === false);
+check("and stays off", (await evaluate(`document.querySelector('[data-kind="metric"] input[value="f.fouls_observed"]').checked`)) === false);
 
 await evaluate(`document.getElementById("graph").scrollIntoView()`);
 await sleep(200);

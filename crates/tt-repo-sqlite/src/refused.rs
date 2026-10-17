@@ -230,7 +230,7 @@ mod tests {
                 client_record_id: record_id.into(),
                 match_key: "2026now_qm99".into(),
                 team_number: 254,
-                payload: [("teleop_scored".to_string(), Value::Count(9))].into(),
+                payload: [("launch_made".to_string(), Value::Count(9))].into(),
                 schema_version: 1,
                 observed_at: at(1),
             },

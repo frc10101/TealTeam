@@ -153,7 +153,7 @@ mod tests {
     fn written_notes_are_the_filled_in_text_fields() {
         let schema = current_season().unwrap();
         let mut payload = Payload::new();
-        payload.insert("teleop_scored".into(), Value::Count(9));
+        payload.insert("launch_made".into(), Value::Count(9));
         assert!(written(&schema, &payload).is_empty(), "no text at all");
 
         payload.insert("notes".into(), Value::Text("   ".into()));
@@ -173,10 +173,11 @@ mod tests {
     fn redacting_keeps_numbers_and_choices_and_drops_every_kind_of_prose() {
         let schema = current_season().unwrap();
         let mut payload: Payload = [
-            ("starting_position", Value::Text("left".into())),
-            ("teleop_scored", Value::Count(4)),
-            ("broke_down", Value::Flag(true)),
+            ("robot_status", Value::Text("played".into())),
+            ("launch_made", Value::Count(4)),
+            ("teleop_park", Value::Flag(true)),
             ("notes", Value::Text("tippy on the ramp".into())),
+            ("rule_incidents", Value::Text("hit the HIVE".into())),
             (
                 "old_comment_field",
                 Value::Text("from last year's form".into()),
@@ -187,7 +188,7 @@ mod tests {
         .collect();
         redact(&schema, &mut payload);
         let kept: Vec<&str> = payload.keys().map(String::as_str).collect();
-        assert_eq!(kept, ["broke_down", "starting_position", "teleop_scored"]);
+        assert_eq!(kept, ["launch_made", "robot_status", "teleop_park"]);
     }
 
     #[test]

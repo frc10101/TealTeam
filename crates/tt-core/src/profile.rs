@@ -8,8 +8,8 @@
 //! approved observation on the current form version, by one rule per kind of
 //! field:
 //!
-//! - a **choice** is a tally, most common first, so a lead sees "Center 3,
-//!   Left 1" rather than a mode that hides how split the scouts were;
+//! - a **choice** is a tally, most common first, so a lead sees "Played 5,
+//!   Disabled 1" rather than a mode that hides how split the scouts were;
 //! - a **counter** is its average and its best;
 //! - a **yes/no** is how many times out of how many.
 //!
@@ -138,18 +138,18 @@ mod tests {
     fn three() -> Vec<Payload> {
         vec![
             payload(&[
-                ("starting_position", Value::Text("left".into())),
-                ("teleop_scored", Value::Count(4)),
-                ("broke_down", Value::Flag(true)),
+                ("robot_status", Value::Text("disabled".into())),
+                ("launch_made", Value::Count(4)),
+                ("teleop_park", Value::Flag(true)),
             ]),
             payload(&[
-                ("starting_position", Value::Text("center".into())),
-                ("teleop_scored", Value::Count(9)),
-                ("broke_down", Value::Flag(false)),
+                ("robot_status", Value::Text("played".into())),
+                ("launch_made", Value::Count(9)),
+                ("teleop_park", Value::Flag(false)),
             ]),
             payload(&[
-                ("starting_position", Value::Text("center".into())),
-                ("teleop_scored", Value::Count(5)),
+                ("robot_status", Value::Text("played".into())),
+                ("launch_made", Value::Count(5)),
             ]),
         ]
     }
@@ -161,10 +161,10 @@ mod tests {
         let refs: Vec<&Payload> = observations.iter().collect();
         let summary = summarize(&schema, &refs);
         assert_eq!(
-            field(&summary, "Starting position").summary,
+            field(&summary, "Robot status").summary,
             Some(Summary::Choice(vec![
-                ("Center".into(), 2),
-                ("Left".into(), 1)
+                ("Played".into(), 2),
+                ("Disabled".into(), 1)
             ]))
         );
     }
@@ -177,13 +177,13 @@ mod tests {
         let summary = summarize(&schema, &refs);
 
         assert_eq!(
-            field(&summary, "Pieces scored in teleop").summary,
+            field(&summary, "Teleop launches made").summary,
             Some(Summary::Counter {
                 average: 6.0,
                 best: 9
             })
         );
-        let broke = field(&summary, "Broke down or tipped");
+        let broke = field(&summary, "Parked at the end");
         assert_eq!(broke.summary, Some(Summary::Toggle { yes: 1 }));
         assert_eq!(broke.answered, 2, "the third left it out");
     }
@@ -192,7 +192,7 @@ mod tests {
     fn nothing_answered_is_none_not_zero_and_notes_are_not_summarised() {
         let schema = current_season().unwrap();
         let summary = summarize(&schema, &[]);
-        let auto = field(&summary, "Pieces scored in auto");
+        let auto = field(&summary, "Auto launches made");
         assert_eq!((auto.answered, &auto.summary), (0, &None));
         assert!(
             !summary
@@ -209,18 +209,18 @@ mod tests {
 
     #[test]
     fn a_tied_tally_keeps_form_order() {
-        // Right before left in time, but left comes first on the form.
+        // Disabled before no show in time, but no show comes first on the form.
         let observations = [
-            payload(&[("starting_position", Value::Text("right".into()))]),
-            payload(&[("starting_position", Value::Text("left".into()))]),
+            payload(&[("robot_status", Value::Text("disabled".into()))]),
+            payload(&[("robot_status", Value::Text("no_show".into()))]),
         ];
         let refs: Vec<&Payload> = observations.iter().collect();
         let summary = summarize(&current_season().unwrap(), &refs);
         assert_eq!(
-            field(&summary, "Starting position").summary,
+            field(&summary, "Robot status").summary,
             Some(Summary::Choice(vec![
-                ("Left".into(), 1),
-                ("Right".into(), 1)
+                ("No show".into(), 1),
+                ("Disabled".into(), 1)
             ]))
         );
     }
@@ -228,13 +228,13 @@ mod tests {
     #[test]
     fn a_counter_average_keeps_its_fraction() {
         let observations = [
-            payload(&[("teleop_scored", Value::Count(4))]),
-            payload(&[("teleop_scored", Value::Count(5))]),
+            payload(&[("launch_made", Value::Count(4))]),
+            payload(&[("launch_made", Value::Count(5))]),
         ];
         let refs: Vec<&Payload> = observations.iter().collect();
         let summary = summarize(&current_season().unwrap(), &refs);
         assert_eq!(
-            field(&summary, "Pieces scored in teleop").summary,
+            field(&summary, "Teleop launches made").summary,
             Some(Summary::Counter {
                 average: 4.5,
                 best: 5
@@ -245,12 +245,12 @@ mod tests {
     #[test]
     fn never_ticked_is_zero_of_n_not_unanswered() {
         let observations = [
-            payload(&[("broke_down", Value::Flag(false))]),
-            payload(&[("broke_down", Value::Flag(false))]),
+            payload(&[("teleop_park", Value::Flag(false))]),
+            payload(&[("teleop_park", Value::Flag(false))]),
         ];
         let refs: Vec<&Payload> = observations.iter().collect();
         let summary = summarize(&current_season().unwrap(), &refs);
-        let broke = field(&summary, "Broke down or tipped");
+        let broke = field(&summary, "Parked at the end");
         assert_eq!(
             (broke.answered, &broke.summary),
             (2, &Some(Summary::Toggle { yes: 0 }))

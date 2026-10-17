@@ -40,7 +40,7 @@ pub const DEFAULT_TEXT_LIMIT: usize = 2_000;
 /// A season's scouting form and scoring rubric.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SeasonSchema {
-    /// FRC season year, e.g. `2026`.
+    /// Season year, e.g. `2026`.
     pub season: i32,
 
     /// Bumped whenever the field set changes in a way that makes older payloads
@@ -48,7 +48,7 @@ pub struct SeasonSchema {
     /// readable and aggregation can refuse to mix incompatible versions.
     pub version: i64,
 
-    /// Display name of the game, e.g. "Rebuilt" for 2026.
+    /// Display name of the game, e.g. "BIOBUZZ" for 2026.
     #[serde(default)]
     pub name: String,
 
@@ -499,7 +499,7 @@ mod tests {
     use super::*;
 
     /// A schema exercising every field kind. Small on purpose -- the real
-    /// 2026 schema lives in seasons/2026.json and is checked by its own test.
+    /// BIOBUZZ schema lives in seasons/2026.json and is checked by its own test.
     fn schema() -> SeasonSchema {
         SeasonSchema::parse(
             r#"{
@@ -812,55 +812,119 @@ mod tests {
         assert!(once.starts_with(r#"{"climbed""#), "keys should be sorted");
     }
 
-    // ── The shipped 2026 schema ─────────────────────────────────────────────
+    // ── The shipped BIOBUZZ schema ──────────────────────────────────────────
 
     #[test]
     fn shipped_season_schema_is_valid() {
-        // seasons/2026.json is the 2026 game, Rebuilt.
+        // seasons/2026.json is the 2026-2027 FTC game, BIOBUZZ (manual TU05).
         // This is the test that turns a Kickoff-day typo into a red build.
         let s = current_season().expect("seasons/2026.json must parse and validate");
         assert_eq!(s.season, 2026);
-        assert_eq!(s.name, "Rebuilt");
-        assert!(s.fields().count() >= 5);
+        assert_eq!(s.name, "BIOBUZZ");
+        assert_eq!(s.version, 1);
+        assert!(
+            CURRENT_SEASON_JSON.contains("TU05"),
+            "records the manual version"
+        );
+        assert_eq!(s.fields().count(), 18);
+        assert!(s.field("robot_status").unwrap().required);
+        assert!(s.field("start_location").is_none(), "not scouted (D4)");
+        assert!(!s.field("notes").unwrap().is_scored());
+    }
+
+    #[test]
+    fn shipped_schema_only_scores_what_one_robot_earns() {
+        // Table 10-2: LEAVE 3, PARK 5 (auto and teleop), GARDEN 1 each. Every
+        // other field starts at 0 until it is measured (D5).
+        let s = current_season().expect("schema");
+        for field in s.fields() {
+            let scored = match &field.kind {
+                FieldKind::Select { options } => options.iter().any(|o| o.points != 0),
+                FieldKind::Counter { points_each, .. } => *points_each != 0,
+                FieldKind::Toggle { points } => *points != 0,
+                FieldKind::Text { .. } => false,
+            };
+            let expected = matches!(
+                field.key.as_str(),
+                "auto_leave" | "auto_park" | "teleop_park" | "garden_delivered"
+            );
+            assert_eq!(scored, expected, "{}", field.key);
+        }
     }
 
     #[test]
     fn shipped_schema_scores_a_realistic_payload() {
         let s = current_season().expect("schema");
         let p = payload(&[
-            ("starting_position", Value::Text("center".into())),
-            ("auto_scored", Value::Count(2)),        //  2 * 4  =   8
-            ("teleop_scored", Value::Count(9)),      //  9 * 2  =  18
-            ("endgame", Value::Text("full".into())), //             6
-            ("defense_rating", Value::Text("some".into())), //       2
-            ("driver_skill", Value::Text("strong".into())), //       4
-            ("speed", Value::Text("fast".into())),   //             4
-            ("broke_down", Value::Flag(false)),      //             0
-            ("penalties", Value::Count(1)),          //  1 * -2 =  -2
-            ("notes", Value::Text("tippy".into())),  //  not scored
+            ("robot_status", Value::Text("played".into())),
+            ("auto_leave", Value::Flag(true)),       //        3
+            ("auto_launch_made", Value::Count(3)),   //        0
+            ("auto_launch_missed", Value::Count(1)), //        0
+            ("auto_flower_pollen_pickup", Value::Flag(false)),
+            ("auto_park", Value::Flag(true)),          //        5
+            ("launch_made", Value::Count(14)),         //        0
+            ("launch_missed", Value::Count(4)),        //        0
+            ("garden_delivered", Value::Count(6)),     // 6 * 1 = 6
+            ("flower_nectar_placed", Value::Count(2)), //        0
+            ("flower_pollen_placed", Value::Count(5)), //        0
+            ("flower_role", Value::Text("placed_bottom_nectar".into())),
+            ("teleop_park", Value::Flag(true)), //        5
+            ("defense_played", Value::Text("some".into())),
+            ("defended_against", Value::Text("slowed".into())),
+            ("fouls_observed", Value::Count(1)), //        0
+            ("rule_incidents", Value::Text("hit the HIVE".into())),
+            ("notes", Value::Text("tippy".into())), // not scored
         ]);
         s.validate_payload(&p).expect("payload should validate");
-        assert_eq!(s.score(&p, &WeightOverrides::new()), 40);
+        assert_eq!(s.score(&p, &WeightOverrides::new()), 19);
     }
 
     #[test]
-    fn shipped_schema_penalises_unreliability() {
-        // A robot that scores well but breaks down should rank below one that
-        // scores the same and finishes. Reliability is what alliance picks turn on.
+    fn shipped_schema_rejects_a_bad_payload() {
         let s = current_season().expect("schema");
-        let base = [
-            ("starting_position", Value::Text("left".into())),
-            ("teleop_scored", Value::Count(10)),
-        ];
+        let played = ("robot_status", Value::Text("played".into()));
 
-        let mut reliable = payload(&base);
-        reliable.insert("broke_down".into(), Value::Flag(false));
-
-        let mut fragile = payload(&base);
-        fragile.insert("broke_down".into(), Value::Flag(true));
-
-        let w = WeightOverrides::new();
-        assert!(s.score(&fragile, &w) < s.score(&reliable, &w));
+        // robot_status is required.
+        assert!(matches!(
+            s.validate_payload(&payload(&[("auto_leave", Value::Flag(true))])),
+            Err(DomainError::Missing { .. })
+        ));
+        // An FRC key is from another game.
+        assert!(
+            s.validate_payload(&payload(&[
+                played.clone(),
+                ("teleop_scored", Value::Count(9))
+            ]))
+            .is_err()
+        );
+        // Counter caps hold.
+        assert!(
+            s.validate_payload(&payload(&[
+                played.clone(),
+                ("auto_launch_made", Value::Count(16))
+            ]))
+            .is_err()
+        );
+        assert!(
+            s.validate_payload(&payload(&[
+                played.clone(),
+                ("flower_nectar_placed", Value::Count(9))
+            ]))
+            .is_err()
+        );
+        // An option that is not offered.
+        assert!(
+            s.validate_payload(&payload(&[(
+                "robot_status",
+                Value::Text("broke_down".into())
+            )]))
+            .is_err()
+        );
+        // Wrong shape.
+        assert!(
+            s.validate_payload(&payload(&[played, ("auto_park", Value::Count(1))]))
+                .is_err()
+        );
     }
 
     #[test]

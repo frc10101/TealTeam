@@ -1524,9 +1524,9 @@ pub struct FormSection {
 
 #[derive(Debug, Clone)]
 pub struct FormField {
-    /// The input's `name`: `f.auto_scored`.
+    /// The input's `name`: `f.launch_made`.
     pub name: String,
-    /// The input's `id`: `f-auto_scored`.
+    /// The input's `id`: `f-launch_made`.
     pub id: String,
     pub label: String,
     pub help: String,
@@ -1723,7 +1723,7 @@ mod tests {
             title: "Home".into(),
             nav: nav(Roles::SCOUT),
             team_display: "10101".into(),
-            season_name: "Rebuilt".into(),
+            season_name: "BIOBUZZ".into(),
             season_year: 2026,
             event: EventPanel::default(),
         }
@@ -1745,7 +1745,7 @@ mod tests {
                 ..Roles::SCOUT
             }),
             team_display: "10101".into(),
-            season_name: "Rebuilt".into(),
+            season_name: "BIOBUZZ".into(),
             season_year: 2026,
             event: EventPanel::default(),
         }
@@ -1763,7 +1763,7 @@ mod tests {
             title: "Home".into(),
             nav: Nav::anonymous(true),
             team_display: String::new(),
-            season_name: "Rebuilt".into(),
+            season_name: "BIOBUZZ".into(),
             season_year: 2026,
             event: EventPanel::default(),
         }
@@ -1781,7 +1781,7 @@ mod tests {
             title: "Home".into(),
             nav: Nav::anonymous(false),
             team_display: String::new(),
-            season_name: "Rebuilt".into(),
+            season_name: "BIOBUZZ".into(),
             season_year: 2026,
             event: EventPanel::default(),
         }
@@ -1830,7 +1830,7 @@ mod tests {
             title: "Home".into(),
             nav,
             team_display: String::new(),
-            season_name: "Rebuilt".into(),
+            season_name: "BIOBUZZ".into(),
             season_year: 2026,
             event,
         }
@@ -2078,7 +2078,7 @@ mod tests {
         assert!(html.contains("Cheesy Poofs"));
         assert!(html.contains(r#"value="0191f7ac-1234-7000-8000-000000000001""#));
         // Counters start at their minimum, so an untouched one is a real zero.
-        assert!(html.contains(r#"name="f.auto_scored" value="0""#));
+        assert!(html.contains(r#"name="f.auto_launch_made" value="0""#));
         assert!(!html.contains(" checked"), "nothing is preselected");
     }
 
@@ -2087,14 +2087,14 @@ mod tests {
         let mut errors = FormErrors::default();
         errors
             .fields
-            .insert("teleop_scored".into(), "Must be between 0 and 60.".into());
+            .insert("launch_made".into(), "Must be between 0 and 60.".into());
         errors.form.push(tt_core::form::STALE_FORM.into());
         let draft = Draft {
             record_id: "0191f7ac-1234-7000-8000-000000000001".into(),
             answers: answers(&[
-                ("f.starting_position", "center"),
-                ("f.teleop_scored", "61"),
-                ("f.broke_down", "on"),
+                ("f.robot_status", "played"),
+                ("f.launch_made", "61"),
+                ("f.teleop_park", "on"),
                 ("f.notes", "<b>tippy</b>"),
             ]),
             errors,
@@ -2103,7 +2103,7 @@ mod tests {
         assert!(form.has_errors);
 
         let html = scouting_page(None, Some(form));
-        assert!(html.contains(r#"value="center" checked"#));
+        assert!(html.contains(r#"value="played" checked"#));
         assert!(
             html.contains(r#"value="61""#),
             "the mistake itself, so it can be fixed"
@@ -2111,7 +2111,7 @@ mod tests {
         assert!(html.contains("Must be between 0 and 60."));
         assert!(html.contains("Not saved yet."));
         assert!(html.contains("different version of the form"));
-        assert!(html.contains(r#"name="f.broke_down" value="on" checked"#));
+        assert!(html.contains(r#"name="f.teleop_park" value="on" checked"#));
         assert!(
             html.contains("&#60;b&#62;tippy&#60;/b&#62;</textarea>"),
             "escaped"
@@ -2640,7 +2640,7 @@ mod tests {
         let page = |ok: bool| LeadScoutPage {
             title: "Lead Scout".into(),
             nav: nav(Roles::SCOUT),
-            season_name: "Rebuilt".into(),
+            season_name: "BIOBUZZ".into(),
             upstream: UpstreamPanel {
                 result_headline: "Sync finished".into(),
                 result_ok: ok,

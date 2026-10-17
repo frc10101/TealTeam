@@ -25,7 +25,7 @@ use crate::season::{Field, FieldKind, Payload, SeasonSchema, Value};
 /// `match` or `team` without colliding with the form's own inputs.
 pub const FIELD_PREFIX: &str = "f.";
 
-/// The input name for a schema field: `f.auto_scored`.
+/// The input name for a schema field: `f.launch_made`.
 pub fn input_name(field_key: &str) -> String {
     format!("{FIELD_PREFIX}{field_key}")
 }
@@ -443,19 +443,21 @@ mod tests {
         let payload = read_answers(
             &season,
             &raw(&[
-                ("f.starting_position", "center"),
-                ("f.auto_scored", "2"),
-                ("f.teleop_scored", "9"),
-                ("f.endgame", "full"),
-                ("f.penalties", "0"),
+                ("f.robot_status", "played"),
+                ("f.auto_leave", "on"),
+                ("f.auto_launch_made", "2"),
+                ("f.launch_made", "9"),
+                ("f.flower_role", "took_ownership"),
+                ("f.fouls_observed", "0"),
                 ("f.notes", "tippy on the ramp"),
             ]),
         )
         .expect("valid");
 
         assert!(season.validate_payload(&payload).is_ok());
-        assert_eq!(payload["broke_down"], Value::Flag(false));
-        assert_eq!(payload["no_show"], Value::Flag(false));
+        assert_eq!(payload["auto_leave"], Value::Flag(true));
+        assert_eq!(payload["teleop_park"], Value::Flag(false));
+        assert_eq!(payload["auto_park"], Value::Flag(false));
     }
 
     #[test]
@@ -525,6 +527,6 @@ mod tests {
 
     #[test]
     fn input_names_carry_the_prefix() {
-        assert_eq!(input_name("auto_scored"), "f.auto_scored");
+        assert_eq!(input_name("launch_made"), "f.launch_made");
     }
 }

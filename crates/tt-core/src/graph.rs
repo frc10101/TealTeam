@@ -258,28 +258,50 @@ mod tests {
             keys,
             [
                 "points",
-                "f.no_show",
-                "f.auto_scored",
-                "f.teleop_scored",
-                "f.endgame",
-                "f.defense_rating",
-                "f.driver_skill",
-                "f.speed",
-                "f.broke_down",
-                "f.penalties",
+                "f.auto_leave",
+                "f.auto_launch_made",
+                "f.auto_launch_missed",
+                "f.auto_flower_pollen_pickup",
+                "f.auto_park",
+                "f.launch_made",
+                "f.launch_missed",
+                "f.garden_delivered",
+                "f.flower_nectar_placed",
+                "f.flower_pollen_placed",
+                "f.teleop_park",
+                "f.fouls_observed",
                 "opr",
                 "dpr",
                 "ccwm",
             ],
-            "no starting position (no points), no notes"
+            "no choice without points (robot status, FLOWER role, defense), no notes"
         );
+        assert_eq!(
+            metric(&schema, "f.teleop_park").label,
+            "Parked at the end (1 = yes)"
+        );
+    }
+
+    #[test]
+    fn a_choice_with_points_is_its_weighted_points() {
+        let schema = SeasonSchema::parse(
+            r#"{"season":2026,"version":1,"sections":[{"key":"a","label":"A","fields":[
+              {"key":"endgame","label":"Endgame result","type":"select","options":[
+                {"key":"none","label":"Nothing","points":0},
+                {"key":"full","label":"Complete","points":6}]}]}]}"#,
+        )
+        .unwrap();
         assert_eq!(
             metric(&schema, "f.endgame").label,
             "Endgame result (points)"
         );
+        let mut weights = WeightOverrides::new();
+        weights.set("endgame", "full", 10);
+        let p = payload(&[("endgame", Value::Text("full".into()))]);
         assert_eq!(
-            metric(&schema, "f.broke_down").label,
-            "Broke down or tipped (1 = yes)"
+            value(&schema, &weights, &metric(&schema, "f.endgame"), &p),
+            Some(10.0),
+            "the lead's weight, not the file's"
         );
     }
 
@@ -287,22 +309,21 @@ mod tests {
     fn a_value_is_a_count_a_flag_or_a_choices_weighted_points() {
         let schema = current_season().unwrap();
         let mut weights = WeightOverrides::new();
-        weights.set("endgame", "full", 10);
+        weights.set("flower_role", "took_ownership", 10);
         let p = payload(&[
-            ("teleop_scored", Value::Count(7)),
-            ("broke_down", Value::Flag(true)),
-            ("endgame", Value::Text("full".into())),
+            ("garden_delivered", Value::Count(7)),
+            ("teleop_park", Value::Flag(true)),
+            ("flower_role", Value::Text("took_ownership".into())),
         ]);
         let v = |key: &str| value(&schema, &weights, &metric(&schema, key), &p);
-        assert_eq!(v("f.teleop_scored"), Some(7.0));
-        assert_eq!(v("f.broke_down"), Some(1.0));
+        assert_eq!(v("f.garden_delivered"), Some(7.0));
+        assert_eq!(v("f.teleop_park"), Some(1.0));
+        assert_eq!(v("f.auto_launch_made"), None, "left out is not zero");
         assert_eq!(
-            v("f.endgame"),
-            Some(10.0),
-            "the lead's weight, not the file's"
+            v("points"),
+            Some((7 + 5 + 10) as f64),
+            "the lead's weight on a choice counts in the points"
         );
-        assert_eq!(v("f.auto_scored"), None, "left out is not zero");
-        assert_eq!(v("points"), Some((7 * 2 - 5 + 10) as f64));
         assert_eq!(v("opr"), None, "no observation holds OPR");
     }
 
@@ -310,13 +331,13 @@ mod tests {
     fn a_line_is_a_teams_matches_in_order_with_two_scouts_averaged() {
         let schema = current_season().unwrap();
         let none = WeightOverrides::new();
-        let wanted = [metric(&schema, "f.teleop_scored"), metric(&schema, "opr")];
+        let wanted = [metric(&schema, "f.launch_made"), metric(&schema, "opr")];
         let (a, b, c, d, old) = (
-            payload(&[("teleop_scored", Value::Count(4))]),
-            payload(&[("teleop_scored", Value::Count(6))]),
-            payload(&[("teleop_scored", Value::Count(9))]),
+            payload(&[("launch_made", Value::Count(4))]),
+            payload(&[("launch_made", Value::Count(6))]),
+            payload(&[("launch_made", Value::Count(9))]),
             payload(&[]),
-            payload(&[("teleop_scored", Value::Count(60))]),
+            payload(&[("launch_made", Value::Count(60))]),
         );
         let sample = |match_key, place: (usize, usize), payload, schema_version| Sample {
             team_number: 254,

@@ -156,17 +156,34 @@ pub async fn pull(
 /// A random but valid set of answers.
 fn answers() -> String {
     let mut rng = rand::rng();
-    let position = ["left", "center", "right"][rng.random_range(0..3)];
-    let broke = if rng.random_bool(0.1) {
-        "&f.broke_down=on"
+    // Most robots play; now and then one does not.
+    let status = if rng.random_bool(0.9) {
+        "played"
     } else {
-        ""
+        ["no_show", "disabled", "tipped_over"][rng.random_range(0..3)]
     };
+    let role = [
+        "none",
+        "attempted",
+        "placed_bottom_nectar",
+        "took_ownership",
+    ][rng.random_range(0..4)];
+    let tick = |rng: &mut rand::rngs::ThreadRng, name: &str| {
+        if rng.random_bool(0.6) {
+            format!("&f.{name}=on")
+        } else {
+            String::new()
+        }
+    };
+    let leave = tick(&mut rng, "auto_leave");
+    let park = tick(&mut rng, "teleop_park");
     format!(
-        "f.starting_position={position}&f.auto_scored={}&f.teleop_scored={}\
-         &f.penalties={}&f.notes=load+test{broke}",
-        rng.random_range(0..=20),
+        "f.robot_status={status}&f.auto_launch_made={}&f.launch_made={}\
+         &f.garden_delivered={}&f.flower_role={role}&f.fouls_observed={}\
+         &f.notes=load+test{leave}{park}",
+        rng.random_range(0..=15),
         rng.random_range(0..=60),
+        rng.random_range(0..=30),
         rng.random_range(0..=3),
     )
 }
