@@ -442,8 +442,8 @@ mod tests {
             comp_level: CompLevel::Qualification,
             set_number: 1,
             match_number: 14,
-            red: [Some(10101), Some(254), Some(1)],
-            blue: [Some(2), Some(3), Some(4)],
+            red: [Some(10101), Some(254)],
+            blue: [Some(2), Some(3)],
             red_score: Some(60),
             blue_score: Some(75),
             winner: Some("blue".into()),
@@ -459,7 +459,7 @@ mod tests {
                 line.partners.as_str(),
                 line.result.as_str()
             ),
-            ("Q14", "red", "with 10101, 1", "Lost 60–75")
+            ("Q14", "red", "with 10101", "Lost 60–75")
         );
         assert_eq!(TeamMatchLine::new(&record, 3).unwrap().result, "Won 75–60");
         assert!(TeamMatchLine::new(&record, 9999).is_none());

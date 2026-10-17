@@ -7,7 +7,7 @@
 
 use anyhow::Context;
 use chrono::{TimeDelta, Utc};
-use tt_core::matches::CompLevel;
+use tt_core::matches::{ALLIANCE_SIZE, CompLevel, ROBOTS_PER_MATCH};
 use tt_core::records::{Event, MatchRecord, Team};
 use tt_repo::Repo;
 use tt_repo_sqlite::SqliteRepo;
@@ -22,10 +22,11 @@ pub fn match_key(n: u32) -> String {
     format!("{EVENT}_qm{n}")
 }
 
-/// The six robots in match `n`, red then blue: the roster in turn, so every
+/// The robots in match `n`, red then blue: the roster in turn, so every
 /// team plays and no team plays itself.
-pub fn robots(n: u32) -> [i32; 6] {
-    std::array::from_fn(|slot| FIRST_TEAM + ((n as i32 * 6 + slot as i32) % TEAMS))
+pub fn robots(n: u32) -> [i32; ROBOTS_PER_MATCH] {
+    let per_match = ROBOTS_PER_MATCH as i32;
+    std::array::from_fn(|slot| FIRST_TEAM + ((n as i32 * per_match + slot as i32) % TEAMS))
 }
 
 /// Migrate `database_url` and store the event with `matches` matches. Safe to
@@ -69,15 +70,15 @@ pub async fn seed(database_url: &str, matches: u32) -> anyhow::Result<()> {
     }
 
     for n in 1..=matches {
-        let [r1, r2, r3, b1, b2, b3] = robots(n);
+        let teams = robots(n);
         let record = MatchRecord {
             key: match_key(n),
             event_key: EVENT.into(),
             comp_level: CompLevel::Qualification,
             set_number: 1,
             match_number: n as i32,
-            red: [Some(r1), Some(r2), Some(r3)],
-            blue: [Some(b1), Some(b2), Some(b3)],
+            red: std::array::from_fn(|i| Some(teams[i])),
+            blue: std::array::from_fn(|i| Some(teams[ALLIANCE_SIZE + i])),
             red_score: None,
             blue_score: None,
             winner: None,
@@ -95,7 +96,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn every_match_has_six_different_teams_from_the_roster() {
+    fn every_match_has_different_teams_from_the_roster() {
         for n in 1..=500 {
             let teams = robots(n);
             let mut sorted = teams;
@@ -122,7 +123,10 @@ mod tests {
         let repo = SqliteRepo::connect(&url).unwrap();
         let found = repo.match_by_key(&match_key(10)).await.unwrap().unwrap();
         assert_eq!(found.red[0], Some(robots(10)[0]));
-        assert_eq!(found.alliance_of(robots(10)[5]), Some("blue"));
+        assert_eq!(
+            found.alliance_of(robots(10)[ROBOTS_PER_MATCH - 1]),
+            Some("blue")
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 }

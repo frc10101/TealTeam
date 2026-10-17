@@ -83,14 +83,14 @@ pub fn is_due(scheduled: Option<DateTime<Utc>>, now: DateTime<Utc>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::matches::CompLevel;
+    use crate::matches::{ALLIANCE_SIZE, CompLevel};
     use chrono::TimeZone;
 
     fn at(hour: u32, minute: u32) -> DateTime<Utc> {
         Utc.with_ymd_and_hms(2026, 3, 14, hour, minute, 0).unwrap()
     }
 
-    fn scheduled(number: i32, red: [i32; 3], played: bool) -> MatchRecord {
+    fn scheduled(number: i32, red: [i32; ALLIANCE_SIZE], played: bool) -> MatchRecord {
         MatchRecord {
             key: format!("2026mabil_qm{number}"),
             event_key: "2026mabil".into(),
@@ -98,7 +98,7 @@ mod tests {
             set_number: 1,
             match_number: number,
             red: red.map(Some),
-            blue: [Some(4), Some(5), Some(6)],
+            blue: [Some(4), Some(5)],
             red_score: None,
             blue_score: None,
             winner: None,
@@ -111,10 +111,10 @@ mod tests {
     #[test]
     fn the_next_match_is_the_first_unplayed_whatever_the_clock_says() {
         let matches = [
-            scheduled(1, [10101, 2, 3], true),
-            scheduled(2, [7, 8, 9], false),
-            scheduled(3, [10101, 2, 3], false),
-            scheduled(4, [1, 10101, 3], false),
+            scheduled(1, [10101, 2], true),
+            scheduled(2, [7, 8], false),
+            scheduled(3, [10101, 2], false),
+            scheduled(4, [1, 10101], false),
         ];
         let standings: Vec<(i32, Standing)> = schedule(&matches, 10101)
             .into_iter()

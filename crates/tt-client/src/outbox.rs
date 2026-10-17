@@ -20,7 +20,7 @@
 use chrono::{DateTime, Utc};
 use rusqlite::{OptionalExtension, params};
 use serde::Serialize;
-use tt_core::outbox::QueuedObservation;
+use tt_core::outbox::{OUTBOX_VERSION, QueuedObservation};
 use tt_core::record_id;
 use tt_repo::{NewObservation, Recorded, RepoError, Result};
 
@@ -162,7 +162,7 @@ impl ClientRepo {
         let observations = self.outbox()?;
         let export = Export {
             format: "tealteam-outbox",
-            version: 1,
+            version: OUTBOX_VERSION,
             exported_at: now,
             schema: self.schema()?,
             observations: &observations,

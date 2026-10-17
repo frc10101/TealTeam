@@ -8,7 +8,7 @@
 use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::matches::CompLevel;
+use crate::matches::{Alliance, CompLevel};
 
 /// A competition.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -178,8 +178,8 @@ pub struct MatchRecord {
     pub match_number: i32,
 
     /// Team numbers by slot. `None` where the schedule has a gap.
-    pub red: [Option<i32>; 3],
-    pub blue: [Option<i32>; 3],
+    pub red: Alliance,
+    pub blue: Alliance,
 
     pub red_score: Option<i64>,
     pub blue_score: Option<i64>,
@@ -328,8 +328,8 @@ mod tests {
             comp_level: CompLevel::Qualification,
             set_number: 1,
             match_number: 14,
-            red: [Some(10101), Some(254), Some(1)],
-            blue: [Some(2), Some(3), Some(4)],
+            red: [Some(10101), Some(254)],
+            blue: [Some(2), Some(3)],
             red_score: Some(88),
             blue_score: Some(74),
             winner: Some("red".into()),
@@ -452,17 +452,17 @@ mod tests {
     fn a_match_lists_its_robots_red_first() {
         assert_eq!(
             a_match().teams().collect::<Vec<_>>(),
-            vec![10101, 254, 1, 2, 3, 4]
+            vec![10101, 254, 2, 3]
         );
     }
 
     #[test]
     fn empty_alliance_slots_are_skipped_not_reported_as_zero() {
         let m = MatchRecord {
-            red: [Some(1), None, None],
+            red: [Some(1), None],
             ..a_match()
         };
-        assert_eq!(m.teams().collect::<Vec<_>>(), vec![1, 2, 3, 4]);
+        assert_eq!(m.teams().collect::<Vec<_>>(), vec![1, 2, 3]);
         assert!(!m.is_fully_scheduled());
     }
 
@@ -476,8 +476,9 @@ mod tests {
 
     #[test]
     fn partners_exclude_the_team_itself() {
-        assert_eq!(a_match().partners_of(10101), vec![254, 1]);
-        assert_eq!(a_match().partners_of(3), vec![2, 4]);
+        // FTC: one partner each.
+        assert_eq!(a_match().partners_of(10101), vec![254]);
+        assert_eq!(a_match().partners_of(3), vec![2]);
     }
 
     #[test]

@@ -1,7 +1,7 @@
 // QR transfer's format in the browser (S13): the same frames tt_core::qr
 // makes and reads, for a tablet with no Pi to ask.
 //
-//   TT1:<kind>:<crc32 of the compressed bytes, 8 hex>:<i>/<n>:<base45>
+//   TT2:<kind>:<crc32 of the compressed bytes, 8 hex>:<i>/<n>:<base45>
 //
 // zlib by CompressionStream where the browser has it, else zlib's "stored"
 // blocks, which any inflater reads: bigger, never wrong. Reading a transfer
@@ -19,7 +19,7 @@
 (function () {
   "use strict";
 
-  var PREFIX = "TT1:";
+  var PREFIX = "TT2:";
   var FRAME_BYTES = 400;
   var MAX_FRAMES = 99;
   var QUIET_ZONE = 4;

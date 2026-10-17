@@ -3,6 +3,7 @@
 
 use askama::Template;
 use chrono::{DateTime, Utc};
+use tt_core::Alliance;
 use tt_core::coach::{self, Standing};
 use tt_core::records::{Event, MatchRecord, TeamEventStats};
 
@@ -105,7 +106,7 @@ impl CoachCard {
             Some("blue") => (("blue", &record.blue), ("red", &record.red)),
             _ => (("red", &record.red), ("blue", &record.blue)),
         };
-        let side = |(color, slots): (&'static str, &[Option<i32>; 3])| {
+        let side = |(color, slots): (&'static str, &Alliance)| {
             let teams: Vec<CoachTeam> = slots
                 .iter()
                 .flatten()
@@ -176,8 +177,8 @@ mod tests {
             comp_level: CompLevel::Qualification,
             set_number: 1,
             match_number: number,
-            red: [Some(2), Some(3), Some(4)],
-            blue: [Some(10101), Some(254), None],
+            red: [Some(2), Some(3)],
+            blue: [Some(10101), Some(254)],
             red_score: played.then_some(60),
             blue_score: played.then_some(75),
             winner: None,
@@ -241,10 +242,7 @@ mod tests {
         );
         assert_eq!(next.ours.color, "blue", "our side first, whatever colour");
         assert_eq!(next.ours.opr_total, "75.5");
-        assert!(
-            !next.ours.opr_partial,
-            "the gap in blue 3 is no team, not a missing OPR"
-        );
+        assert!(!next.ours.opr_partial, "both of ours have an OPR");
         assert!(next.ours.teams[0].us && !next.ours.teams[1].us);
         assert_eq!(next.theirs.opr_total, "20.0");
         assert!(next.theirs.opr_partial, "3 and 4 have no OPR yet");

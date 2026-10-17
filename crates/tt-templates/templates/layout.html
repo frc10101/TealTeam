@@ -7,9 +7,12 @@
 
   Event-scoped links carry ?event= so moving between pages keeps the event the
   header switcher shows (U2).
+
+  --alliance-size is tt_core::ALLIANCE_SIZE, so the stylesheet lays out one
+  alliance's robots across without saying how many there are.
 #}
 <!doctype html>
-<html lang="en">
+<html lang="en" style="--alliance-size: {{ tt_core::ALLIANCE_SIZE }}">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">

@@ -1,6 +1,6 @@
 //! The scouting page and the save behind it (U4).
 //!
-//! A scout picks a match, then one of its six robots, then fills in a form drawn
+//! A scout picks a match, then one of its robots, then fills in a form drawn
 //! from the season schema. Every step is in the URL -- `?event=&match=&team=` --
 //! so a reload, a bookmark, or a second tab lands on the same step.
 //!

@@ -9,14 +9,94 @@
 //! line continuation removes the newline, so a SQL line comment silently eats
 //! the rest of the statement while remaining valid SQL.
 
+use std::sync::LazyLock;
+
 use chrono::{DateTime, NaiveDate, Utc};
 use sqlx::Row;
-use tt_core::matches::CompLevel;
+use tt_core::matches::{CompLevel, slot_names};
 use tt_core::records::{Event, MatchRecord, Team, TeamEventStats};
 use tt_repo::Result;
 
 use crate::SqliteRepo;
 use crate::users::{from_sql, query_err, to_sql};
+
+/// `red1, red2, …, blue<N>`: one column per slot (`tt_core::ALLIANCE_SIZE`).
+static SLOTS: LazyLock<String> = LazyLock::new(|| slot_names().join(", "));
+
+/// A match row, as [`match_from_row`] reads it.
+static MATCH_COLUMNS: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "tba_key, event_key, comp_level, set_number, match_number, {}, \
+         red_score, blue_score, winner, played, scheduled_at, actual_at",
+        *SLOTS
+    )
+});
+
+/// Playing order.
+const MATCH_ORDER: &str = "ORDER BY CASE comp_level WHEN 'qm' THEN 0 WHEN 'ef' THEN 1 \
+                           WHEN 'qf' THEN 2 WHEN 'sf' THEN 3 ELSE 4 END, \
+                           set_number, match_number";
+
+static UPSERT_MATCH: LazyLock<String> = LazyLock::new(|| {
+    let slots = slot_names();
+    let columns: Vec<&str> = [
+        "tba_key",
+        "event_key",
+        "comp_level",
+        "set_number",
+        "match_number",
+    ]
+    .into_iter()
+    .chain(slots.iter().map(String::as_str))
+    .chain([
+        "red_score",
+        "blue_score",
+        "winner",
+        "played",
+        "scheduled_at",
+        "actual_at",
+        "created_at",
+        "updated_at",
+    ])
+    .collect();
+    let updated = slots
+        .iter()
+        .map(String::as_str)
+        .chain([
+            "red_score",
+            "blue_score",
+            "winner",
+            "played",
+            "scheduled_at",
+            "actual_at",
+            "updated_at",
+        ])
+        .map(|c| format!("{c} = excluded.{c}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "INSERT INTO matches ({}) VALUES ({}) ON CONFLICT (tba_key) DO UPDATE SET {updated}",
+        columns.join(", "),
+        vec!["?"; columns.len()].join(", "),
+    )
+});
+
+static MATCH_BY_KEY: LazyLock<String> =
+    LazyLock::new(|| format!("SELECT {} FROM matches WHERE tba_key = ?", *MATCH_COLUMNS));
+
+static EVENT_MATCHES: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "SELECT {} FROM matches WHERE event_key = ? {MATCH_ORDER}",
+        *MATCH_COLUMNS
+    )
+});
+
+static TEAM_MATCHES: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "SELECT {} FROM matches WHERE event_key = ? AND ? IN ({}) {MATCH_ORDER}",
+        *MATCH_COLUMNS, *SLOTS
+    )
+});
 
 fn date_to_sql(date: Option<NaiveDate>) -> Option<String> {
     date.map(|d| d.format("%Y-%m-%d").to_string())
@@ -71,8 +151,8 @@ fn match_from_row(row: &sqlx::sqlite::SqliteRow) -> MatchRecord {
             .unwrap_or(CompLevel::Qualification),
         set_number: row.get("set_number"),
         match_number: row.get("match_number"),
-        red: [row.get("red1"), row.get("red2"), row.get("red3")],
-        blue: [row.get("blue1"), row.get("blue2"), row.get("blue3")],
+        red: std::array::from_fn(|i| row.get(format!("red{}", i + 1).as_str())),
+        blue: std::array::from_fn(|i| row.get(format!("blue{}", i + 1).as_str())),
         red_score: row.get("red_score"),
         blue_score: row.get("blue_score"),
         winner: row.get("winner"),
@@ -313,73 +393,45 @@ impl SqliteRepo {
         now: DateTime<Utc>,
     ) -> Result<()> {
         let ts = to_sql(now);
-        sqlx::query(
-            "INSERT INTO matches (tba_key, event_key, comp_level, set_number, match_number, \
-                                  red1, red2, red3, blue1, blue2, blue3, \
-                                  red_score, blue_score, winner, played, \
-                                  scheduled_at, actual_at, created_at, updated_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) \
-             ON CONFLICT (tba_key) DO UPDATE SET \
-                red1 = excluded.red1, red2 = excluded.red2, red3 = excluded.red3, \
-                blue1 = excluded.blue1, blue2 = excluded.blue2, blue3 = excluded.blue3, \
-                red_score = excluded.red_score, blue_score = excluded.blue_score, \
-                winner = excluded.winner, played = excluded.played, \
-                scheduled_at = excluded.scheduled_at, actual_at = excluded.actual_at, \
-                updated_at = excluded.updated_at",
-        )
-        .bind(&record.key)
-        .bind(&record.event_key)
-        .bind(record.comp_level.as_str())
-        .bind(record.set_number)
-        .bind(record.match_number)
-        .bind(record.red[0])
-        .bind(record.red[1])
-        .bind(record.red[2])
-        .bind(record.blue[0])
-        .bind(record.blue[1])
-        .bind(record.blue[2])
-        .bind(record.red_score)
-        .bind(record.blue_score)
-        .bind(&record.winner)
-        .bind(record.played as i64)
-        .bind(record.scheduled_at.map(to_sql))
-        .bind(record.actual_at.map(to_sql))
-        .bind(&ts)
-        .bind(&ts)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| query_err("upserting match", e))?;
+        let mut query = sqlx::query(UPSERT_MATCH.as_str())
+            .bind(&record.key)
+            .bind(&record.event_key)
+            .bind(record.comp_level.as_str())
+            .bind(record.set_number)
+            .bind(record.match_number);
+        for slot in record.red.iter().chain(&record.blue) {
+            query = query.bind(*slot);
+        }
+        query
+            .bind(record.red_score)
+            .bind(record.blue_score)
+            .bind(&record.winner)
+            .bind(record.played as i64)
+            .bind(record.scheduled_at.map(to_sql))
+            .bind(record.actual_at.map(to_sql))
+            .bind(&ts)
+            .bind(&ts)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| query_err("upserting match", e))?;
         Ok(())
     }
 
     pub(crate) async fn match_by_key_impl(&self, key: &str) -> Result<Option<MatchRecord>> {
-        let row = sqlx::query(
-            "SELECT tba_key, event_key, comp_level, set_number, match_number, \
-                    red1, red2, red3, blue1, blue2, blue3, red_score, blue_score, winner, played, \
-                    scheduled_at, actual_at \
-             FROM matches WHERE tba_key = ?",
-        )
-        .bind(key)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| query_err("loading match", e))?;
+        let row = sqlx::query(MATCH_BY_KEY.as_str())
+            .bind(key)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| query_err("loading match", e))?;
         Ok(row.as_ref().map(match_from_row))
     }
 
     pub(crate) async fn event_matches_impl(&self, event_key: &str) -> Result<Vec<MatchRecord>> {
-        let rows = sqlx::query(
-            "SELECT tba_key, event_key, comp_level, set_number, match_number, \
-                    red1, red2, red3, blue1, blue2, blue3, red_score, blue_score, winner, played, \
-                    scheduled_at, actual_at \
-             FROM matches WHERE event_key = ? \
-             ORDER BY CASE comp_level WHEN 'qm' THEN 0 WHEN 'ef' THEN 1 WHEN 'qf' THEN 2 \
-                      WHEN 'sf' THEN 3 ELSE 4 END, \
-                      set_number, match_number",
-        )
-        .bind(event_key)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| query_err("listing matches", e))?;
+        let rows = sqlx::query(EVENT_MATCHES.as_str())
+            .bind(event_key)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| query_err("listing matches", e))?;
         Ok(rows.iter().map(match_from_row).collect())
     }
 
@@ -388,22 +440,12 @@ impl SqliteRepo {
         event_key: &str,
         team_number: i32,
     ) -> Result<Vec<MatchRecord>> {
-        let rows = sqlx::query(
-            "SELECT tba_key, event_key, comp_level, set_number, match_number, \
-                    red1, red2, red3, blue1, blue2, blue3, red_score, blue_score, winner, played, \
-                    scheduled_at, actual_at \
-             FROM matches \
-             WHERE event_key = ? \
-               AND ? IN (red1, red2, red3, blue1, blue2, blue3) \
-             ORDER BY CASE comp_level WHEN 'qm' THEN 0 WHEN 'ef' THEN 1 WHEN 'qf' THEN 2 \
-                      WHEN 'sf' THEN 3 ELSE 4 END, \
-                      set_number, match_number",
-        )
-        .bind(event_key)
-        .bind(team_number)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| query_err("listing team matches", e))?;
+        let rows = sqlx::query(TEAM_MATCHES.as_str())
+            .bind(event_key)
+            .bind(team_number)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| query_err("listing team matches", e))?;
         Ok(rows.iter().map(match_from_row).collect())
     }
 

@@ -1675,9 +1675,9 @@ mod flow_tests {
             comp_level: CompLevel::Qualification,
             set_number: 1,
             match_number: number,
-            // Only 10101 and 254 are on the synced roster; 1-4 are not.
-            red: [Some(10101), Some(254), Some(1)],
-            blue: [Some(2), Some(3), Some(4)],
+            // Only 10101 and 254 are on the synced roster; 1 and 2 are not.
+            red: [Some(10101), Some(254)],
+            blue: [Some(1), Some(2)],
             red_score: None,
             blue_score: None,
             winner: None,
@@ -2480,12 +2480,12 @@ mod flow_tests {
 
     #[tokio::test]
     async fn a_robot_the_roster_has_not_synced_can_be_scouted() {
-        // Team 3 is in the TBA schedule but not yet in any FIRST roster.
+        // Team 2 is in the TBA schedule but not yet in any FIRST roster.
         let (state, cookies) = scouting().await;
         let response = post(
             &state,
             "/api/submission",
-            &observation_form(3, RECORD_ID, GOOD_ANSWERS),
+            &observation_form(2, RECORD_ID, GOOD_ANSWERS),
             Some(&cookies),
         )
         .await;
@@ -2562,14 +2562,19 @@ mod flow_tests {
         let body = text(response).await;
 
         assert!(body.contains("Assignments · This Weekend"), "{body}");
-        assert!(body.contains("<strong>2 of 6</strong> robots in upcoming matches"));
+        assert!(body.contains("<strong>2 of 4</strong> robots in upcoming matches"));
+        // FTC: two a side, so the header and every row stop at 2.
+        assert!(body.contains(r#"class="blue">Blue 2</th>"#), "{body}");
+        assert!(!body.contains("Red 3") && !body.contains("Blue 3"));
+        assert!(body.contains(r#"style="--alliance-size: 2""#));
         let q2 = &body[body.find(r#"id="2026now_qm2""#).expect("Q2 row")..];
         let q2 = &q2[..q2.find("</tr>").unwrap()];
         assert!(q2.contains("Device 0191f7ac"), "an unnamed tablet: {q2}");
         assert!(q2.contains(r#"<span class="slot-kind">tablet</span>"#));
         assert!(q2.contains(">Sam<"));
         assert!(q2.contains(r#"<span class="slot-name">Team 254</span>"#));
-        assert_eq!(q2.matches("Unassigned").count(), 4);
+        // The two robots nobody has.
+        assert_eq!(q2.matches("Unassigned").count(), 2);
 
         // Q1 is played: still listed, folded away below.
         let played = body.find(r#"id="played""#).expect("played section");
@@ -2676,7 +2681,7 @@ mod flow_tests {
 
         let body = text(get(&state, location(&response), Some(&admin)).await).await;
         assert!(body.contains("Saved Q2."));
-        assert!(body.contains("<strong>2 of 6</strong>"));
+        assert!(body.contains("<strong>2 of 4</strong>"));
     }
 
     #[tokio::test]
@@ -3423,8 +3428,8 @@ mod flow_tests {
         let (state, admin) = after_q1().await;
         let body = text(get(&state, "/lead-scout/assignments", Some(&admin)).await).await;
 
-        assert!(body.contains("<strong>1 of 6</strong> robots in played matches were recorded."));
-        assert!(body.contains("Played matches (1) · 5 not scouted"));
+        assert!(body.contains("<strong>1 of 4</strong> robots in played matches were recorded."));
+        assert!(body.contains("Played matches (1) · 3 not scouted"));
 
         let q1 = &body[body.find(r#"id="2026now_qm1""#).expect("Q1 row")..];
         let q1 = &q1[..q1.find("</tr>").unwrap()];
@@ -4398,8 +4403,8 @@ mod flow_tests {
             comp_level: CompLevel::Qualification,
             set_number: 1,
             match_number: 7,
-            red: [Some(254), None, None],
-            blue: [None, None, None],
+            red: [Some(254), None],
+            blue: [None, None],
             red_score: None,
             blue_score: None,
             winner: None,

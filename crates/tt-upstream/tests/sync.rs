@@ -244,7 +244,7 @@ async fn matches_record_scores_only_when_played() {
     assert!(played.played);
     assert_eq!(played.red_score, Some(88));
     assert_eq!(played.winner.as_deref(), Some("red"));
-    assert_eq!(played.red, [Some(10101), Some(254), Some(1)]);
+    assert_eq!(played.red, [Some(10101), Some(254)]);
 
     let upcoming = &matches[1];
     assert!(!upcoming.played);
@@ -292,9 +292,10 @@ async fn a_team_schedule_contains_only_that_teams_matches() {
     let ours = repo.team_matches("2026mabil", 10101).await.expect("query");
     assert_eq!(ours.len(), 2);
     assert_eq!(ours[0].alliance_of(10101), Some("red"));
-    assert_eq!(ours[0].partners_of(10101), vec![254, 1]);
+    // The stub is FRC, three a side; only the first ALLIANCE_SIZE are kept.
+    assert_eq!(ours[0].partners_of(10101), vec![254]);
     // Q2 puts us in a different slot; partners must follow.
-    assert_eq!(ours[1].partners_of(10101), vec![2, 5]);
+    assert_eq!(ours[1].partners_of(10101), vec![2]);
 }
 
 #[tokio::test]

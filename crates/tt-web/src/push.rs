@@ -15,7 +15,8 @@
 //!   - 401 not signed in, and no token from this device,
 //!   - 409 another schema (S11, `?schema=`, as for the pull),
 //!   - 413 more than [`MAX_PER_PUSH`] entries,
-//!   - 422 not a push, with why,
+//!   - 422 not a push, with why, or one of another outbox version
+//!     ([`tt_core::outbox::OUTBOX_VERSION`]),
 //!   - 503 storage down; nothing after the first failure was tried.
 
 use std::collections::HashMap;
@@ -65,6 +66,13 @@ pub async fn push(
             );
         }
     };
+    if push.is_other_version() {
+        return refuse(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "this outbox was saved by another version of TealTeam; \
+             hand it to the lead scout as a file",
+        );
+    }
     if push.observations.len() > MAX_PER_PUSH {
         return refuse(
             StatusCode::PAYLOAD_TOO_LARGE,
@@ -363,8 +371,8 @@ mod tests {
             comp_level: CompLevel::Qualification,
             set_number: 1,
             match_number: 2,
-            red: [Some(10101), Some(254), Some(1)],
-            blue: [Some(2), Some(3), Some(4)],
+            red: [Some(254), Some(1)],
+            blue: [Some(2), Some(3)],
             red_score: None,
             blue_score: None,
             winner: None,
@@ -626,19 +634,17 @@ mod tests {
 
         // Refusals of the whole push say why, and never redirect.
         let push = |n: usize| {
-            serde_json::to_string(&Push {
-                observations: vec![
-                    QueuedObservation {
-                        client_record_id: MINE.into(),
-                        match_key: "2026now_qm2".into(),
-                        team_number: 254,
-                        payload: Payload::new(),
-                        schema_version: 1,
-                        observed_at: Utc::now(),
-                    };
-                    n
-                ],
-            })
+            serde_json::to_string(&Push::new(vec![
+                QueuedObservation {
+                    client_record_id: MINE.into(),
+                    match_key: "2026now_qm2".into(),
+                    team_number: 254,
+                    payload: Payload::new(),
+                    schema_version: 1,
+                    observed_at: Utc::now(),
+                };
+                n
+            ]))
             .unwrap()
         };
         let status = |reply: Reply| reply.status;
@@ -667,6 +673,15 @@ mod tests {
             ),
             422
         );
+        // The FRC build's outbox (version 1) is refused whole, not misread.
+        let mut frc: serde_json::Value = serde_json::from_str(&push(1)).unwrap();
+        frc["version"] = 1.into();
+        let refused = (&sam)
+            .post_json("/api/sync/push", frc.to_string())
+            .await
+            .unwrap();
+        assert_eq!(refused.status, 422);
+        assert!(refused.body.contains("another version"), "{}", refused.body);
         assert_eq!(
             status(
                 (&sam)
@@ -977,16 +992,14 @@ mod tests {
             .await
             .unwrap();
         let saved = observation(MINE, 254);
-        let push = serde_json::to_string(&Push {
-            observations: vec![QueuedObservation {
-                client_record_id: MINE.into(),
-                match_key: saved.match_key,
-                team_number: saved.team_number,
-                payload: saved.payload,
-                schema_version: saved.schema_version,
-                observed_at: saved.observed_at,
-            }],
-        })
+        let push = serde_json::to_string(&Push::new(vec![QueuedObservation {
+            client_record_id: MINE.into(),
+            match_key: saved.match_key,
+            team_number: saved.team_number,
+            payload: saved.payload,
+            schema_version: saved.schema_version,
+            observed_at: saved.observed_at,
+        }]))
         .unwrap();
         for nobody in [&sam, &anonymous] {
             assert_eq!(

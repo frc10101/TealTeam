@@ -44,10 +44,10 @@ execFileSync("sqlite3", [`${D}/t.db`, `
     (10101, 'Teal Team', 'x', 'x'), (254, 'The Cheesy Poofs', 'x', 'x'), (1678, 'Citrus Circuits', 'x', 'x');
   INSERT INTO event_teams (event_key, team_number, created_at) VALUES
     ('2026c8', 10101, 'x'), ('2026c8', 254, 'x'), ('2026c8', 1678, 'x');
-  INSERT INTO matches (tba_key, event_key, comp_level, match_number, red1, red2, red3, blue1, blue2, blue3, played, scheduled_at, created_at, updated_at) VALUES
-    ('2026c8_qm1', '2026c8', 'qm', 1, 10101, 254, 1, 1678, 2, 3, 1, '${at(14)}', 'x', 'x'),
-    ('2026c8_qm2', '2026c8', 'qm', 2, 1, 2, 254, 10101, 3, 4, 0, '${at(15)}', 'x', 'x'),
-    ('2026c8_qm3', '2026c8', 'qm', 3, 1, 2, 3, 4, 1678, 10101, 0, '${at(16)}', 'x', 'x');
+  INSERT INTO matches (tba_key, event_key, comp_level, match_number, red1, red2, blue1, blue2, played, scheduled_at, created_at, updated_at) VALUES
+    ('2026c8_qm1', '2026c8', 'qm', 1, 10101, 254, 1678, 2, 1, '${at(14)}', 'x', 'x'),
+    ('2026c8_qm2', '2026c8', 'qm', 2, 1, 254, 10101, 3, 0, '${at(15)}', 'x', 'x'),
+    ('2026c8_qm3', '2026c8', 'qm', 3, 1, 2, 1678, 10101, 0, '${at(16)}', 'x', 'x');
   INSERT INTO scout_assignments (match_key, team_number, event_key, scouter_id, created_at, updated_at) VALUES
     ('2026c8_qm1', 254, '2026c8', 1, 'x', 'x'), ('2026c8_qm2', 254, '2026c8', 1, 'x', 'x'),
     ('2026c8_qm3', 1678, '2026c8', 1, 'x', 'x');
@@ -88,7 +88,7 @@ const rows = (sel) => evaluate(`[...document.querySelectorAll('${sel} .duty')].m
 await go(`${local}/submission?event=2026c8`);
 await evaluate(`navigator.serviceWorker.ready`);
 const page = await rows("#my-assignments");
-check("the page lists Q2 and Q3, in order", page.length === 2 && /^Q2 · Red 3/.test(page[0]) && /^Q3 · Blue 2/.test(page[1]), JSON.stringify(page));
+check("the page lists Q2 and Q3, in order", page.length === 2 && /^Q2 · Red 2/.test(page[0]) && /^Q3 · Blue 1/.test(page[1]), JSON.stringify(page));
 check("each row has the event's clock time", page.every((r) => /\d:\d\d [AP]M C[DS]T/.test(r)), JSON.stringify(page));
 const copy = await kept();
 check("the list is kept on the device", copy && copy.scout === "Sam" && copy.upcoming.length === 2 && copy.missed.length === 1 && copy.savedAt > 0, JSON.stringify(copy));

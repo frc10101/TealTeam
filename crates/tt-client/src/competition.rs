@@ -6,9 +6,11 @@
 //! backslash continuation removes the newline, and a line comment would eat
 //! the rest of the statement while staying valid SQL.
 
+use std::sync::LazyLock;
+
 use chrono::{DateTime, NaiveDate, Utc};
-use rusqlite::{OptionalExtension, Row, params};
-use tt_core::matches::CompLevel;
+use rusqlite::{OptionalExtension, Row, ToSql, params};
+use tt_core::matches::{ALLIANCE_SIZE, Alliance, CompLevel, slot_names};
 use tt_core::records::{Event, MatchRecord, Team, TeamEventStats};
 use tt_repo::Result;
 
@@ -53,6 +55,15 @@ fn team_from_row(row: &Row) -> rusqlite::Result<Team> {
     })
 }
 
+/// One alliance's slots, `red1` to `red<N>`.
+fn slots(row: &Row, color: &str) -> rusqlite::Result<Alliance> {
+    let mut out = [None; ALLIANCE_SIZE];
+    for (i, slot) in out.iter_mut().enumerate() {
+        *slot = row.get(format!("{color}{}", i + 1).as_str())?;
+    }
+    Ok(out)
+}
+
 fn match_from_row(row: &Row) -> rusqlite::Result<MatchRecord> {
     Ok(MatchRecord {
         key: row.get("tba_key")?,
@@ -63,8 +74,8 @@ fn match_from_row(row: &Row) -> rusqlite::Result<MatchRecord> {
             .unwrap_or(CompLevel::Qualification),
         set_number: row.get("set_number")?,
         match_number: row.get("match_number")?,
-        red: [row.get("red1")?, row.get("red2")?, row.get("red3")?],
-        blue: [row.get("blue1")?, row.get("blue2")?, row.get("blue3")?],
+        red: slots(row, "red")?,
+        blue: slots(row, "blue")?,
         red_score: row.get("red_score")?,
         blue_score: row.get("blue_score")?,
         winner: row.get("winner")?,
@@ -104,9 +115,55 @@ fn stats_from_row(row: &Row) -> rusqlite::Result<TeamEventStats> {
 const EVENT_COLUMNS: &str = "tba_key, name, location, timezone, start_date, end_date, \
                              event_code, event_type, district_key, week";
 
-const MATCH_COLUMNS: &str = "tba_key, event_key, comp_level, set_number, match_number, \
-                             red1, red2, red3, blue1, blue2, blue3, red_score, blue_score, \
-                             winner, played, scheduled_at, actual_at";
+/// `red1, red2, …, blue<N>`: one column per slot (`tt_core::ALLIANCE_SIZE`).
+static SLOTS: LazyLock<String> = LazyLock::new(|| slot_names().join(", "));
+
+static MATCH_COLUMNS: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "tba_key, event_key, comp_level, set_number, match_number, {}, \
+         red_score, blue_score, winner, played, scheduled_at, actual_at",
+        *SLOTS
+    )
+});
+
+/// As on the server: every column, and on a conflict every column but the
+/// key and `created_at`.
+static UPSERT_MATCH: LazyLock<String> = LazyLock::new(|| {
+    let slots = slot_names();
+    let tail = [
+        "red_score",
+        "blue_score",
+        "winner",
+        "played",
+        "scheduled_at",
+        "actual_at",
+    ];
+    let columns: Vec<&str> = [
+        "tba_key",
+        "event_key",
+        "comp_level",
+        "set_number",
+        "match_number",
+    ]
+    .into_iter()
+    .chain(slots.iter().map(String::as_str))
+    .chain(tail)
+    .chain(["created_at", "updated_at"])
+    .collect();
+    let updated = slots
+        .iter()
+        .map(String::as_str)
+        .chain(tail)
+        .chain(["updated_at"])
+        .map(|c| format!("{c} = excluded.{c}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        "INSERT INTO matches ({}) VALUES ({}) ON CONFLICT (tba_key) DO UPDATE SET {updated}",
+        columns.join(", "),
+        vec!["?"; columns.len()].join(", "),
+    )
+});
 
 /// Playing order, as `event_matches` and `team_matches` sort on the server.
 const MATCH_ORDER: &str = "ORDER BY CASE comp_level WHEN 'qm' THEN 0 WHEN 'ef' THEN 1 \
@@ -302,42 +359,38 @@ impl ClientRepo {
 
     pub(crate) fn upsert_match_impl(&self, record: &MatchRecord, now: DateTime<Utc>) -> Result<()> {
         let ts = to_sql(now);
+        let level = record.comp_level.as_str();
+        let played = record.played as i64;
+        let (scheduled, actual) = (
+            record.scheduled_at.map(to_sql),
+            record.actual_at.map(to_sql),
+        );
+        let mut values: Vec<&dyn ToSql> = vec![
+            &record.key,
+            &record.event_key,
+            &level,
+            &record.set_number,
+            &record.match_number,
+        ];
+        values.extend(
+            record
+                .red
+                .iter()
+                .chain(&record.blue)
+                .map(|s| s as &dyn ToSql),
+        );
+        values.extend([
+            &record.red_score as &dyn ToSql,
+            &record.blue_score,
+            &record.winner,
+            &played,
+            &scheduled,
+            &actual,
+            &ts,
+            &ts,
+        ]);
         self.conn
-            .execute(
-                "INSERT INTO matches (tba_key, event_key, comp_level, set_number, match_number, \
-                                      red1, red2, red3, blue1, blue2, blue3, \
-                                      red_score, blue_score, winner, played, \
-                                      scheduled_at, actual_at, created_at, updated_at) \
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) \
-                 ON CONFLICT (tba_key) DO UPDATE SET \
-                    red1 = excluded.red1, red2 = excluded.red2, red3 = excluded.red3, \
-                    blue1 = excluded.blue1, blue2 = excluded.blue2, blue3 = excluded.blue3, \
-                    red_score = excluded.red_score, blue_score = excluded.blue_score, \
-                    winner = excluded.winner, played = excluded.played, \
-                    scheduled_at = excluded.scheduled_at, actual_at = excluded.actual_at, \
-                    updated_at = excluded.updated_at",
-                params![
-                    record.key,
-                    record.event_key,
-                    record.comp_level.as_str(),
-                    record.set_number,
-                    record.match_number,
-                    record.red[0],
-                    record.red[1],
-                    record.red[2],
-                    record.blue[0],
-                    record.blue[1],
-                    record.blue[2],
-                    record.red_score,
-                    record.blue_score,
-                    record.winner,
-                    record.played as i64,
-                    record.scheduled_at.map(to_sql),
-                    record.actual_at.map(to_sql),
-                    ts,
-                    ts,
-                ],
-            )
+            .execute(UPSERT_MATCH.as_str(), values.as_slice())
             .ctx("upserting match")?;
         Ok(())
     }
@@ -345,7 +398,7 @@ impl ClientRepo {
     pub(crate) fn match_by_key_impl(&self, key: &str) -> Result<Option<MatchRecord>> {
         self.conn
             .query_row(
-                &format!("SELECT {MATCH_COLUMNS} FROM matches WHERE tba_key = ?"),
+                &format!("SELECT {} FROM matches WHERE tba_key = ?", *MATCH_COLUMNS),
                 [key],
                 match_from_row,
             )
@@ -355,7 +408,10 @@ impl ClientRepo {
 
     pub(crate) fn event_matches_impl(&self, event_key: &str) -> Result<Vec<MatchRecord>> {
         self.all(
-            &format!("SELECT {MATCH_COLUMNS} FROM matches WHERE event_key = ? {MATCH_ORDER}"),
+            &format!(
+                "SELECT {} FROM matches WHERE event_key = ? {MATCH_ORDER}",
+                *MATCH_COLUMNS
+            ),
             [event_key],
             match_from_row,
             "listing matches",
@@ -369,9 +425,8 @@ impl ClientRepo {
     ) -> Result<Vec<MatchRecord>> {
         self.all(
             &format!(
-                "SELECT {MATCH_COLUMNS} FROM matches \
-                 WHERE event_key = ? AND ? IN (red1, red2, red3, blue1, blue2, blue3) \
-                 {MATCH_ORDER}"
+                "SELECT {} FROM matches WHERE event_key = ? AND ? IN ({}) {MATCH_ORDER}",
+                *MATCH_COLUMNS, *SLOTS
             ),
             params![event_key, team_number],
             match_from_row,

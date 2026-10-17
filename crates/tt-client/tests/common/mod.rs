@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 use chrono::{DateTime, NaiveDate, TimeZone, Utc};
-use tt_core::matches::CompLevel;
+use tt_core::matches::{ALLIANCE_SIZE, CompLevel};
 use tt_core::records::{Event, MatchRecord, Team};
 use tt_core::season::{Payload, Value};
 use tt_repo::{LocalRepo, NewObservation, NewUpstream};
@@ -71,7 +71,12 @@ pub fn team(number: i32, name: &str) -> Team {
     }
 }
 
-pub fn game(event_key: &str, number: i32, red: [i32; 3], blue: [i32; 3]) -> MatchRecord {
+pub fn game(
+    event_key: &str,
+    number: i32,
+    red: [i32; ALLIANCE_SIZE],
+    blue: [i32; ALLIANCE_SIZE],
+) -> MatchRecord {
     MatchRecord {
         key: format!("{event_key}_qm{number}"),
         event_key: event_key.into(),

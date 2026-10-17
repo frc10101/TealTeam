@@ -39,8 +39,8 @@ execFileSync("sqlite3", [`${D}/t.db`, `
 INSERT INTO events (tba_key, name, start_date, end_date, created_at, updated_at) VALUES ('2026demo', 'Demo Regional', '${today}', '${today}', 'x', 'x');
 INSERT INTO teams (team_number, name, created_at, updated_at) VALUES (254, 'The Cheesy Poofs', 'x', 'x');
 INSERT INTO event_teams (event_key, team_number, created_at) VALUES ('2026demo', 254, 'x');
-INSERT INTO matches (tba_key, event_key, comp_level, match_number, red1, red2, red3, blue1, blue2, blue3, played, created_at, updated_at)
-  VALUES ('2026demo_qm2', '2026demo', 'qm', 2, 254, 1, 2, 3, 4, 5, 0, 'x', 'x');`]);
+INSERT INTO matches (tba_key, event_key, comp_level, match_number, red1, red2, blue1, blue2, played, created_at, updated_at)
+  VALUES ('2026demo_qm2', '2026demo', 'qm', 2, 254, 1, 2, 3, 0, 'x', 'x');`]);
 
 chrome = spawn("chromium", ["--headless=new", "--disable-gpu", `--remote-debugging-port=${CDP}`, `--user-data-dir=${D}/chr`, "about:blank"], { stdio: "ignore" });
 for (let i = 0; i < 80; i++) { try { await fetch(`http://127.0.0.1:${CDP}/json/version`); break; } catch { await sleep(100); } }
@@ -101,7 +101,7 @@ check("it reads Q2 · Team 254", (await evaluate(`document.querySelector("[data-
 await evaluate(`document.querySelector("[data-handoff-show]").click()`);
 check("the code shows", await until(`document.querySelectorAll("[data-handoff-frames] svg.qr").length > 0`));
 const texts = await evaluate(`[...document.querySelectorAll("[data-handoff-frames] svg.qr")].map((s) => s.dataset.text)`);
-check("in our format", texts.every((t) => /^TT1:H:[0-9A-F]{8}:\d+\/\d+:/.test(t)), `${texts.length} part(s)`);
+check("in our format", texts.every((t) => /^TT2:H:[0-9A-F]{8}:\d+\/\d+:/.test(t)), `${texts.length} part(s)`);
 check("no horizontal scroll at 360px", await evaluate(`document.documentElement.scrollWidth <= 360`));
 await page(`${D}/tablet.png`);
 // Each part, photographed.

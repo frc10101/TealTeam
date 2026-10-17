@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use chrono::{DateTime, NaiveDate, TimeZone, Utc};
 use tt_client::ClientRepo;
 use tt_client::pages::render;
-use tt_core::matches::CompLevel;
+use tt_core::matches::{ALLIANCE_SIZE, CompLevel};
 use tt_core::notes::{self, Notes};
 use tt_core::records::{Event, MatchRecord, Team, TeamEventStats};
 use tt_core::review::Decision;
@@ -104,7 +104,7 @@ fn team(number: i32, name: &str) -> Team {
     }
 }
 
-fn game(number: i32, red: [i32; 3], blue: [i32; 3]) -> MatchRecord {
+fn game(number: i32, red: [i32; ALLIANCE_SIZE], blue: [i32; ALLIANCE_SIZE]) -> MatchRecord {
     MatchRecord {
         key: format!("2026here_qm{number}"),
         event_key: "2026here".into(),
@@ -173,10 +173,10 @@ async fn fixture(dir: &Dir, season: &SeasonSchema) -> (SqliteRepo, ClientRepo) {
         pi.link_event_team("2026here", number, at(0)).await.unwrap();
     }
     pi.link_event_team("2026away", 254, at(0)).await.unwrap();
-    pi.upsert_match(&game(1, [254, 10101, 1678], [4, 5, 6]), at(0))
+    pi.upsert_match(&game(1, [254, 10101], [4, 5]), at(0))
         .await
         .unwrap();
-    pi.upsert_match(&game(2, [4, 5, 6], [254, 10101, 1678]), at(0))
+    pi.upsert_match(&game(2, [4, 5], [254, 10101]), at(0))
         .await
         .unwrap();
     let stats = TeamEventStats {

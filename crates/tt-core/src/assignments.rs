@@ -608,9 +608,13 @@ fn long_run(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::matches::CompLevel;
+    use crate::matches::{ALLIANCE_SIZE, CompLevel, ROBOTS_PER_MATCH};
 
-    fn scheduled(number: i32, red: [i32; 3], blue: [i32; 3]) -> MatchRecord {
+    fn scheduled(
+        number: i32,
+        red: [i32; ALLIANCE_SIZE],
+        blue: [i32; ALLIANCE_SIZE],
+    ) -> MatchRecord {
         MatchRecord {
             key: format!("2026mabil_qm{number}"),
             event_key: "2026mabil".into(),
@@ -665,40 +669,37 @@ mod tests {
     }
 
     #[test]
-    fn six_scouts_cover_every_robot_and_keep_rotating() {
-        let matches = [
-            scheduled(1, [1, 2, 3], [4, 5, 6]),
-            scheduled(2, [7, 8, 9], [10, 11, 12]),
-        ];
-        let pool: Vec<_> = (1..=8).map(scout).collect();
+    fn more_scouts_than_robots_cover_every_robot_and_keep_rotating() {
+        let matches = [scheduled(1, [1, 2], [3, 4]), scheduled(2, [5, 6], [7, 8])];
+        let pool: Vec<_> = (1..=6).map(scout).collect();
         let picks = distribute(&matches, &[], &pool, None);
 
-        assert_eq!(picks.len(), 12);
+        assert_eq!(picks.len(), 2 * ROBOTS_PER_MATCH);
         let first: Vec<_> = picked(&picks, 1).iter().map(|p| p.1).collect();
-        assert_eq!(first, (1..=6).map(scout).collect::<Vec<_>>());
+        assert_eq!(first, (1..=4).map(scout).collect::<Vec<_>>());
         // The two who sat out Q1 start Q2.
         let second: Vec<_> = picked(&picks, 2).iter().map(|p| p.1).collect();
-        assert_eq!(second, [7, 8, 1, 2, 3, 4].map(scout));
+        assert_eq!(second, [5, 6, 1, 2].map(scout));
     }
 
     #[test]
     fn nobody_is_handed_two_robots_in_one_match() {
-        let matches = [scheduled(1, [1, 2, 3], [4, 5, 6])];
-        let pool = [scout(1), scout(2), scout(3), scout(4)];
+        let matches = [scheduled(1, [1, 2], [3, 4])];
+        let pool = [scout(1), scout(2), scout(3)];
         let picks = distribute(&matches, &[], &pool, None);
 
         assert_eq!(
             picked(&picks, 1),
-            [(1, scout(1)), (2, scout(2)), (3, scout(3)), (4, scout(4))],
-            "blue 2 and blue 3 stay open rather than doubling anyone up"
+            [(1, scout(1)), (2, scout(2)), (3, scout(3))],
+            "blue 2 stays open rather than doubling anyone up"
         );
     }
 
     #[test]
     fn what_is_already_assigned_is_left_alone_and_its_scout_is_busy() {
-        let matches = [scheduled(1, [1, 2, 3], [4, 5, 6])];
-        // Sam (scout 1) already has team 5.
-        let existing = [assigned("2026mabil_qm1", 5)];
+        let matches = [scheduled(1, [1, 2], [3, 4])];
+        // Sam (scout 1) already has team 4.
+        let existing = [assigned("2026mabil_qm1", 4)];
         let picks = distribute(&matches, &existing, &[scout(1), scout(2)], None);
 
         assert_eq!(picked(&picks, 1), [(1, scout(2))]);
@@ -706,7 +707,7 @@ mod tests {
 
     #[test]
     fn a_stale_assignment_frees_neither_its_robot_nor_blocks_its_scout() {
-        let matches = [scheduled(1, [1, 2, 3], [4, 5, 6])];
+        let matches = [scheduled(1, [1, 2], [3, 4])];
         // Team 99 left the match; Sam is free to take a robot that is in it.
         let existing = [assigned("2026mabil_qm1", 99)];
         let picks = distribute(&matches, &existing, &[scout(1)], None);
@@ -715,17 +716,17 @@ mod tests {
 
     #[test]
     fn empty_slots_and_an_empty_pool_hand_out_nothing() {
-        let mut playoff = scheduled(1, [1, 2, 3], [4, 5, 6]);
-        playoff.red = [None; 3];
-        playoff.blue = [None; 3];
+        let mut playoff = scheduled(1, [1, 2], [3, 4]);
+        playoff.red = [None; ALLIANCE_SIZE];
+        playoff.blue = [None; ALLIANCE_SIZE];
         assert!(distribute(&[playoff], &[], &[scout(1)], None).is_empty());
-        assert!(distribute(&[scheduled(2, [1, 2, 3], [4, 5, 6])], &[], &[], None).is_empty());
+        assert!(distribute(&[scheduled(2, [1, 2], [3, 4])], &[], &[], None).is_empty());
     }
 
     fn season(played: i32, to_come: i32) -> Vec<MatchRecord> {
         (1..=played + to_come)
             .map(|n| {
-                let mut m = scheduled(n, [1, 2, 3], [4, 5, 6]);
+                let mut m = scheduled(n, [1, 2], [3, 4]);
                 m.played = n <= played;
                 m
             })
@@ -791,28 +792,29 @@ mod tests {
 
     #[test]
     fn a_latecomer_catches_up_without_going_an_hour_without_a_break() {
-        // Six scouts did all of Q1-Q10; a seventh arrives for Q11-Q40.
+        // One scout per robot did all of Q1-Q10; one more arrives for Q11-Q40.
+        let robots = ROBOTS_PER_MATCH as i64;
         let schedule = season(10, 30);
         let existing: Vec<_> = (1..=10)
-            .flat_map(|m| (1..=6).map(move |s| to(m, s as i32, named(s, "x"))))
+            .flat_map(|m| (1..=robots).map(move |s| to(m, s as i32, named(s, "x"))))
             .collect();
-        let pool: Vec<_> = (1..=7).map(scout).collect();
+        let pool: Vec<_> = (1..=robots + 1).map(scout).collect();
         let picks = distribute(&schedule, &existing, &pool, None);
-        assert_eq!(picks.len(), 30 * 6);
+        assert_eq!(picks.len(), 30 * ROBOTS_PER_MATCH);
 
         let all = with_picks(&existing, &picks);
-        let (run, late) = run_and_load(&schedule, &all, scout(7));
+        let (run, late) = run_and_load(&schedule, &all, scout(robots + 1));
         assert!(run <= LONGEST_RUN, "latecomer ran {run} in a row");
         let (_, early) = run_and_load(&schedule, &all, scout(1));
         assert!(
-            late > 30 * 6 / 7,
-            "the latecomer did more than a seventh: {late}"
+            late > 30 * ROBOTS_PER_MATCH / (ROBOTS_PER_MATCH + 1),
+            "the latecomer did more than an even share: {late}"
         );
         assert!(
             early > late,
             "but not more than the early ones: {early} vs {late}"
         );
-        for s in 1..=7 {
+        for s in 1..=robots + 1 {
             let (run, _) = run_and_load(&schedule[10..], &all, scout(s));
             assert!(run <= LONGEST_RUN, "scout {s} ran {run} in a row");
         }
@@ -952,19 +954,19 @@ mod tests {
 
     /// Q1 played; Q2-Q4 to come.
     fn schedule() -> Vec<MatchRecord> {
-        let mut q1 = scheduled(1, [1, 2, 3], [4, 5, 6]);
+        let mut q1 = scheduled(1, [1, 2], [3, 4]);
         q1.played = true;
         vec![
             q1,
-            scheduled(2, [1, 2, 3], [4, 5, 6]),
-            scheduled(3, [1, 2, 3], [4, 5, 6]),
-            scheduled(4, [1, 2, 3], [4, 5, 6]),
+            scheduled(2, [1, 2], [3, 4]),
+            scheduled(3, [1, 2], [3, 4]),
+            scheduled(4, [1, 2], [3, 4]),
         ]
     }
 
     #[test]
     fn the_next_duty_is_the_first_unplayed_unrecorded_assignment() {
-        let assignments = [to(4, 5, sam()), to(3, 2, sam()), to(2, 6, tablet(9))];
+        let assignments = [to(4, 3, sam()), to(3, 2, sam()), to(2, 4, tablet(9))];
         let agenda = agenda(&schedule(), &assignments, &[scout(1)], &[]);
         assert_eq!(
             agenda.next,
@@ -972,20 +974,20 @@ mod tests {
             "Q3 before Q4; Q2 is someone else's tablet"
         );
 
-        assert_eq!(agenda.upcoming, [key(3, 2), key(4, 5)], "the whole list");
+        assert_eq!(agenda.upcoming, [key(3, 2), key(4, 3)], "the whole list");
 
         let agenda = super::agenda(&schedule(), &assignments, &[scout(1)], &[key(3, 2)]);
-        assert_eq!(agenda.next, Some(key(4, 5)), "once Q3 is recorded, Q4");
-        assert_eq!(agenda.upcoming, [key(4, 5)]);
+        assert_eq!(agenda.next, Some(key(4, 3)), "once Q3 is recorded, Q4");
+        assert_eq!(agenda.upcoming, [key(4, 3)]);
     }
 
     #[test]
     fn an_assignment_to_the_tablet_counts_whoever_is_signed_in() {
-        let assignments = [to(2, 6, tablet(9))];
+        let assignments = [to(2, 4, tablet(9))];
         let me = [scout(7), AssigneeKey::Device(9)];
         assert_eq!(
             agenda(&schedule(), &assignments, &me, &[]).next,
-            Some(key(2, 6))
+            Some(key(2, 4))
         );
     }
 
@@ -1083,10 +1085,10 @@ mod tests {
 
     #[test]
     fn an_assignment_to_a_robot_that_left_the_match_is_stale() {
-        let matches = [scheduled(1, [1, 2, 3], [4, 5, 6])];
+        let matches = [scheduled(1, [1, 2], [3, 4])];
         let assignments = [
             assigned("2026mabil_qm1", 2),
-            assigned("2026mabil_qm1", 6),
+            assigned("2026mabil_qm1", 4),
             // A surrogate replaced 99 after it was assigned.
             assigned("2026mabil_qm1", 99),
         ];
@@ -1097,7 +1099,7 @@ mod tests {
 
     #[test]
     fn an_assignment_for_a_match_elsewhere_is_not_this_schedules_business() {
-        let matches = [scheduled(1, [1, 2, 3], [4, 5, 6])];
+        let matches = [scheduled(1, [1, 2], [3, 4])];
         assert!(stale(&matches, &[assigned("2026nhgrs_qm1", 99)]).is_empty());
     }
 }

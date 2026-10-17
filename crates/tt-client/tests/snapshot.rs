@@ -90,13 +90,13 @@ async fn seed(pi: &SqliteRepo) -> (i64, i64, i64) {
         pi.link_event_team("2026here", number, at(0)).await.unwrap();
     }
     pi.link_event_team("2026away", 254, at(0)).await.unwrap();
-    pi.upsert_match(&game("2026here", 1, [10101, 254, 1678], [4, 5, 6]), at(0))
+    pi.upsert_match(&game("2026here", 1, [10101, 254], [4, 5]), at(0))
         .await
         .unwrap();
-    pi.upsert_match(&game("2026here", 2, [4, 5, 6], [10101, 254, 1678]), at(0))
+    pi.upsert_match(&game("2026here", 2, [4, 5], [10101, 254]), at(0))
         .await
         .unwrap();
-    pi.upsert_match(&game("2026away", 1, [254, 5, 6], [7, 8, 9]), at(0))
+    pi.upsert_match(&game("2026away", 1, [254, 5], [7, 8]), at(0))
         .await
         .unwrap();
     for (number, rank) in [(254, 1), (10101, 2)] {
@@ -354,7 +354,7 @@ async fn writes_land_on_the_device_as_on_the_server() {
     same!(f, link_event_team("2026here", 9999, at(20))).unwrap();
     same!(
         f,
-        upsert_match(&game("2026here", 3, [9999, 254, 1678], [4, 5, 6]), at(20))
+        upsert_match(&game("2026here", 3, [9999, 254], [4, 5]), at(20))
     )
     .unwrap();
     let stats = TeamEventStats {

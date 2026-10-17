@@ -21,6 +21,7 @@ use axum::extract::{FromRequestParts, Query};
 use axum::http::request::Parts;
 use chrono::{DateTime, Utc};
 use tracing::{info, warn};
+use tt_core::Alliance;
 use tt_core::connectivity::describe_age;
 use tt_core::form::{FormErrors, RawAnswers, read_answers};
 use tt_core::notes::Notes;
@@ -139,9 +140,9 @@ pub async fn list(state: &AppState, context: &EventContext) -> RefusedList {
     }
 }
 
-/// `"Q14 · Red 254 1678 971 · Blue 2 3 4"`.
+/// `"Q14 · Red 254 1678 · Blue 2 3"`.
 fn choice(m: &MatchRecord) -> MatchChoice {
-    let side = |slots: &[Option<i32>; 3]| {
+    let side = |slots: &Alliance| {
         slots
             .iter()
             .flatten()

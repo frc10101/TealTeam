@@ -28,7 +28,7 @@ for (const f of ["t.db", "t.db-wal", "t.db-shm"]) rmSync(`${D}/${f}`, { force: t
 
 // ── TBA, on localhost ───────────────────────────────────────────────────────
 const MATCHES = JSON.stringify([{ key: "2026demo_qm1", comp_level: "qm", set_number: 1, match_number: 1,
-  alliances: { red: { score: 88, team_keys: ["frc254", "frc1678", "frc10101"] }, blue: { score: 74, team_keys: ["frc971", "frc4", "frc5"] } },
+  alliances: { red: { score: 88, team_keys: ["frc254", "frc1678"] }, blue: { score: 74, team_keys: ["frc10101", "frc971"] } },
   winning_alliance: "red" }]);
 const BODIES = { matches: MATCHES, oprs: JSON.stringify({ oprs: { frc254: 61.25 }, dprs: {}, ccwms: {} }),
   rankings: JSON.stringify({ rankings: [], sort_order_info: [] }), coprs: "{}" };
@@ -70,7 +70,7 @@ for (const [t, name] of [[254, "Poofs"], [1678, "Citrus"], [10101, "Teal"]]) {
   seed += `INSERT OR IGNORE INTO teams (team_number, name, created_at, updated_at) VALUES (${t}, '${name}', 'x', 'x');\n`;
   seed += `INSERT INTO event_teams (event_key, team_number, created_at) VALUES ('2026demo', ${t}, 'x');\n`;
 }
-seed += `INSERT INTO matches (tba_key, event_key, comp_level, match_number, red1, red2, red3, blue1, played, created_at, updated_at) VALUES ('2026demo_qm1', '2026demo', 'qm', 1, 254, 1678, 10101, 971, 0, 'x', 'x');\n`;
+seed += `INSERT INTO matches (tba_key, event_key, comp_level, match_number, red1, red2, blue1, blue2, played, created_at, updated_at) VALUES ('2026demo_qm1', '2026demo', 'qm', 1, 254, 1678, 10101, 971, 0, 'x', 'x');\n`;
 writeFileSync(`${D}/seed.sql`, seed);
 execFileSync("sqlite3", [`${D}/t.db`, `.read ${D}/seed.sql`]);
 

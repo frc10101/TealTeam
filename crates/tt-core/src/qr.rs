@@ -7,10 +7,11 @@
 //! Each frame is one QR code, and its text reads
 //!
 //! ```text
-//! TT1:H:1A2B3C4D:2/5:<base45>
+//! TT2:H:1A2B3C4D:2/5:<base45>
 //! ```
 //!
-//! - `TT1`: this format. A frame from another version is refused by name.
+//! - `TT2`: this format. A frame from another version is refused by name.
+//!   `TT1` was the FRC build's, whose matches had three robots an alliance.
 //! - `H`: the kind, one letter.
 //! - `1A2B3C4D`: the transfer's id, the CRC-32 of all of its compressed
 //!   bytes, so frames of two transfers never mix, and the whole is checked
@@ -43,7 +44,7 @@ use qrcodegen::{QrCode, QrCodeEcc};
 use thiserror::Error;
 
 /// What every frame of this format begins with.
-pub const PREFIX: &str = "TT1:";
+pub const PREFIX: &str = "TT2:";
 
 /// Compressed bytes per frame. 400 bytes are 600 base45 characters, which
 /// with the header is a version 17 code at medium error correction: 85
@@ -501,7 +502,7 @@ mod tests {
             (frame.kind, frame.index, frame.count),
             (Kind::Handoff, 1, 1)
         );
-        assert!(frames[0].starts_with("TT1:H:"));
+        assert!(frames[0].starts_with("TT2:H:"));
         assert!(
             frames[0].bytes().all(|c| BASE45.contains(&c)),
             "{}",
@@ -553,19 +554,20 @@ mod tests {
     fn foreign_and_damaged_codes_say_what_they_are() {
         assert_eq!(parse("https://example.com"), Err(QrError::NotOurs));
         assert_eq!(parse("WIFI:S:x;;"), Err(QrError::NotOurs));
+        // TT1 is the FRC build's: three robots an alliance, so refused.
         assert_eq!(
-            parse("TT2:H:00000000:1/1:00"),
-            Err(QrError::OtherVersion("TT2".into()))
+            parse("TT1:H:00000000:1/1:00"),
+            Err(QrError::OtherVersion("TT1".into()))
         );
         for bad in [
-            "TT1:H:00000000:1/1",
-            "TT1:X:00000000:1/1:00",
-            "TT1:H:0000:1/1:00",
-            "TT1:H:0000000G:1/1:00",
-            "TT1:H:00000000:2/1:00",
-            "TT1:H:00000000:0/1:00",
-            "TT1:H:00000000:1/100:00",
-            "TT1:H:00000000:one/1:00",
+            "TT2:H:00000000:1/1",
+            "TT2:X:00000000:1/1:00",
+            "TT2:H:0000:1/1:00",
+            "TT2:H:0000000G:1/1:00",
+            "TT2:H:00000000:2/1:00",
+            "TT2:H:00000000:0/1:00",
+            "TT2:H:00000000:1/100:00",
+            "TT2:H:00000000:one/1:00",
         ] {
             assert!(matches!(parse(bad), Err(QrError::Malformed(_))), "{bad}");
         }

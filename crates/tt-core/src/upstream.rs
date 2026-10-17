@@ -34,7 +34,7 @@ use serde::{Deserialize, Deserializer};
 pub const UPSTREAM_ENABLED: bool = false;
 use std::collections::HashMap;
 
-use crate::matches::CompLevel;
+use crate::matches::{ALLIANCE_SIZE, Alliance, CompLevel};
 
 /// Upstream sends `null` where a field has nothing to say -- TBA does for a
 /// match's `actual_time` until it is played -- and serde's `default` covers
@@ -357,12 +357,13 @@ impl Match {
         (self.alliances.blue.score >= 0).then_some(self.alliances.blue.score)
     }
 
-    /// The three red robots, by team number, padded with `None`.
-    pub fn red_teams(&self) -> [Option<i32>; 3] {
+    /// The red robots, by team number, padded with `None` and cut to
+    /// [`ALLIANCE_SIZE`].
+    pub fn red_teams(&self) -> Alliance {
         slots(&self.alliances.red.team_keys)
     }
 
-    pub fn blue_teams(&self) -> [Option<i32>; 3] {
+    pub fn blue_teams(&self) -> Alliance {
         slots(&self.alliances.blue.team_keys)
     }
 
@@ -379,8 +380,8 @@ impl Match {
     }
 }
 
-fn slots(keys: &[String]) -> [Option<i32>; 3] {
-    let mut out = [None; 3];
+fn slots(keys: &[String]) -> Alliance {
+    let mut out = [None; ALLIANCE_SIZE];
     for (i, slot) in out.iter_mut().enumerate() {
         *slot = keys.get(i).and_then(|k| team_number(k));
     }
@@ -909,8 +910,8 @@ mod tests {
             (m.red_score(), m.blue_score(), m.winner()),
             (None, None, None)
         );
-        assert_eq!(m.red_teams(), [Some(254), None, None]);
-        assert_eq!(m.blue_teams(), [None, None, None]);
+        assert_eq!(m.red_teams(), [Some(254), None]);
+        assert_eq!(m.blue_teams(), [None; ALLIANCE_SIZE]);
     }
 
     #[test]
@@ -954,22 +955,23 @@ mod tests {
     }
 
     #[test]
-    fn alliance_slots_are_team_numbers_padded_to_three() {
+    fn alliance_slots_are_team_numbers_cut_to_the_alliance_size() {
+        // The fixture is an FRC match, three a side: the third is dropped.
         let m = played_match();
-        assert_eq!(m.red_teams(), [Some(10101), Some(254), Some(1)]);
-        assert_eq!(m.blue_teams(), [Some(2), Some(3), Some(4)]);
+        assert_eq!(m.red_teams(), [Some(10101), Some(254)]);
+        assert_eq!(m.blue_teams(), [Some(2), Some(3)]);
     }
 
     #[test]
     fn a_short_alliance_pads_with_none_rather_than_panicking() {
-        // Surrogate and no-show situations produce two-robot alliances.
+        // Surrogate and no-show situations produce short alliances.
         let m: Match = serde_json::from_str(
             r#"{"key": "k", "alliances": {"red": {"score": -1, "team_keys": ["frc1"]},
                                           "blue": {"score": -1, "team_keys": []}}}"#,
         )
         .expect("parse");
-        assert_eq!(m.red_teams(), [Some(1), None, None]);
-        assert_eq!(m.blue_teams(), [None, None, None]);
+        assert_eq!(m.red_teams(), [Some(1), None]);
+        assert_eq!(m.blue_teams(), [None; ALLIANCE_SIZE]);
     }
 
     #[test]

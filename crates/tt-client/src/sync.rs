@@ -149,7 +149,7 @@ impl<T: Transport> SyncClient<T> {
                 .iter()
                 .map(|o| o.client_record_id.clone())
                 .collect();
-            let body = serde_json::to_string(&Push { observations })
+            let body = serde_json::to_string(&Push::new(observations))
                 .map_err(|e| RepoError::Query(format!("writing the outbox out: {e}")))?;
 
             let reply = self.transport.post_json(&path, body).await;

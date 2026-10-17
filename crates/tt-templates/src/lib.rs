@@ -28,6 +28,7 @@ pub use team::{
     EventLink, NoteLine, StatLine, SummaryLine, SummarySection, TeamAtEvent, TeamCard,
     TeamMatchLine, TeamPage, stat_lines, summary_sections, team_href,
 };
+use tt_core::Alliance;
 use tt_core::assignments::{
     self, AssigneeKey, Assignment, Reason, Sighting, SlotState, Suggestion,
 };
@@ -910,7 +911,7 @@ pub struct DeviceRow {
     pub clock_off: bool,
 }
 
-/// The six selects for one match (L2).
+/// One select per robot in one match (L2).
 #[derive(Debug, Clone)]
 pub struct MatchEditor {
     pub match_key: String,
@@ -967,7 +968,7 @@ impl MatchEditor {
         choices: &[AssigneeChoice],
         chosen: Option<&[(i32, Option<AssigneeKey>)]>,
     ) -> Self {
-        let side = |color: &'static str, station: &str, teams: &[Option<i32>; 3]| {
+        let side = |color: &'static str, station: &str, teams: &Alliance| {
             teams
                 .iter()
                 .enumerate()
@@ -1018,7 +1019,7 @@ impl MatchEditor {
     }
 }
 
-/// Matches down, the six driver stations across.
+/// Matches down, every driver station across.
 ///
 /// Upcoming matches first, since those are the ones a lead scout can still do
 /// something about; played ones follow, folded away.
@@ -1053,7 +1054,7 @@ pub struct GridRow {
     pub label: String,
     /// Opens this match's editor.
     pub edit_href: String,
-    /// Red 1-3, then blue 1-3.
+    /// Red 1 to `ALLIANCE_SIZE`, then blue.
     pub cells: Vec<GridCell>,
 }
 
@@ -1189,7 +1190,7 @@ impl AssignmentGrid {
         };
 
         let row = |m: &MatchRecord| {
-            let side = |color: &'static str, station: &str, teams: &[Option<i32>; 3]| {
+            let side = |color: &'static str, station: &str, teams: &Alliance| {
                 teams
                     .iter()
                     .enumerate()
@@ -1333,7 +1334,7 @@ pub struct Keypad {
 
 /// Choosing the match and the robot.
 ///
-/// A robot is picked from the six in the match, never from the event's list of
+/// A robot is picked from those in the match, never from the event's list of
 /// fifty: the wrong-robot entries the retired app suffered came from exactly
 /// that list. Assignments (L3-L5) will preselect a robot here rather than
 /// replace the picker.
@@ -1371,7 +1372,7 @@ pub struct AllianceSlots {
     pub slots: Vec<RobotSlot>,
 }
 
-/// One of the six driver-station positions.
+/// One of the match's driver-station positions.
 #[derive(Debug, Clone)]
 pub struct RobotSlot {
     /// `"Red 1"`.
@@ -1419,24 +1420,23 @@ impl MatchPicker {
             href: scout_href(event_key, &m.key, None),
             label: m.label(),
         };
-        let alliance =
-            |color: &'static str, station: &str, teams: &[Option<i32>; 3]| AllianceSlots {
-                color,
-                slots: teams
-                    .iter()
-                    .enumerate()
-                    .map(|(i, slot)| RobotSlot {
-                        station: format!("{station} {}", i + 1),
-                        team: slot.map(|n| n.to_string()).unwrap_or_default(),
-                        href: slot
-                            .map(|n| scout_href(event_key, &shown.key, Some(n)))
-                            .unwrap_or_default(),
-                        selected: slot.is_some() && *slot == team,
-                        recorded: slot.is_some_and(|n| recorded.contains(&n)),
-                        assigned: slot.is_some() && *slot == assigned,
-                    })
-                    .collect(),
-            };
+        let alliance = |color: &'static str, station: &str, teams: &Alliance| AllianceSlots {
+            color,
+            slots: teams
+                .iter()
+                .enumerate()
+                .map(|(i, slot)| RobotSlot {
+                    station: format!("{station} {}", i + 1),
+                    team: slot.map(|n| n.to_string()).unwrap_or_default(),
+                    href: slot
+                        .map(|n| scout_href(event_key, &shown.key, Some(n)))
+                        .unwrap_or_default(),
+                    selected: slot.is_some() && *slot == team,
+                    recorded: slot.is_some_and(|n| recorded.contains(&n)),
+                    assigned: slot.is_some() && *slot == assigned,
+                })
+                .collect(),
+        };
 
         Self {
             event_key: event_key.to_string(),
@@ -1680,6 +1680,7 @@ pub struct AccountPage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tt_core::ALLIANCE_SIZE;
     use tt_core::user::Roles;
 
     fn user(name: &str, roles: Roles) -> User {
@@ -1950,8 +1951,8 @@ mod tests {
             comp_level: tt_core::matches::CompLevel::Qualification,
             set_number: 1,
             match_number: number,
-            red: [Some(10101), Some(254), None],
-            blue: [Some(2), Some(3), Some(4)],
+            red: [Some(10101), Some(254)],
+            blue: [Some(2), None],
             red_score: None,
             blue_score: None,
             winner: None,
@@ -1999,9 +2000,9 @@ mod tests {
     }
 
     #[test]
-    fn the_picker_offers_the_six_robots_of_the_chosen_match() {
+    fn the_picker_offers_every_robot_of_the_chosen_match() {
         let matches = [scheduled(1, true), scheduled(2, false), scheduled(3, false)];
-        let picker = MatchPicker::new("2026mabil", &matches, 1, Some(254), &[3], Some(2));
+        let picker = MatchPicker::new("2026mabil", &matches, 1, Some(254), &[10101], Some(2));
 
         assert_eq!(picker.label, "Q2");
         assert_eq!(picker.options[0].label, "Q1 · played");
@@ -2009,22 +2010,20 @@ mod tests {
         assert_eq!(picker.previous.as_ref().unwrap().label, "Q1");
         assert_eq!(picker.next.as_ref().unwrap().label, "Q3");
 
-        let red = &picker.alliances[0].slots;
+        let (red, blue) = (&picker.alliances[0].slots, &picker.alliances[1].slots);
+        assert_eq!((red.len(), blue.len()), (ALLIANCE_SIZE, ALLIANCE_SIZE));
         assert_eq!(red[1].station, "Red 2");
         assert!(red[1].selected);
         assert_eq!(
             red[1].href,
             "/submission?event=2026mabil&match=2026mabil_qm2&team=254"
         );
+        assert!(red[0].recorded, "red 1 is team 10101");
         assert!(
-            red[2].team.is_empty() && red[2].href.is_empty(),
+            blue[1].team.is_empty() && blue[1].href.is_empty(),
             "an empty slot"
         );
-        assert!(picker.alliances[1].slots[1].recorded, "blue 2 is team 3");
-        assert!(
-            picker.alliances[1].slots[0].assigned,
-            "blue 1 is team 2, this scout's"
-        );
+        assert!(blue[0].assigned, "blue 1 is team 2, this scout's");
 
         let html = scouting_page(Some(picker), None);
         assert!(html.contains(r#"<ul class="alliance red""#));
@@ -2177,8 +2176,8 @@ mod tests {
         }
     }
 
-    /// Q1 played, Q2 and Q3 to come. Each has 10101, 254, and a gap on red, and
-    /// 2, 3, 4 on blue; only 10101 and 254 are on the roster.
+    /// Q1 played, Q2 and Q3 to come. Each has 10101 and 254 on red, and 2 and
+    /// a gap on blue; only 10101 and 254 are on the roster.
     fn grid(assignments: &[Assignment]) -> AssignmentGrid {
         let matches = [scheduled(1, true), scheduled(2, false), scheduled(3, false)];
         let roster = [team(10101, "Teal Team"), team(254, "Cheesy Poofs")];
@@ -2221,10 +2220,7 @@ mod tests {
             .iter()
             .map(|c| c.station.as_str())
             .collect();
-        assert_eq!(
-            stations,
-            ["Red 1", "Red 2", "Red 3", "Blue 1", "Blue 2", "Blue 3"]
-        );
+        assert_eq!(stations, ["Red 1", "Red 2", "Blue 1", "Blue 2"]);
 
         let html = assignments_page(Some(grid), "");
         assert!(html.contains(r#"<tr role="row" id="2026mabil_qm2">"#));
@@ -2247,13 +2243,13 @@ mod tests {
         assert_eq!(q2[0].assignee, "Sam");
         assert!(!q2[0].by_device && !q2[0].is_open());
 
-        assert_eq!(q2[3].assignee, "Stands Left");
-        assert!(q2[3].by_device);
-        assert!(q2[3].team_name.is_empty(), "team 2 is not on the roster");
+        assert_eq!(q2[2].assignee, "Stands Left");
+        assert!(q2[2].by_device);
+        assert!(q2[2].team_name.is_empty(), "team 2 is not on the roster");
 
         assert!(q2[1].is_open(), "254 has nobody");
         assert!(
-            q2[2].team.is_empty() && !q2[2].is_open(),
+            q2[3].team.is_empty() && !q2[3].is_open(),
             "a gap is not open"
         );
 
@@ -2272,9 +2268,9 @@ mod tests {
     #[test]
     fn coverage_counts_only_upcoming_robots() {
         // One in a played match, which no longer needs a scout.
-        let grid = grid(&[assignment(1, 254, sam()), assignment(3, 4, sam())]);
-        assert_eq!((grid.assigned, grid.assignable), (1, 10));
-        assert!(assignments_page(Some(grid), "").contains("<strong>1 of 10</strong> robots"));
+        let grid = grid(&[assignment(1, 254, sam()), assignment(3, 2, sam())]);
+        assert_eq!((grid.assigned, grid.assignable), (1, 6));
+        assert!(assignments_page(Some(grid), "").contains("<strong>1 of 6</strong> robots"));
     }
 
     #[test]
@@ -2335,7 +2331,7 @@ mod tests {
         assert_eq!(selected, ["u:1"]);
         assert_eq!(red2.options.len(), 3, "unassigned, Sam, the tablet");
         assert!(
-            editor.slots[2].field.is_empty(),
+            editor.slots[3].field.is_empty(),
             "a gap has nothing to choose"
         );
 
@@ -2390,17 +2386,17 @@ mod tests {
             ("missed", "Missed")
         );
         assert_eq!(
-            (q1[3].state, q1[3].state_label.as_str()),
+            (q1[2].state, q1[2].state_label.as_str()),
             ("unscouted", "Not scouted")
         );
-        assert_eq!(q1[2].state, "empty");
-        assert_eq!((grid.played_robots, grid.played_recorded), (5, 1));
-        assert_eq!(grid.played_unrecorded(), 4);
+        assert_eq!(q1[3].state, "empty");
+        assert_eq!((grid.played_robots, grid.played_recorded), (3, 1));
+        assert_eq!(grid.played_unrecorded(), 2);
 
         let html = assignments_page(Some(grid), "");
         assert!(html.contains(r#"class="slot red missed""#));
-        assert!(html.contains("1 of 5</strong> robots in played matches"));
-        assert!(html.contains("Played matches (1) · 4 not scouted"));
+        assert!(html.contains("1 of 3</strong> robots in played matches"));
+        assert!(html.contains("Played matches (1) · 2 not scouted"));
     }
 
     #[test]

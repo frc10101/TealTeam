@@ -224,12 +224,12 @@ async fn schedule(p: &Pair) {
     }
     same!(
         p,
-        upsert_match(&game("2026here", 1, [10101, 254, 1678], [4, 5, 6]), at(0))
+        upsert_match(&game("2026here", 1, [10101, 254], [4, 5]), at(0))
     )
     .unwrap();
     same!(
         p,
-        upsert_match(&game("2026here", 2, [4, 5, 6], [10101, 254, 1678]), at(0))
+        upsert_match(&game("2026here", 2, [4, 5], [10101, 254]), at(0))
     )
     .unwrap();
 }
@@ -294,13 +294,13 @@ async fn the_competition_graph_round_trips() {
     same!(p, upsert_team(&team(254, "Poofs"), at(1))).unwrap();
     same!(p, link_event_team("2026here", 254, at(1))).unwrap();
     same!(p, link_event_team("2026away", 254, at(1))).unwrap();
-    let mut played = game("2026here", 2, [4, 5, 6], [10101, 254, 1678]);
+    let mut played = game("2026here", 2, [4, 5], [10101, 254]);
     played.played = true;
     played.actual_at = Some(at(12));
     same!(p, upsert_match(&played, at(12))).unwrap();
     same!(
         p,
-        upsert_match(&game("2026away", 1, [254, 5, 6], [7, 8, 9]), at(12))
+        upsert_match(&game("2026away", 1, [254, 5], [7, 8]), at(12))
     )
     .unwrap();
 

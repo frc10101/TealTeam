@@ -507,7 +507,7 @@ async fn assignment_outcome(
     }
 }
 
-/// `POST /api/assignments/match`: set one match's six robots.
+/// `POST /api/assignments/match`: set every robot of one match.
 pub async fn save_match_assignments(
     State(state): State<AppState>,
     LeadScout(user): LeadScout,

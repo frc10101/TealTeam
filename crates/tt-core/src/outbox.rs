@@ -24,6 +24,12 @@ use crate::season::Payload;
 /// Most entries in one push; a device with more sends them in turns.
 pub const MAX_PER_PUSH: usize = 100;
 
+/// The outbox's format, on a push and an exported file. 1 was the FRC
+/// build's, whose matches had three robots an alliance; 2 is FTC's
+/// ([`crate::ALLIANCE_SIZE`]). One from another version is refused whole
+/// rather than read as this one.
+pub const OUTBOX_VERSION: u32 = 2;
+
 /// One observation as the device recorded it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QueuedObservation {
@@ -45,6 +51,25 @@ pub struct QueuedObservation {
 pub struct Push {
     #[serde(default)]
     pub observations: Vec<QueuedObservation>,
+    /// [`OUTBOX_VERSION`] when the sender says; `None` from a sender that
+    /// predates it, which [`Push::is_other_version`] refuses as well.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<u32>,
+}
+
+impl Push {
+    /// A push of `observations` in this build's format.
+    pub fn new(observations: Vec<QueuedObservation>) -> Self {
+        Self {
+            observations,
+            version: Some(OUTBOX_VERSION),
+        }
+    }
+
+    /// Whether this was written by another version: refused whole.
+    pub fn is_other_version(&self) -> bool {
+        self.version != Some(OUTBOX_VERSION)
+    }
 }
 
 /// What became of one entry.
@@ -99,21 +124,19 @@ mod tests {
 
     #[test]
     fn a_push_survives_the_trip_and_ignores_what_an_export_adds() {
-        let push = Push {
-            observations: vec![QueuedObservation {
-                client_record_id: "r1".into(),
-                match_key: "2026now_qm2".into(),
-                team_number: 254,
-                payload: [
-                    ("launch_made".to_string(), Value::Count(9)),
-                    ("teleop_park".to_string(), Value::Flag(true)),
-                    ("notes".to_string(), Value::Text("tippy".into())),
-                ]
-                .into(),
-                schema_version: 1,
-                observed_at: Utc.with_ymd_and_hms(2026, 3, 14, 10, 0, 0).unwrap(),
-            }],
-        };
+        let push = Push::new(vec![QueuedObservation {
+            client_record_id: "r1".into(),
+            match_key: "2026now_qm2".into(),
+            team_number: 254,
+            payload: [
+                ("launch_made".to_string(), Value::Count(9)),
+                ("teleop_park".to_string(), Value::Flag(true)),
+                ("notes".to_string(), Value::Text("tippy".into())),
+            ]
+            .into(),
+            schema_version: 1,
+            observed_at: Utc.with_ymd_and_hms(2026, 3, 14, 10, 0, 0).unwrap(),
+        }]);
         let json = serde_json::to_value(&push).unwrap();
         assert_eq!(serde_json::from_value::<Push>(json.clone()).unwrap(), push);
 
@@ -121,5 +144,14 @@ mod tests {
         exported["format"] = "tealteam-outbox".into();
         exported["observations"][0]["refused"] = "a reason".into();
         assert_eq!(serde_json::from_value::<Push>(exported).unwrap(), push);
+    }
+
+    #[test]
+    fn an_outbox_from_the_frc_build_is_another_version() {
+        assert!(!Push::new(Vec::new()).is_other_version());
+        let old: Push = serde_json::from_str(r#"{"observations":[],"version":1}"#).unwrap();
+        assert!(old.is_other_version());
+        let unsaid: Push = serde_json::from_str(r#"{"observations":[]}"#).unwrap();
+        assert!(unsaid.is_other_version());
     }
 }

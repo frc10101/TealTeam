@@ -6,6 +6,26 @@
 
 use chrono::{DateTime, TimeDelta, Utc};
 
+/// Robots on one alliance. FTC (BIOBUZZ, manual §8 and §10) plays two
+/// alliances of two, so a match has twice this many robots. Everything that
+/// walks a match's slots goes through this one number; nothing else says it.
+pub const ALLIANCE_SIZE: usize = 2;
+
+/// One alliance's slots: team numbers, `None` where the schedule has a gap.
+pub type Alliance = [Option<i32>; ALLIANCE_SIZE];
+
+/// Every robot in one match: both alliances.
+pub const ROBOTS_PER_MATCH: usize = ALLIANCE_SIZE + ALLIANCE_SIZE;
+
+/// Every slot's name, red first: `red1`, `red2`, …, then `blue1`, …. The
+/// storage columns and a schedule file's headers are named this way.
+pub fn slot_names() -> Vec<String> {
+    ["red", "blue"]
+        .into_iter()
+        .flat_map(|color| (1..=ALLIANCE_SIZE).map(move |i| format!("{color}{i}")))
+        .collect()
+}
+
 /// How close a match is to happening, relative to a supplied instant.
 ///
 /// The retired implementation used a +/-15 minute window around the scheduled
@@ -121,6 +141,12 @@ mod tests {
     fn at(hour: u32, minute: u32) -> DateTime<Utc> {
         use chrono::TimeZone;
         Utc.with_ymd_and_hms(2026, 3, 14, hour, minute, 0).unwrap()
+    }
+
+    #[test]
+    fn ftc_alliances_are_two_robots_and_their_slots_are_named_in_order() {
+        assert_eq!(ROBOTS_PER_MATCH, 4);
+        assert_eq!(slot_names(), ["red1", "red2", "blue1", "blue2"]);
     }
 
     #[test]

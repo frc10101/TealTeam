@@ -324,8 +324,8 @@ mod tests {
                 comp_level: CompLevel::Qualification,
                 set_number: 1,
                 match_number: 14,
-                red: [Some(10101), Some(254), Some(1)],
-                blue: [Some(2), Some(3), Some(4)],
+                red: [Some(10101), Some(254)],
+                blue: [Some(2), Some(3)],
                 red_score: None,
                 blue_score: None,
                 winner: None,
@@ -687,7 +687,7 @@ mod tests {
     async fn a_match_is_found_by_its_key() {
         let repo = repo().await;
         let found = repo.match_by_key(MATCH).await.unwrap().expect("found");
-        assert_eq!(found.red, [Some(10101), Some(254), Some(1)]);
+        assert_eq!(found.red, [Some(10101), Some(254)]);
         assert!(repo.match_by_key("2026mabil_qm99").await.unwrap().is_none());
     }
 }

@@ -1,7 +1,7 @@
 //! The lead scout's assignment grid (L1), the changes made from it (L2), and
 //! the coverage it shows (L6).
 //!
-//! Every match at the selected event, its six robots, and who is watching each
+//! Every match at the selected event, its robots, and who is watching each
 //! one. A lead scout assigns a match at a time, hands the open robots out
 //! automatically, clears a match or the event, and names tablets.
 //!
@@ -500,7 +500,7 @@ async fn load_match(state: &AppState, key: Option<&str>) -> Result<MatchRecord, 
     }
 }
 
-/// `POST /api/assignments/match`: set all six robots of one match.
+/// `POST /api/assignments/match`: set every robot of one match.
 ///
 /// Fields are `a.<team number>` = `u:<id>`, `d:<id>`, or blank for nobody.
 /// A robot the post does not mention keeps its assignment; one not in the

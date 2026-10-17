@@ -34,3 +34,4 @@ pub mod upstream;
 pub mod user;
 
 pub use error::{DomainError, Result};
+pub use matches::{ALLIANCE_SIZE, Alliance, ROBOTS_PER_MATCH};

@@ -23,6 +23,7 @@ use tokio::time::Instant;
 
 use crate::report::Shared;
 use crate::seed::{EVENT, match_key, robots};
+use tt_core::ROBOTS_PER_MATCH;
 
 pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 pub const RESAVE: Duration = Duration::from_secs(2);
@@ -206,7 +207,7 @@ pub async fn work(shared: &Shared, plan: &Plan, index: usize, cookie: &str, navi
         }
         let began = Instant::now();
         let key = match_key(n);
-        let team = robots(n)[index % 6];
+        let team = robots(n)[index % ROBOTS_PER_MATCH];
 
         if began >= heartbeat_due {
             let url = format!("{base}/api/device/heartbeat");

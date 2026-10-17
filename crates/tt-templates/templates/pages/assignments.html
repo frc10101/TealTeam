@@ -1,6 +1,6 @@
 {#
-  The lead scout's assignment grid (L1): matches down, the six driver stations
-  across. A table on anything wide; under 48rem each match becomes a card of
+  The lead scout's assignment grid (L1): matches down, every driver station
+  across (tt_core::ALLIANCE_SIZE a side). A table on anything wide; under 48rem each match becomes a card of
   red over blue, like the scouting page's robot picker.
 
   Every change (L2) is a plain form post answered with a 303 back here, so the
@@ -20,12 +20,8 @@
     <thead role="rowgroup">
       <tr role="row">
         <th scope="col" role="columnheader">Match</th>
-        <th scope="col" role="columnheader" class="red">Red 1</th>
-        <th scope="col" role="columnheader" class="red">Red 2</th>
-        <th scope="col" role="columnheader" class="red">Red 3</th>
-        <th scope="col" role="columnheader" class="blue">Blue 1</th>
-        <th scope="col" role="columnheader" class="blue">Blue 2</th>
-        <th scope="col" role="columnheader" class="blue">Blue 3</th>
+        {% for n in 1..=tt_core::ALLIANCE_SIZE %}<th scope="col" role="columnheader" class="red">Red {{ n }}</th>{% endfor %}
+        {% for n in 1..=tt_core::ALLIANCE_SIZE %}<th scope="col" role="columnheader" class="blue">Blue {{ n }}</th>{% endfor %}
       </tr>
     </thead>
     <tbody role="rowgroup">
