@@ -3,7 +3,7 @@
 Status: **plan only — nothing implemented.**
 
 **Scope decision (2026-10-15): a separate, FTC-only branch, `ftc-biobuzz`, for one
-test event. It is never merged back into `rebuild`.** The migration doc
+test event: **Alabama Athens Qualifier 1, Saturday 2026-10-24.** It is never merged back into `rebuild`.** The migration doc
 (`docs/FTC_BIOBUZZ_MIGRATION.md`) describes the long-term dual-program design.
 This plan deliberately takes the short path the migration doc allows: "an
 FTC-only build". Anything learned at the event goes back into that design as
@@ -66,7 +66,7 @@ Fouls: MINOR = +5 and MAJOR = +20 **credited to the opponent**. Cards follow
 
 ---
 
-## 2. What the branch decision settles, and what is still open
+## 2. Decisions
 
 **Settled by choosing a throwaway branch:**
 - **No dual-program model.** There is no `program` column and no schema registry, and FRC
@@ -78,15 +78,15 @@ Fouls: MINOR = +5 and MAJOR = +20 **credited to the opponent**. Cards follow
 - **Fixed 2-robot alliances.** Championship 3-robot alliances do not matter for
   one qualifier-level event.
 
-**Still open (owner: human):**
+**Answered (2026-10-15):**
 
-| # | Decision | Recommendation |
+| # | Decision | Answer → consequence |
 | --- | --- | --- |
-| D2 | Which event, and on what date? | Sets every deadline in §5. If a league meet is available, use it, because the stakes are lowest |
-| D3 | Scouts per match | **One per robot (4).** This is how the current assignment model already works. If only 2 scouts are available, assign each one a single robot per match and accept partial coverage; do not build a 2-robot form for a single event |
-| D4 | Starting-location options | Watch about 10 early-season match videos and pick 3–4 locations a scout can name |
-| D5 | Elements needed to TIP a HIVE | Optional. Launch weights start at 0, and the lead scout can raise them at the event through the existing runtime point-weight overrides (L12) without touching the schema |
-| D6 | Is the app primary, or a shadow next to paper? | **Primary, with a paper fallback kit.** Running both in parallel doubles the work for a small FTC team, and a single test is worth more if the app does the real job |
+| D2 | Event | **Alabama Athens Qualifier 1, Sat 2026-10-24.** Nine days, so the schedule in §5 is tight and F5 is cut back to reusing what already exists |
+| D3 | Scouts per match | **2–4, varying through the day.** The generator already leaves extra robots open rather than doubling anyone up, but it balances *scout* load, not *team* coverage. F1b fixes that so every team is still seen across its 5–6 matches |
+| D4 | Starting location | **Not scouted.** `start_location` is dropped from the schema |
+| D5 | HIVE TIP threshold | Not needed before the event. Launch weights start at 0; the lead scout tunes them on the day through the runtime overrides (L12) |
+| D6 | Primary or shadow | Primary, with a paper fallback kit |
 
 ---
 
@@ -99,7 +99,6 @@ other field starts at 0, as the migration doc requires. Counter caps are first
 guesses and must be checked against match video (§5, B0).
 
 **match**
-- `start_location`: select, options to be set by D4, 0 pts, required.
 - `robot_status`: select, `played` / `no_show` / `no_movement` /
   `disabled` / `tipped_over` / `lost_connection`, 0 pts, required. This replaces
   the FRC `no_show` toggle, as the migration doc asks.
@@ -119,7 +118,7 @@ guesses and must be checked against match video (§5, B0).
 **endgame** (last 60 s)
 - `flower_nectar_placed`: counter 0–8. The alliance has 8 NECTAR. 0 pts, because ownership decides the value.
 - `flower_pollen_placed`: counter 0–20, 0 pts.
-- `flower_role`: select, `none` / `attempted` / `placed_bottom_nectar` / `took_ownership`, 0 pts. Scouts may struggle to judge "top-most" from the stands, so this field is part of the B0 test.
+- `flower_role`: select, `none` / `attempted` / `placed_bottom_nectar` / `took_ownership`, 0 pts. Scouts may struggle to judge "top-most" from the stands, so B0 checks it.
 - `teleop_park`: toggle, **5**.
 
 **play style**
@@ -142,42 +141,59 @@ table. That table goes in the PR description.
 | --- | --- | --- |
 | F0 | Commit or stash the untracked files on `rebuild` first, so the branch starts from a known state. Branch `ftc-biobuzz` from that commit. Run `./check.sh` and save the result as the baseline | Baseline saved; branch point recorded in this file |
 | F1 | **Alliance size.** Add one constant, `ALLIANCE_SIZE = 2`, in `tt-core`. Replace the 10 `[Option<i32>; 3]` sites with it, and fix slot iteration, `partners_of`, `alliance_of`, assignment coverage, the keypad, the match picker, templates and fixtures (17 files). Do not write a literal `2` anywhere else. Bump the snapshot, outbox and QR format version so that a stale FRC tablet is refused rather than misread | `cargo test` is green with 4-robot fixtures; a page shows 2 red and 2 blue teams |
+| F1b | **Coverage with 2–4 scouts.** When there are fewer assignees than robots, fill the open slots with the robots whose team has been assigned least so far at the event. Our own team's robot goes last, because we already know it. The existing rule that nobody watches two robots in one match stays | Test: 2 scouts × a 12-team schedule leaves every team observed at least twice; 4 scouts leave nothing open |
 | F2 | **Schema.** Replace `2026.json` with the BIOBUZZ fields from §3, and update the tests that name FRC field keys | Schema parse, valid-payload and invalid-payload tests pass; the form completes at phone width |
 | F3 | **Manual seed.** Write a small import, either in `tt-load` or as a lead-scout page. It reads a CSV with `match,red1,red2,blue1,blue2` plus a roster, strips the `*` surrogate marker, lists the surrogate slots in the import report, and rejects each bad row by name | A malformed CSV is rejected row by row; the real schedule imports cleanly |
 | F4 | **Turn off what is FRC-only.** Disable TBA/FIRST sync and its triggers: the boot fetch, the S6 phone-tether watcher and the S7 lobby fetch. Remove OPR/DPR/CCWM, predictions and TBA rankings from navigation; their routes return "not available on this build" | No upstream request is made during a full rehearsal; no FRC statistic is visible |
-| F5 | **Pick list.** Show per-robot LEAVE/PARK rates, average launches, FLOWER role counts and incidents, all labeled "scout estimate" | The lead scout can rank the event's teams from this view |
+| F5 | **Pick list, minimal.** Reuse the existing pick list and team pages. The only new work is labeling the schema score "scout estimate" and making sure the team page shows the BIOBUZZ fields. No new analytics before the event | The lead scout can rank the event's teams from the existing views |
 | F6 | Pin the commit, tag it `ftc-biobuzz-beta-1`, and build and install it on the Pi | The tag exists; the Pi reports that commit |
 
 Estimate: F1 is the largest step and the riskiest. Do it first, and on its own commit.
 
 ---
 
-## 5. Test plan, working back from the event
+## 5. Schedule to Sat 2026-10-24
 
-### T-3 weeks — B0: desk test on match video
-- Two scouts score the **same robot** independently on about 10 recorded BIOBUZZ matches, at real speed, on phones.
+| Day | Work | Gate |
+| --- | --- | --- |
+| **Thu 10-15** | F0: clean commit, branch, baseline. Start F1 | Baseline saved |
+| **Fri 10-16** | Finish F1 (alliance size) and F1b (coverage) | `cargo test` green with 4-robot fixtures |
+| **Sat 10-17** | F2 schema. **B0 desk test**: 2 scouts score the same robot on about 10 BIOBUZZ match videos at real speed (see below) | Schema frozen at `version: 1` by Saturday night |
+| **Sun 10-18** | F3 schedule import, F4 upstream off | Malformed CSV rejected row by row; zero upstream calls in a logged run |
+| **Mon 10-19** | F5 labels, then a click-through of every page at phone width | No 3-robot ghost slots anywhere |
+| **Tue 10-20** | F6: tag `ftc-biobuzz-beta-1`, install on the Pi | Pi reports the tagged commit |
+| **Wed 10-21** | **B1 dress rehearsal** (see below) | No lost observations |
+| **Thu 10-22** | Fix B1 findings only. **Code freeze tonight**, then re-tag | Final tag on the Pi |
+| **Fri 10-23** | Check for a new Team Update (re-read §10.5 and §13.6). Wipe and charge the tablets, print the paper kit, take a backup, run a restore check | Bag packed |
+| **Sat 10-24** | **Event** (see below) | §7 |
+
+If F1 is not green by **Saturday night (10-17)**, stop and fall back to paper for this event. Keep the branch for the next opportunity. Two red days on the riskiest change leave no time for B1.
+
+### B0 — desk test on match video (Sat 10-17)
+- Use early-season BIOBUZZ match video. If too little exists, score robot practice on our own field instead.
 - Measure:
   - completion time after the match ends: the target is under 60 s;
   - agreement between the two scouts: ±2 on launches, exact on toggles;
-  - fields left blank or guessed (watch `flower_role` and `start_location`).
-- **Ground truth:** for each alliance, add up the scouted LEAVE and PARK points and compare them with the official score breakdown. Do the same for CELL launches against the official TIP count.
-- **Gate:** schema frozen at `version: 1`; D4 answered. If launch agreement is poor, swap in a `launch_volume` select (none/few/many).
+  - fields left blank or guessed (watch `flower_role`).
+- Where official score breakdowns exist, compare each alliance's scouted LEAVE and PARK points with the official numbers.
+- If launch agreement is poor, swap in a `launch_volume` select (none/few/many) **before** the freeze.
 
-### T-1 week — B1: dress rehearsal
-- Use the real Pi and wired setup from `docs/EVENT_DAY_RUNBOOK.md`, real phones and the real scouts, with a fake 12-team schedule seeded through F3.
+### B1 — dress rehearsal (Wed 10-21)
+- Use the real Pi and wired setup (`docs/EVENT_DAY_RUNBOOK.md`), real phones, and the scouts who will actually go.
+- Seed a fake 12-team schedule through F3. Run it once with 2 scouts and once with 4, to exercise F1b.
 - Walk through every failure path once:
   - offline draft recovery;
   - QR handoff;
   - a refused observation, then a lead-scout correction;
   - pulling the power;
   - backup → wipe → restore.
-- **Gate:** no lost observations; every match is covered; the pick list is built from the rehearsal data.
 
-### Event day — B2
+### Event day (Sat 10-24)
 - Seed from the official schedule as soon as it is posted (no later than 15 min before quals, §13.6.1). Check every match against the printed sheet.
-- Start with one scout on one match, check the result, then the full crew.
+- Re-run auto-assign whenever the number of scouts on duty changes.
+- Start with one scout on one match, check the result, then bring in the full crew.
 - Paper fallback kit: printed forms that mirror the schema, used only if the app is down. Note every switch to paper.
-- Do not change the schema during the event. Weight overrides are allowed.
+- Do not change the schema. Weight overrides are allowed.
 - Take a backup after every qualification round.
 
 ### After the event
@@ -188,8 +204,9 @@ Estimate: F1 is the largest step and the riskiest. Do it first, and on its own c
   - fields scouts misunderstood;
   - app bugs versus scouting-strategy issues;
   - the measured completion times;
+  - coverage per team;
   - whether the app's pick list matched the picks actually made.
-- Freeze the branch: keep the tag and do not merge. Keep the exported data and the schedule CSV as fixtures for the future dual-program build.
+- Freeze the branch at its tag; do not merge. Keep the exported data and the schedule CSV as fixtures.
 
 ---
 
@@ -202,13 +219,15 @@ Estimate: F1 is the largest step and the riskiest. Do it first, and on its own c
 | Something still reaches TBA/FIRST, for example the S6 tether trigger | F4 gate: rehearse with traffic logging on and confirm zero upstream calls |
 | Launch counts are unreliable when the HIVE spills | B0 agreement data; fall back to `launch_volume` |
 | The schedule is posted late or changes | F3 import is fast and re-runnable; keep the paper kit |
+| Nine days is tight; F1 runs long | Hard stop Saturday 10-17 (§5). F5 is already cut back to reuse |
+| With 2 scouts, some teams barely get seen | F1b team-coverage ordering; the lead scout checks per-team counts before alliance selection |
 | A Team Update changes scoring before the event | Re-read §10.5 and §13.6 the week before; weights can be changed at runtime |
 
 ---
 
 ## 7. What counts as a successful test
 
-- Every qualification match had its scouted robots recorded with no data loss.
+- Every assigned robot was recorded with no data loss, and every team was observed at least twice.
 - Scouts finished within the field reset at least 90% of the time.
 - B0 ground-truth checks were within target.
 - The lead scout used the app's pick list in alliance selection, or wrote down why not.
