@@ -1,11 +1,15 @@
 // TealTeam's service worker (C1). Served at /sw.js by src/shell.rs, which
-// fills in the three placeholders below.
+// fills in the four placeholders below.
 //
 // What it does, and only this:
 //
 //   * On install, precache the offline shell: /offline and every static file,
 //     into a cache named for this build. A new binary is a new worker with a
 //     new cache; the old cache is deleted when it takes over.
+//     A device too full for all of it (Q6) keeps just /offline and the files
+//     it loads, marked as such; static/js/shell.js reads the mark and warns.
+//     With not even room for that, the install fails, the page warns, and
+//     the next page tries again.
 //   * Pages (navigations): the network, always. Only when the network fails,
 //     the device makes the page itself (C5): tt-client's wasm module runs the
 //     server's own page code over the device's copy in OPFS. For an address
@@ -38,6 +42,12 @@ const BUILD = "__BUILD__";
 const CACHE = "tealteam-shell-" + BUILD;
 const SHELL = "/offline";
 const PRECACHE = __PRECACHE__;
+// The shell page and what it loads, for when PRECACHE does not fit (Q6).
+const ESSENTIAL = __ESSENTIAL__;
+// In a cache that holds only ESSENTIAL: why the rest did not fit, and what
+// the rest is, for shell.js to add once there is room.
+const PARTIAL = "/offline?partial";
+const rest = () => PRECACHE.filter((url) => !ESSENTIAL.includes(url));
 // The wasm module's script, or null in a binary built without it
 // (deploy/build-client.sh). Its .wasm is beside it, and in PRECACHE.
 const CLIENT = __CLIENT__;
@@ -186,13 +196,42 @@ self.addEventListener("message", (event) => {
   }
 });
 
+function fill(cache, urls) {
+  return cache.addAll(urls.map((url) => new Request(url, { cache: "reload" })));
+}
+
+// To every page of the site, controlled or not: a failed install leaves no
+// cache for a page to read.
+function tell(message) {
+  return self.clients
+    .matchAll({ includeUncontrolled: true, type: "window" })
+    .then((pages) => pages.forEach((page) => page.postMessage(message)));
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(CACHE)
       // Past the HTTP cache: the shell must be this build's, not a copy the
       // browser kept from the last one.
-      .then((cache) => cache.addAll(PRECACHE.map((url) => new Request(url, { cache: "reload" }))))
+      .then((cache) => fill(cache, PRECACHE))
+      // Out of room: addAll keeps nothing of a failed call, so try the part
+      // that keeps a reload with no server off the browser's error page.
+      .catch((e) =>
+        caches
+          .delete(CACHE)
+          .then(() => caches.open(CACHE))
+          .then((cache) =>
+            fill(cache, ESSENTIAL).then(() => cache.put(PARTIAL, new Response(JSON.stringify({ reason: e.name, rest: rest() })))),
+          ),
+      )
+      .catch((e) =>
+        tell({ type: "tt-shell", state: "none", reason: e.name })
+          .then(() => caches.delete(CACHE))
+          .then(() => {
+            throw e;
+          }),
+      )
       // Take over at once. Pages and files still come from the network
       // first, so an open page does not mix two builds.
       .then(() => self.skipWaiting()),

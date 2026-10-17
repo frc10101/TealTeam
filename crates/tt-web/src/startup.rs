@@ -742,6 +742,16 @@ mod flow_tests {
         // Every page offers the worker; the script decides whether it may.
         let page = text(get(&state, "/", Some(&cookie)).await).await;
         assert!(page.contains(r#"src="/static/js/shell.js""#));
+        // Q6: and the warnings for a device too full to keep it, hidden.
+        for state in ["none", "partial"] {
+            assert!(
+                page.contains(&format!(
+                    r#"data-shell-full="{state}" role="status" hidden"#
+                )),
+                "{state}"
+            );
+        }
+        assert!(js.contains(r#"const ESSENTIAL = ["/offline","#));
         // C9: a signed-in page keeps a token for whoever is signed in.
         assert!(page.contains(r#"<script src="/static/js/token.js" data-user="1""#));
     }
