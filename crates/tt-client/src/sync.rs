@@ -119,10 +119,9 @@ impl<T: Transport> SyncClient<T> {
         Ok(report)
     }
 
-    /// Pull until caught up, with no push. Browser pages are read-only (open
-    /// decision 3): there is never anything of the device's own to send, so
-    /// this is what `tt_client::worker::pull` calls, and what loads the
-    /// outbox code need not be true for the browser to still sync.
+    /// Pull until caught up, with no push: for a caller that must leave the
+    /// outbox alone. The browser's loop (`tt_client::worker::sync`) calls
+    /// [`Self::sync`], whose push sends nothing while the outbox is empty.
     pub async fn pull_only(&self, repo: &ClientRepo, now: DateTime<Utc>) -> Result<Report> {
         let mut report = Report::default();
         report.stopped = self.pull(repo, now, &mut report).await?;

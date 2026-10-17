@@ -1,29 +1,34 @@
-// Keeps this device's local copy pulled up to date (C7).
+// Keeps this device's local copy in step with the Pi (C7, C12).
 //
-// Browser pages are read-only (open decision 3): there is nothing of this
-// device's own to push, only whatever changed on the Pi to apply. The work is
-// the service worker's: tt-client's wasm module opens this device's copy in
-// OPFS, asks the Pi for what changed since its own cursors, and applies it --
-// insert, update, or delete, keyed the same way the change log is. This only
-// says when: soon after the page opens, when the browser says it is back
-// online, and on each row from the live stream (S8), whose URL only the wasm
-// module can build, since it is this device's own cursors and schema.
+// The work is the service worker's: tt-client's wasm module opens this
+// device's copy in OPFS, pushes its outbox, then asks the Pi for what changed
+// since its own cursors and applies it -- insert, update, or delete, keyed
+// the same way the change log is. Browser pages are read-only (open decision
+// 3), so the outbox is empty until something queues into it and the push
+// sends nothing. This only says when: soon after the page opens, when the
+// browser says it is back online, on each row from the live stream (S8),
+// whose URL only the wasm module can build, since it is this device's own
+// cursors and schema, and once more before the update banner (S11) reloads
+// the page, in its detail.waitFor, so what is queued goes before the build
+// changes under it.
 //
 // A device with no copy yet is given one first, with ttSnapshot.bootstrap
 // (S10): every event this viewer may see, since Team 10101 is the whole
 // deployment (open decision 4). A page that wants a narrower copy, such as
-// the grid scoped to one event, asks for it before this script's first pull
+// the grid scoped to one event, asks for it before this script's first sync
 // finds none and fills in the gap itself.
 //
-// A pull that finds this device's build too old to read the Pi's schema asks
-// for a fresh snapshot, so the next reload -- which link.js's update banner
-// already offers -- opens a copy the new schema can read. It cannot otherwise
-// "block the stale view": the device-made page (C5) already says it may be
-// behind, and there is no live page here to block.
+// A sync that finds this device's build too old for the Pi's schema
+// ({"kind":"reload"}) asks for a fresh snapshot, so the next reload -- which
+// link.js's update banner already offers -- opens a copy the new schema can
+// read. Not while anything is still in the outbox: a fresh copy has none, so
+// that would lose it. Then the outbox is offered as a file instead, to hand
+// to the lead scout, once per page, and the copy is kept as it is.
 //
 // Only where a service worker runs, which needs https (open decision 9); this
-// script and snapshot.js each check that for themselves. Each pull's report
+// script and snapshot.js each check that for themselves. Each sync's report
 // is dispatched on document as "tt:sync", for anything that wants to show it.
+// window.ttSync.sync() and .saveOutbox() are there for a page's own buttons.
 (function () {
   "use strict";
 
@@ -56,8 +61,45 @@
     });
   }
 
+  function stamp() {
+    var d = new Date();
+    var two = function (n) { return (n < 10 ? "0" : "") + n; };
+    return d.getFullYear() + two(d.getMonth() + 1) + two(d.getDate()) + "-" +
+      two(d.getHours()) + two(d.getMinutes());
+  }
+
+  // The outbox as a download, when there is anything in it. Resolves true
+  // when a file was offered.
+  function saveOutbox() {
+    return ask({ type: "tt-export-outbox" }).then(function (file) {
+      if (!file) return false;
+      var url = URL.createObjectURL(new Blob([file], { type: "application/json" }));
+      var link = document.createElement("a");
+      link.href = url;
+      link.download = "tealteam-unsent-" + stamp() + ".json";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(function () { URL.revokeObjectURL(url); }, 60 * 1000);
+      return true;
+    });
+  }
+
+  // A build too old for the Pi. With nothing queued, a fresh copy for the
+  // next reload; with something queued, the file, and the copy kept.
+  var offered = false;
+  function behind(report) {
+    if (report.queued > 0) {
+      if (offered) return Promise.resolve();
+      offered = true;
+      return saveOutbox();
+    }
+    if (!window.ttSnapshot) return Promise.resolve();
+    return window.ttSnapshot.bootstrap({ replace: true }).catch(function () {});
+  }
+
   var running = null;
-  function pull() {
+  function sync() {
     if (running) return running;
     running = bootstrapIfNeeded()
       .then(function () {
@@ -67,8 +109,8 @@
       .then(function (report) {
         if (!report) return report;
         document.dispatchEvent(new CustomEvent("tt:sync", { detail: report }));
-        if (report.stopped && report.stopped.kind === "reload" && window.ttSnapshot) {
-          window.ttSnapshot.bootstrap({ replace: true }).catch(function () {});
+        if (report.stopped && report.stopped.kind === "reload") {
+          return behind(report).then(function () { return report; });
         }
         return report;
       })
@@ -87,27 +129,42 @@
       var timer = null;
       var onRow = function () {
         window.clearTimeout(timer);
-        timer = window.setTimeout(pull, DEBOUNCE_MS);
+        timer = window.setTimeout(sync, DEBOUNCE_MS);
       };
       stream.addEventListener("change", onRow);
       stream.addEventListener("upstream", onRow);
       stream.addEventListener("cursor", onRow);
       stream.onerror = function () {
         // A 409 (another schema) closes the stream for good, the same
-        // trouble a pull already knows how to find and name; anything else
+        // trouble a sync already knows how to find and name; anything else
         // is the browser reconnecting to the same URL on its own.
         if (stream && stream.readyState === EventSource.CLOSED) {
           stream = null;
-          pull();
+          sync();
         }
       };
     });
   }
 
+  // The update banner's reload waits for this, up to its own cap: one more
+  // push of the outbox, and the file if the new build refuses it. A sync
+  // still under way at the cap carries on in the worker, and what it did not
+  // send is still in the copy after the reload.
+  document.addEventListener("tt:before-update", function (event) {
+    if (!event.detail || !event.detail.waitFor) return;
+    if (stream) {
+      stream.close();
+      stream = null;
+    }
+    event.detail.waitFor.push(sync());
+  });
+
+  window.ttSync = { sync: sync, saveOutbox: saveOutbox };
+
   window.setTimeout(function () {
-    pull().then(openStream);
+    sync().then(openStream);
   }, FIRST_MS);
   window.addEventListener("online", function () {
-    pull().then(openStream);
+    sync().then(openStream);
   });
 })();
