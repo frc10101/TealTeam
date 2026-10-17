@@ -29,10 +29,11 @@ Run the local verification suite with:
 ./check.sh
 ```
 
-Use `./check.sh --fast` to skip the wasm32 builds. The browser tests under `crates/tt-web/tests/browser/` require their documented browser-test tooling and are separate from the default Rust test command. To build the service-worker client bundle, install the locked `wasm-bindgen-cli` version and run:
+Use `./check.sh --fast` to skip the wasm32 builds. The browser tests under `crates/tt-web/tests/browser/` require their documented browser-test tooling and are separate from the default Rust test command. `./check.sh` (without `--fast`) also builds the service-worker client bundle. To build it alone, or the release binary a Pi runs with it embedded:
 
 ```sh
-deploy/build-client.sh
+deploy/build-client.sh     # the bundle, into crates/tt-web/static/client/
+deploy/build-release.sh    # the bundle, then target/release/tt-web
 ```
 
 ## Start here
@@ -68,4 +69,4 @@ The one structural rule to get right on the first commit: split the workspace in
 
 The repository pins Rust in [rust-toolchain.toml](rust-toolchain.toml). `rustup` will select the same compiler locally, and CI uses the same version. Do not change the pinned version casually: update the toolchain file and CI together, then run `./check.sh`.
 
-The `wasm32-unknown-unknown` target is included by the toolchain file. The client bundle also needs the `wasm-bindgen-cli` version recorded in `Cargo.lock`; `deploy/build-client.sh` checks that version and prints the exact install command when it is missing.
+The `wasm32-unknown-unknown` target is included by the toolchain file. The client bundle also needs `wasm-bindgen-cli` at exactly the `wasm-bindgen` version pinned in `Cargo.toml` (0.2.127); `deploy/build-client.sh` installs it with cargo into `~/.cargo/wasm-bindgen-0.2.127/` the first time, without replacing any other `wasm-bindgen` on the PATH.

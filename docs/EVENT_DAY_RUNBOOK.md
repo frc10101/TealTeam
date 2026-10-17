@@ -6,6 +6,10 @@
 
 **Kit:** Pi (SSD attached) · official 27 W Pi supply · unmanaged switch + its power · one flat Ethernet cable per Lenovo Chromebook · USB-C-to-Ethernet adapters where needed · gaff tape · USB stick. **No Wi-Fi hotspot, router, mesh, cellular tether, or other 802.11/radio network for event data, ever.**
 
+## Before you leave: install the build
+
+On the Pi, with internet, in the TealTeam folder: `deploy/build-release.sh`, then the `sudo .../install.sh ...` line it prints. That build carries the offline client; `install.sh` refuses one without it.
+
 ## Set up (about 10 minutes)
 
 1. **Cable before power.** Pi `eth0` → switch. Each Lenovo Chromebook → switch, using an adapter only when needed. Tape every cable run flat.

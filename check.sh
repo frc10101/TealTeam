@@ -2,7 +2,7 @@
 # Run everything CI runs, locally. Same order, same failures.
 #
 #   ./check.sh          full run
-#   ./check.sh --fast   skip the wasm build (still runs fmt, clippy, tests)
+#   ./check.sh --fast   skip the wasm builds (still runs fmt, clippy, tests)
 set -euo pipefail
 
 fast=false
@@ -15,6 +15,13 @@ cargo fmt --all --check
 
 step "Clippy"
 cargo clippy --workspace --all-targets -- -D warnings
+
+# The offline client (C14), before the tests so they and the binary embed
+# it, the way a Pi's build does. Installs wasm-bindgen's CLI the first time.
+if [[ "$fast" == false ]]; then
+  step "Offline client bundle (tt-client + wasm-bindgen)"
+  deploy/build-client.sh
+fi
 
 step "Tests"
 cargo test --workspace
@@ -37,11 +44,8 @@ if [[ "$fast" == false ]]; then
   step "wasm32 upstream clients (tt-upstream)"
   cargo build -p tt-upstream --target wasm32-unknown-unknown
 
-  # The browser's repo (C4) and the service worker's pages (C5). Its SQLite
-  # is C, which sqlite-wasm-rs builds with clang for wasm32. Bundling it for
-  # the worker is deploy/build-client.sh, which needs wasm-bindgen's CLI.
-  step "wasm32 browser repo (tt-client)"
-  cargo build -p tt-client --target wasm32-unknown-unknown
+  # tt-client, the browser's repo (C4) and the worker's pages (C5), was
+  # built for wasm32 on its own by the client bundle step above.
 fi
 
 printf '\n\033[1;32mAll checks passed.\033[0m\n'
