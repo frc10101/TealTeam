@@ -389,6 +389,15 @@ impl Repo for SqliteRepo {
             .await
     }
 
+    async fn reopen_observation(
+        &self,
+        id: i64,
+        reopener_id: i64,
+        now: DateTime<Utc>,
+    ) -> Result<bool> {
+        self.reopen_observation_impl(id, reopener_id, now).await
+    }
+
     async fn declined_for(
         &self,
         event_key: &str,

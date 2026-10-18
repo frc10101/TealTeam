@@ -646,7 +646,8 @@ pub struct ReviewPage {
     pub byline: String,
     pub state: &'static str,
     pub state_label: &'static str,
-    /// `"Declined by Kim, 2 minutes ago: that was 1678"`. Empty while pending.
+    /// `"Declined by Kim, 2 minutes ago: that was 1678"`, or `"Put back to
+    /// waiting by Kim, ..."` after an undo. Empty while never reviewed.
     pub verdict: String,
     pub answers: Vec<tt_core::review::AnswerGroup>,
     /// Said in place of notes held back from this viewer (U13): whose they
@@ -657,7 +658,7 @@ pub struct ReviewPage {
     pub other_version: String,
     pub pending: bool,
     /// The verdict on the previous observation, when "and see the next" led
-    /// here.
+    /// here, or that this one was just put back to waiting (G3).
     pub notice: String,
     pub errors: Vec<String>,
     /// A decline reason coming back after a refused decline.

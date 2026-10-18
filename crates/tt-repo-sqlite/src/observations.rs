@@ -231,6 +231,37 @@ impl SqliteRepo {
         Ok(done.rows_affected() == 1)
     }
 
+    pub(crate) async fn reopen_observation_impl(
+        &self,
+        id: i64,
+        reopener_id: i64,
+        now: DateTime<Utc>,
+    ) -> Result<bool> {
+        let ts = to_sql(now);
+        // Guarded like a review: a second undo changes nothing. A declined
+        // row the scout has since recorded again stays declined -- the new
+        // record answered it, and the coverage index allows only one.
+        let done = sqlx::query(
+            "UPDATE observations SET \
+                review_state = 'pending', review_note = NULL, reviewed_by = ?, \
+                reviewed_at = ?, updated_at = ? \
+             WHERE id = ? AND review_state <> 'pending' \
+               AND NOT EXISTS (SELECT 1 FROM observations again \
+                   WHERE again.match_key = observations.match_key \
+                     AND again.team_number = observations.team_number \
+                     AND again.scouter_id = observations.scouter_id \
+                     AND again.id <> observations.id AND again.review_state <> 'declined')",
+        )
+        .bind(reopener_id)
+        .bind(&ts)
+        .bind(&ts)
+        .bind(id)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| query_err("reopening observation", e))?;
+        Ok(done.rows_affected() == 1)
+    }
+
     pub(crate) async fn declined_for_impl(
         &self,
         event_key: &str,
@@ -681,6 +712,73 @@ mod tests {
             .await
             .expect("the coverage index ignores declined rows");
         assert!(repo.declined_for("2026mabil", 1).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_review_can_be_undone_and_the_log_keeps_both() {
+        let repo = repo().await;
+        let Recorded::Created(id) = repo
+            .record_observation(&observation(1, 254), Utc::now())
+            .await
+            .unwrap()
+        else {
+            panic!("created")
+        };
+        let decline = Decision::decline("that was 1678").unwrap();
+        repo.review_observation(id, &decline, 2, Utc::now())
+            .await
+            .unwrap();
+        assert!(
+            !repo
+                .reopen_observation(id + 1, 2, Utc::now())
+                .await
+                .unwrap(),
+            "no such row"
+        );
+
+        let undone_at = Utc::now();
+        assert!(repo.reopen_observation(id, 2, undone_at).await.unwrap());
+        let stored = repo.observation(id).await.unwrap().unwrap();
+        assert_eq!(stored.review_state, ReviewState::Pending);
+        assert_eq!(stored.review_note, None);
+        assert_eq!(stored.reviewer_name.as_deref(), Some("kim@example.com"));
+        assert_eq!(
+            stored.reviewed_at.map(|t| t.timestamp_millis()),
+            Some(undone_at.timestamp_millis()),
+            "who put it back, and when"
+        );
+        assert!(repo.declined_for("2026mabil", 1).await.unwrap().is_empty());
+        assert_eq!(
+            repo.pending_observations("2026mabil").await.unwrap().len(),
+            1
+        );
+        assert!(
+            !repo.reopen_observation(id, 2, Utc::now()).await.unwrap(),
+            "already waiting"
+        );
+
+        // The change log replicates the undo, and still holds the decline.
+        let states: Vec<String> = sqlx::query_scalar(
+            "SELECT json_extract(payload, '$.review_state') FROM changes \
+             WHERE entity = 'observation' ORDER BY seq",
+        )
+        .fetch_all(&repo.pool)
+        .await
+        .unwrap();
+        assert_eq!(states, ["pending", "declined", "pending"]);
+
+        // Declined, then recorded again: the new record is the one to review.
+        repo.review_observation(id, &decline, 2, Utc::now())
+            .await
+            .unwrap();
+        repo.record_observation(&observation(2, 254), Utc::now())
+            .await
+            .unwrap();
+        assert!(!repo.reopen_observation(id, 2, Utc::now()).await.unwrap());
+        assert_eq!(
+            repo.observation(id).await.unwrap().unwrap().review_state,
+            ReviewState::Declined
+        );
     }
 
     #[tokio::test]

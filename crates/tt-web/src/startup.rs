@@ -315,6 +315,10 @@ pub fn router(state: AppState) -> Router {
             "/api/observations/{id}/decline",
             post(handlers::decline_observation),
         )
+        .route(
+            "/api/observations/{id}/reopen",
+            post(handlers::reopen_observation),
+        )
         // Operational
         // The offline shell (C1).
         .route("/sw.js", get(crate::shell::service_worker))
@@ -3649,6 +3653,58 @@ mod flow_tests {
     }
 
     #[tokio::test]
+    async fn a_lead_can_put_a_verdict_back_to_waiting() {
+        let (state, admin, kim) = two_pending().await;
+        post(
+            &state,
+            "/api/observations/1/decline",
+            "reason=That+was+1678",
+            Some(&kim),
+        )
+        .await;
+        let page = text(
+            get(
+                &state,
+                "/lead-scout/submissions/1?event=2026now",
+                Some(&kim),
+            )
+            .await,
+        )
+        .await;
+        assert!(page.contains(r#"action="/api/observations/1/reopen?event=2026now""#));
+
+        let response = post(
+            &state,
+            "/api/observations/1/reopen?event=2026now",
+            "",
+            Some(&kim),
+        )
+        .await;
+        assert_eq!(
+            location(&response),
+            "/lead-scout/submissions/1?event=2026now&reviewed=pending"
+        );
+        assert_eq!(review_state(&state, 1).await, ("pending".into(), None));
+        let page = text(get(&state, location(&response), Some(&kim)).await).await;
+        assert!(page.contains("Put back to waiting. Review it again below."));
+        assert!(!page.contains("Here is the next one."));
+        assert!(page.contains("Put back to waiting by Kim, just now."));
+        assert!(page.contains("Approve and see the next"), "{page}");
+
+        // The scout no longer sees the decline, and the queue has it again.
+        let scout = text(get(&state, "/submission", Some(&admin)).await).await;
+        assert!(!scout.contains("declined your record"));
+        let queue = text(get(&state, "/lead-scout?event=2026now", Some(&kim)).await).await;
+        assert!(queue.contains("<strong>2</strong> waiting"));
+
+        // Already waiting: nothing to undo.
+        let again = text(post(&state, "/api/observations/1/reopen", "", Some(&kim)).await).await;
+        assert!(again.contains("This is already waiting for review."));
+        let missing = post(&state, "/api/observations/99/reopen", "", Some(&kim)).await;
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
     async fn only_a_lead_reviews() {
         let (state, _, _) = two_pending().await;
         let response = post(
@@ -3663,6 +3719,7 @@ mod flow_tests {
             (false, "/lead-scout/submissions/1"),
             (true, "/api/observations/1/approve"),
             (true, "/api/observations/1/decline"),
+            (true, "/api/observations/1/reopen"),
         ] {
             let response = if method_post {
                 post(&state, uri, "reason=no", Some(&scout)).await

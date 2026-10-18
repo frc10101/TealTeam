@@ -439,6 +439,10 @@ async fn observations_and_review_round_trip() {
             .unwrap()
             .is_empty()
     );
+    // Undoing a review (G3): once, and not for a decline the scout answered.
+    assert!(same!(p, reopen_observation(first, lee.id, at(15))).unwrap());
+    assert!(!same!(p, reopen_observation(first, lee.id, at(15))).unwrap());
+    assert!(!same!(p, reopen_observation(second, lee.id, at(15))).unwrap());
 
     let mut weights = WeightOverrides::new();
     weights.set("climb", "high", 15);

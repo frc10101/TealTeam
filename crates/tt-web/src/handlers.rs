@@ -900,17 +900,12 @@ pub async fn review_page(
     Path(id): Path<i64>,
 ) -> Response {
     let (nav, _) = event_page(&state, Some(&user), requested.as_deref()).await;
-    match review::page(
-        &state,
-        nav,
-        &user,
-        id,
-        reviewed.message(),
-        Vec::new(),
-        String::new(),
-    )
-    .await
-    {
+    // A verdict led here by "and see the next"; an undo, back to this one.
+    let notice = match reviewed.0 {
+        Some(tt_core::review::ReviewState::Pending) | None => reviewed.message(),
+        Some(_) => format!("{} Here is the next one.", reviewed.message()),
+    };
+    match review::page(&state, nav, &user, id, notice, Vec::new(), String::new()).await {
         Some(page) => html(page),
         None => StatusCode::NOT_FOUND.into_response(),
     }
@@ -926,6 +921,26 @@ async fn verdict(
     decline: bool,
 ) -> Response {
     match review::decide(&state, &user, id, &pairs, decline).await {
+        Ok(next) => Redirect::to(&next).into_response(),
+        Err(review::Refused::Missing) => StatusCode::NOT_FOUND.into_response(),
+        Err(review::Refused::Again { errors, reason }) => {
+            let (nav, _) = event_page(&state, Some(&user), requested.as_deref()).await;
+            match review::page(&state, nav, &user, id, String::new(), errors, reason).await {
+                Some(page) => html(page),
+                None => StatusCode::NOT_FOUND.into_response(),
+            }
+        }
+    }
+}
+
+/// `POST /api/observations/{id}/reopen`: undo a verdict (G3).
+pub async fn reopen_observation(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
+    Path(id): Path<i64>,
+) -> Response {
+    match review::reopen(&state, &user, id).await {
         Ok(next) => Redirect::to(&next).into_response(),
         Err(review::Refused::Missing) => StatusCode::NOT_FOUND.into_response(),
         Err(review::Refused::Again { errors, reason }) => {
