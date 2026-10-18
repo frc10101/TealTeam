@@ -7,8 +7,9 @@
 // server rendered is put back, with a note saying so and a way to throw it
 // away. The server names the draft to delete once a save is confirmed.
 //
-// Kept simple on purpose: the outbox (C7) will replace this storage. Until
-// it does, handoff.js reads these drafts to hand them over by QR (S13).
+// Kept simple on purpose. handoff.js reads these drafts to hand them over by
+// QR (S13), and a form outbox.js holds (C13) keeps its draft until the server
+// records it, so the QR road stays open for it too.
 (function () {
   "use strict";
 
@@ -161,7 +162,16 @@
     if (ours) tried = !!draft.tried;
   }
 
-  window.ttDraft = { save: save };
+  window.ttDraft = {
+    save: save,
+    // The server has these answers by another road (outbox.js, C13): the
+    // draft is done with, and is not to be written back as the page goes.
+    forget: function () {
+      discarded = true;
+      clearTimeout(timer);
+      remove(key);
+    },
+  };
   form.addEventListener("submit", function () {
     tried = true;
     save();

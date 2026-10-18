@@ -160,6 +160,9 @@ pub struct LinkChip {
     pub shown: bool,
     /// Where tapping it goes, before the page's event; empty when nowhere.
     pub href: &'static str,
+    /// The label and meaning have `tt_core::link::COUNT` where the script
+    /// puts a number (C13's held entries).
+    pub counted: bool,
 }
 
 impl Default for LinkChips {
@@ -171,14 +174,14 @@ impl Default for LinkChips {
 impl LinkChips {
     /// `needs_review` entries the server refused wait for a lead, as the
     /// server counted them for this viewer (C10b). A lead's chip goes to
-    /// them. The outbox is not in pages yet (C5), so offline has nothing
-    /// unsent.
+    /// them. What the page's outbox holds (C13) is the device's to count, so
+    /// the held state is rendered with a blank for `link.js` to fill.
     pub fn new(needs_review: usize, can_lead: bool) -> Self {
         let review = (needs_review > 0).then_some(Link::NeedsReview {
             count: needs_review,
         });
         let shown = Link::classify(true, false, 0, needs_review);
-        let states = [Link::Synced, Link::Syncing, Link::Offline { unsent: 0 }]
+        let mut states: Vec<LinkChip> = [Link::Synced, Link::Syncing, Link::Offline { unsent: 0 }]
             .into_iter()
             .chain(review)
             .map(|link| LinkChip {
@@ -192,8 +195,19 @@ impl LinkChips {
                 } else {
                     ""
                 },
+                counted: false,
             })
             .collect();
+        let (label, meaning) = Link::held_template();
+        states.push(LinkChip {
+            key: "held",
+            label,
+            meaning,
+            class: Link::Offline { unsent: 1 }.css_class(),
+            shown: false,
+            href: "",
+            counted: true,
+        });
         LinkChips { states }
     }
 }

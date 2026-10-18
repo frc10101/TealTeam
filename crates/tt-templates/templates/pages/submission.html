@@ -29,6 +29,9 @@
   <p class="alert alert-info" role="status">Your next assignment: <a href="{{ next.href }}">{{ next.label }}</a></p>
 {% endif %}
 {% for error in errors %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endfor %}
+{# C13: outbox.js says here what it holds, what it sent, and what the server
+   refused. #}
+<div id="outbox" class="stack" aria-live="polite" hidden></div>
 {% for d in declined %}
   <div class="alert alert-warning" role="status">
     <p>{{ d.reviewer }} declined your record of {{ d.what }}: “{{ d.reason }}”</p>

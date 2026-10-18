@@ -2157,6 +2157,18 @@ mod flow_tests {
         assert!(form.contains(&format!(r#"data-draft="{key}""#)), "{form}");
         assert!(!form.contains("data-draft-posted"), "nothing posted yet");
         assert!(form.contains("/static/js/draft.js"));
+        // C13: the outbox holds what the form cannot send, says so here,
+        // and the chip has a held state for the script to count into.
+        assert!(form.contains(r#"<script src="/static/js/outbox.js" data-user="1""#));
+        assert!(form.contains(r#"<div id="outbox""#));
+        assert!(
+            form.contains(r#"data-link="held" data-label="Offline · {n} held""#),
+            "{form}"
+        );
+        let script = text(get(&state, "/static/js/outbox.js", None).await).await;
+        assert!(script.contains(r#""/api/sync/push?schema=""#));
+        assert!(script.contains("tt-outbox:v1:"));
+        assert!(!script.contains("serviceWorker") && !script.contains("isSecureContext"));
 
         let bad = text(
             post(

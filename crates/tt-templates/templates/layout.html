@@ -44,7 +44,10 @@
            different thing, on the lead scout page. #}
         <span class="link-chip" id="link-chip" role="status" aria-live="polite">
           {% for state in nav.link.states %}
-            {% if state.href.is_empty() %}
+            {% if state.counted %}
+              {# C13: link.js puts the outbox's count where the template has {n}. #}
+              <span class="badge {{ state.class }}" data-link="{{ state.key }}" data-label="{{ state.label }}" data-meaning="{{ state.meaning }}" hidden><span data-link-label>{{ state.label }}</span><span class="visually-hidden">: <span data-link-meaning>{{ state.meaning }}</span></span></span>
+            {% else if state.href.is_empty() %}
               <span class="badge {{ state.class }}" data-link="{{ state.key }}" title="{{ state.meaning }}"{% if !state.shown %} hidden{% endif %}>{{ state.label }}<span class="visually-hidden">: {{ state.meaning }}</span></span>
             {% else %}
               <a class="badge {{ state.class }}" data-link="{{ state.key }}" title="{{ state.meaning }}" href="{{ state.href }}{{ nav.event.query() }}#refused"{% if !state.shown %} hidden{% endif %}>{{ state.label }}<span class="visually-hidden">: {{ state.meaning }}</span></a>
@@ -163,6 +166,9 @@
     {% if nav.signed_in %}<script src="/static/js/persist.js" defer></script>{% endif %}
     {% if nav.signed_in || nav.offline_shell || nav.from_device %}<script src="/static/js/agenda.js" defer></script>{% endif %}
     {% if nav.signed_in || nav.offline_shell %}<script src="/static/js/token.js" data-user="{{ nav.user_id }}" defer></script>{% endif %}
+    {# C13: what the scouting form could not send, held on this device and
+       pushed when the server answers. Every signed-in page sends it. #}
+    {% if nav.signed_in %}<script src="/static/js/outbox.js" data-user="{{ nav.user_id }}" defer></script>{% endif %}
     {% if nav.signed_in || nav.offline_shell %}<script src="/static/js/courier.js" data-lead="{{ nav.can_lead }}" defer></script>{% endif %}
     {# The device's sync loop (C7, C12): only on a live page with a session
        worth syncing for -- not the shell or a page already made from the
