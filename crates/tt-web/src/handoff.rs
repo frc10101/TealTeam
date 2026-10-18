@@ -143,7 +143,14 @@ pub async fn receive(
         recorded,
         "forms handed over by QR"
     );
-    let receipt = receipt_frames(&HandoffReceipts { receipts });
+    // The forms stand either way; a second scan of fewer records none twice.
+    let Some(receipt) = receipt_frames(&HandoffReceipts { receipts }) else {
+        return fail(format!(
+            "The forms were recorded, but their receipt is too big to show as codes. \
+             Have the scout send fewer at a time, and scan again for each receipt ({} sent).",
+            rows.len()
+        ));
+    };
     let forms = |n: usize| if n == 1 { "form" } else { "forms" };
     let heading = if rows.is_empty() {
         format!("{}'s tablet sent no forms", user.name)
@@ -192,22 +199,25 @@ async fn heading(state: &AppState, queued: &QueuedObservation) -> String {
     format!("{label} · Team {}", queued.team_number)
 }
 
-/// The receipt as codes. A handoff is at most [`MAX_PER_PUSH`] forms, so
-/// its receipt is a few frames at most and always fits.
-fn receipt_frames(receipts: &HandoffReceipts) -> Vec<QrFrame> {
-    let json = serde_json::to_vec(receipts).expect("receipts serialize");
-    let frames = qr::frames(Kind::Receipt, &json).expect("a receipt fits");
+/// The receipt as codes. A handoff is at most [`MAX_PER_PUSH`] forms, so an
+/// honest receipt is a few frames at most. But each one echoes the record
+/// id and, in a refusal's reason, the match key as the tablet sent them, so
+/// codes made to fill [`qr::MAX_FRAMES`] can come back as more than fit:
+/// `None` then, never a panic.
+fn receipt_frames(receipts: &HandoffReceipts) -> Option<Vec<QrFrame>> {
+    let json = serde_json::to_vec(receipts).ok()?;
+    let frames = qr::frames(Kind::Receipt, &json).ok()?;
     let count = frames.len();
     frames
         .iter()
         .enumerate()
         .map(|(i, text)| {
-            let symbol = qr::symbol(text).expect("a frame fits one code");
-            QrFrame {
+            let symbol = qr::symbol(text).ok()?;
+            Some(QrFrame {
                 size: symbol.size,
                 path: symbol.path,
                 label: format!("Part {} of {count}", i + 1),
-            }
+            })
         })
         .collect()
 }
@@ -480,6 +490,37 @@ mod tests {
             assert!(page.contains("data-scanner"));
         }
         assert!(state.repo.open_refusals().await.unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_receipt_too_big_for_codes_is_none_not_a_panic() {
+        // Incompressible text, as a handoff made to fill its codes echoes.
+        let mut seed: u64 = 0x2545_f491_4f6c_dd1d;
+        let mut noise = |n: usize| -> String {
+            (0..n)
+                .map(|_| {
+                    seed ^= seed << 13;
+                    seed ^= seed >> 7;
+                    seed ^= seed << 17;
+                    char::from(b'!' + (seed % 90) as u8)
+                })
+                .collect()
+        };
+        let receipts = (0..MAX_PER_PUSH)
+            .map(|_| Receipt {
+                client_record_id: noise(800),
+                outcome: Outcome::Refused { reason: noise(800) },
+            })
+            .collect();
+        assert!(receipt_frames(&HandoffReceipts { receipts }).is_none());
+
+        let small = HandoffReceipts {
+            receipts: vec![Receipt {
+                client_record_id: GOOD.into(),
+                outcome: Outcome::Recorded,
+            }],
+        };
+        assert_eq!(receipt_frames(&small).map(|f| f.len()), Some(1));
     }
 
     #[tokio::test]
