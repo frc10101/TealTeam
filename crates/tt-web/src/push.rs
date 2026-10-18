@@ -945,10 +945,14 @@ mod tests {
         assert_eq!(issued.status, 200, "{}", issued.body);
         let issued: serde_json::Value = serde_json::from_str(&issued.body).unwrap();
         let token = issued["token"].as_str().unwrap().to_string();
+        // What a sync sends (T1): the token, "~", its device key.
+        let credential = format!("{token}~{}", issued["key"].as_str().unwrap());
         let claims = tt_core::token::read_unverified(&token).unwrap();
         assert_eq!(claims.name, "Sam");
         assert_eq!(claims.team, Some(10101));
         assert_eq!(format!("tt_device={}", claims.device), DEVICE);
+        assert_eq!(claims.epoch, 0);
+        let claims_user = claims.user_id;
         // The device can check it with the key that came with it.
         use base64::Engine;
         let key: [u8; 32] = base64::engine::general_purpose::URL_SAFE_NO_PAD
@@ -1000,8 +1004,9 @@ mod tests {
             assert_eq!(nobody.get("/api/sync/pull").await.unwrap().status, 401);
         }
 
-        // With the token, from the tablet it was issued to: recorded as Sam.
-        let tablet = wire(Some(DEVICE.into()), Some(token.clone()));
+        // With the token and its key, from the tablet it was issued to:
+        // recorded as Sam.
+        let tablet = wire(Some(DEVICE.into()), Some(credential.clone()));
         let reply = (&tablet)
             .post_json("/api/sync/push", push.clone())
             .await
@@ -1016,19 +1021,26 @@ mod tests {
         // A token is not a session: pages still want Sam to sign in.
         assert_eq!((&tablet).get("/account").await.unwrap().status, 303);
 
-        // Copied to another browser, altered, or nonsense: refused.
+        // Copied to another browser, altered, without its key or with
+        // another, or nonsense: refused.
         let elsewhere = wire(
             Some("tt_device=0191f7ac-1234-7000-8000-000000000999".into()),
-            Some(token.clone()),
+            Some(credential.clone()),
         );
         let mut altered = token.clone();
         altered.pop();
         altered.push(if token.ends_with('A') { 'B' } else { 'A' });
+        let other_key = format!("{token}~{}", "A".repeat(43));
         for refused in [
             elsewhere,
-            wire(Some(DEVICE.into()), Some(altered)),
+            wire(
+                Some(DEVICE.into()),
+                Some(format!("{altered}~{}", issued["key"].as_str().unwrap())),
+            ),
+            wire(Some(DEVICE.into()), Some(token.clone())),
+            wire(Some(DEVICE.into()), Some(other_key)),
             wire(Some(DEVICE.into()), Some("v4.public.nonsense".into())),
-            wire(None, Some(token)),
+            wire(None, Some(credential.clone())),
         ] {
             let refused = &refused;
             assert_eq!(
@@ -1041,6 +1053,15 @@ mod tests {
             );
             assert_eq!(refused.get("/api/sync/pull").await.unwrap().status, 401);
         }
+
+        // Signed out everywhere (T1): the tablet's credential is void too.
+        assert_eq!((&tablet).get("/api/sync/pull").await.unwrap().status, 200);
+        state
+            .repo
+            .sign_out_everywhere(claims_user, claims_user, Utc::now())
+            .await
+            .unwrap();
+        assert_eq!((&tablet).get("/api/sync/pull").await.unwrap().status, 401);
     }
 
     /// TBA for 2026now, on localhost: Q2 played, and an OPR for 254.
@@ -1173,7 +1194,11 @@ mod tests {
             .await
             .unwrap();
         let issued: serde_json::Value = serde_json::from_str(&issued.body).unwrap();
-        let token = issued["token"].as_str().unwrap().to_string();
+        let token = format!(
+            "{}~{}",
+            issued["token"].as_str().unwrap(),
+            issued["key"].as_str().unwrap()
+        );
         (&sam)
             .post_json("/api/auth/logout", String::new())
             .await

@@ -267,6 +267,13 @@
                 <button class="btn btn-secondary" type="submit">Rename</button>
               </div>
             </form>
+            {# T1: a lost tablet, or a scout's handoff codes photographed. #}
+            {% if device.last_user_id != 0 %}
+              <form method="post" action="/api/users/{{ device.last_user_id }}/sign-out{{ nav.event.query() }}" class="device-sign-out">
+                <button class="btn btn-secondary btn-sm" type="submit">Sign {{ device.last_user }} out everywhere</button>
+                <span class="hint">Lost tablet? Ends their sessions and every tablet's offline sign-in.</span>
+              </form>
+            {% endif %}
           </li>
         {% endfor %}
       </ul>

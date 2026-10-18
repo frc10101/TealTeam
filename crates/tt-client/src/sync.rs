@@ -585,8 +585,9 @@ fn upsert_pick(tx: &Transaction, f: &Fields) -> rusqlite::Result<bool> {
 /// service worker. Same-origin, so the session and device cookies go with
 /// it, and redirects are not followed, so a lost session reads as one.
 ///
-/// `bearer` is the device's offline token (C9, `static/js/token.js`), sent
-/// as `Authorization: Bearer`, so a sync still goes as the scout once the
+/// `bearer` is the device's offline credential (C9, `static/js/token.js`:
+/// the token, `~`, its device key, T1), sent as `Authorization: Bearer`, so
+/// a sync still goes as the scout once the
 /// session has run out. A worker cannot read `localStorage`; whoever owns
 /// the database is handed it by the page.
 ///

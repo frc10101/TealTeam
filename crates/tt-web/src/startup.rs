@@ -281,6 +281,10 @@ pub fn router(state: AppState) -> Router {
             post(handlers::distribute_assignments),
         )
         .route("/api/devices/{id}/rename", post(handlers::rename_device))
+        .route(
+            "/api/users/{id}/sign-out",
+            post(handlers::sign_out_everywhere),
+        )
         .route("/api/weights", post(handlers::save_weights))
         .route("/api/rankings/manual", post(handlers::save_rankings))
         .route("/api/pick-list", post(handlers::change_pick_list))
@@ -2935,6 +2939,9 @@ mod flow_tests {
         assert!(body.contains("Tablet renamed."));
         assert!(body.contains("<strong>Stands Left</strong>"));
         assert!(body.contains("last used by Sam"));
+        // T1: and a way to void Sam's sign-ins if the tablet goes missing.
+        assert!(body.contains("Sign Sam out everywhere"), "{body}");
+        assert!(body.contains(r#"action="/api/users/"#), "{body}");
 
         post(
             &state,

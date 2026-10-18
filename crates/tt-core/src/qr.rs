@@ -347,14 +347,36 @@ pub fn symbol(text: &str) -> Result<Symbol, QrError> {
 /// A tablet's forms that never reached the Pi, carried to a lead scout who
 /// can reach it ([`Kind::Handoff`]). `static/js/handoff.js` writes it from
 /// what `draft.js` kept (C3).
+///
+/// `body` is a [`HandoffBody`] as JSON text, and `mac` is its
+/// [`token::mac`](crate::token::mac) for [`Purpose::Handoff`](crate::token::Purpose)
+/// with the scout's device key (T1). The codes never carry the scout's
+/// token: a photo of them names the scout and holds a MAC over these forms
+/// alone, for [`HANDOFF_WINDOW`], and nothing the sync would take.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Handoff {
-    /// The scout's offline token (C9). It says who saved the forms and on
-    /// which tablet, and the Pi checks its signature, so a lead records
-    /// them as that scout, not as themself.
-    pub token: String,
+    pub body: String,
+    pub mac: String,
+}
+
+/// What a [`Handoff`]'s MAC covers.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct HandoffBody {
+    /// Whose token's key made the MAC (C9): the Pi records the forms as
+    /// them, from their tablet, and derives the key from it.
+    pub scout: crate::token::Holder,
+    /// Made fresh each time the codes are shown. The receipt echoes it, so
+    /// a tablet takes only the receipt for the codes it showed.
+    pub nonce: String,
+    /// When the codes were made, in Unix milliseconds on the tablet's clock.
+    pub at: i64,
     pub forms: Vec<HandedForm>,
 }
+
+/// How far a handoff's `at` may be from the Pi's clock, after the tablet's
+/// own clock correction (S12): long enough for a lead to walk over, short
+/// enough that a photo of the codes is soon worth nothing.
+pub const HANDOFF_WINDOW: chrono::TimeDelta = chrono::TimeDelta::minutes(20);
 
 /// One form as the tablet kept it: answers by input name, as the form
 /// would post them, a ticked box as `true`.
@@ -387,9 +409,21 @@ impl HandedForm {
 }
 
 /// The Pi's answer to a handoff ([`Kind::Receipt`]), shown as a code for
-/// the tablet to read, so it knows which forms it can let go of.
+/// the tablet to read, so it knows which forms it can let go of. `body` is
+/// a [`ReceiptBody`] as JSON text; `mac` is its MAC for
+/// [`Purpose::Receipt`](crate::token::Purpose) with the scout's device key,
+/// which the tablet checks before it deletes anything (T1).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct HandoffReceipts {
+    pub body: String,
+    pub mac: String,
+}
+
+/// What a receipt's MAC covers.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ReceiptBody {
+    /// The handoff's own nonce, so an old receipt does not answer new codes.
+    pub nonce: String,
     pub receipts: Vec<crate::outbox::Receipt>,
 }
 

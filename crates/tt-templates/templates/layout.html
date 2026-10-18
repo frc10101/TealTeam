@@ -165,7 +165,9 @@
     <script src="/static/js/tabs.js" defer></script>
     {% if nav.signed_in %}<script src="/static/js/persist.js" defer></script>{% endif %}
     {% if nav.signed_in || nav.offline_shell || nav.from_device %}<script src="/static/js/agenda.js" defer></script>{% endif %}
-    {% if nav.signed_in || nav.offline_shell %}<script src="/static/js/token.js" data-user="{{ nav.user_id }}" defer></script>{% endif %}
+    {# C9: every page, so signing in or out drops the kept token (T1); only a
+       signed-in page fetches one. #}
+    <script src="/static/js/token.js" data-user="{{ nav.user_id }}" defer></script>
     {# C13: what the scouting form could not send, held on this device and
        pushed when the server answers. Every signed-in page sends it. #}
     {% if nav.signed_in %}<script src="/static/js/outbox.js" data-user="{{ nav.user_id }}" defer></script>{% endif %}

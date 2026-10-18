@@ -18,7 +18,7 @@ import { spawn, execFileSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 const [D, BIN] = process.argv.slice(2).map((a) => resolve(a));
-const PORT = 18426, CDP = 9341, local = `http://127.0.0.1:${PORT}`, lan = `http://scout.lan:${PORT}`;
+const PORT = Number(process.env.TT_PORT || 18426), CDP = Number(process.env.TT_CDP || 9341), local = `http://127.0.0.1:${PORT}`, lan = `http://scout.lan:${PORT}`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 mkdirSync(D, { recursive: true });
 rmSync(`${D}/chr`, { recursive: true, force: true });
@@ -109,8 +109,8 @@ check("the scouting form is open", await evaluate(`!!document.getElementById('sc
 check("  over plain http: no secure context, no service worker",
   (await evaluate(`isSecureContext`)) === false && (await evaluate(`!('serviceWorker' in navigator)`)));
 check("  with the outbox script loaded", await evaluate(`!!window.ttOutbox`));
-await until(`!!localStorage.getItem('tt-token:v1')`, 3000);
-check("  and the offline token kept", await evaluate(`!!localStorage.getItem('tt-token:v1')`));
+await until(`!!localStorage.getItem('tt-token:v2')`, 3000);
+check("  and the offline token kept", await evaluate(`!!localStorage.getItem('tt-token:v2')`));
 check("the chip says Synced", (await chipKey()) === "synced", await chip());
 
 // 2. The Pi goes away under the open form; two saves are held.

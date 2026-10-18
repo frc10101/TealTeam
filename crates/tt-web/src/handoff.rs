@@ -11,19 +11,26 @@
 //! a page saying what became of each, with a receipt drawn as a code for the
 //! tablet to scan back, so it lets go of what the Pi now has.
 //!
-//! The token is what makes this safe to accept: it says who saved the forms,
-//! and only the Pi could have signed it. It is not tied to the device that
-//! posts, as a push's is, since the codes come off another screen. So a copy
-//! of a scout's token could be shown as them by anyone, but only a lead
-//! scout can scan it in, and only within the token's 72 hours.
+//! The codes carry no token (T1). They name the scout's token's holder
+//! (`tt_core::token::Holder`) and carry a MAC over the forms, made with the
+//! device key only that tablet was given. The Pi derives the key again and
+//! checks the MAC, so only that tablet could have made these codes, for
+//! these forms. A photo of them is good for those forms alone, which record
+//! once anyway, within `qr::HANDOFF_WINDOW` of being shown, and nothing
+//! else: no sync takes a holder. The receipt comes back with a MAC by the
+//! same key and the codes' nonce, so the tablet deletes only what the Pi
+//! answered for those codes. Each scan that records is a `handoff_scans`
+//! row naming the lead.
 
 use chrono::{DateTime, Utc};
 use tracing::{info, warn};
 use tt_core::form::{RawAnswers, read_answers_as_given};
 use tt_core::outbox::{MAX_PER_PUSH, Outcome, QueuedObservation, Receipt};
-use tt_core::qr::{self, HandedForm, Handoff, HandoffReceipts, Kind};
+use tt_core::qr::{self, HandedForm, Handoff, HandoffBody, HandoffReceipts, Kind, ReceiptBody};
+use tt_core::token::{self, Purpose};
 use tt_core::user::User;
 use tt_repo::Repo;
+use tt_repo_sqlite::token_key::HandoffScan;
 use tt_templates::{HandoffResult, HandoffRow, Nav, QrFrame, ScanPage};
 
 use crate::startup::AppState;
@@ -60,41 +67,45 @@ pub async fn receive(
                 .into(),
         );
     }
+    let not_forms = |e: serde_json::Error| {
+        fail(format!(
+            "Nothing was recorded: those codes are not a scout's forms ({e})."
+        ))
+    };
     let handoff: Handoff = match serde_json::from_slice(&bytes) {
         Ok(handoff) => handoff,
-        Err(e) => {
-            return fail(format!(
-                "Nothing was recorded: those codes are not a scout's forms ({e})."
-            ));
-        }
+        Err(e) => return not_forms(e),
     };
-    if handoff.forms.len() > MAX_PER_PUSH {
+    // Read before it is checked, for who to check it as; nothing in it is
+    // believed until the MAC holds.
+    let body: HandoffBody = match serde_json::from_str(&handoff.body) {
+        Ok(body) => body,
+        Err(e) => return not_forms(e),
+    };
+    if body.forms.len() > MAX_PER_PUSH {
         return fail(format!(
             "Nothing was recorded: at most {MAX_PER_PUSH} forms at a time."
         ));
     }
-    let claims = match crate::token::verify(state, &handoff.token).await {
-        Ok(claims) => claims,
+    let signed_in_again = "The scout signs in on it again once it reaches the server.";
+    let (user, key) = match crate::token::holder_key(state, &body.scout).await {
+        Ok(found) => found,
         Err(e) => {
             return fail(format!(
-                "Nothing was recorded: the tablet's sign-in could not be used ({e}). The scout signs in on it again once it reaches the server."
+                "Nothing was recorded: the tablet's sign-in could not be used ({e}). {signed_in_again}"
             ));
         }
     };
-    // Roles and team as they are now, as for a push with a token.
-    let user = match state.repo.user_by_id(claims.user_id).await {
-        Ok(Some(user)) => user,
-        Ok(None) => {
-            return fail("Nothing was recorded: the account that saved them is gone.".into());
-        }
-        Err(e) => {
-            warn!("loading a handoff's scout: {e}");
-            return fail("Nothing was recorded: storage is unavailable. Try again.".into());
-        }
-    };
+    if !token::mac_holds(&key, Purpose::Handoff, &handoff.body, &handoff.mac) {
+        info!(lead = %lead.email, scout = %user.email, "refused a handoff whose MAC does not hold");
+        return fail(format!(
+            "Nothing was recorded: those codes were not made by {}'s tablet, or were changed. {signed_in_again}",
+            user.name
+        ));
+    }
     let device = state
         .repo
-        .device_by_uuid(&claims.device)
+        .device_by_uuid(&body.scout.device)
         .await
         .unwrap_or_else(|e| {
             warn!("looking up a handoff's tablet: {e}");
@@ -102,9 +113,22 @@ pub async fn receive(
         });
 
     let now = Utc::now();
-    let mut rows = Vec::with_capacity(handoff.forms.len());
-    let mut receipts = Vec::with_capacity(handoff.forms.len());
-    for form in &handoff.forms {
+    // When the codes were made, on the Pi's clock as near as the tablet's
+    // last measurement (S12) says.
+    let offset = device.as_ref().and_then(|d| d.clock_offset_ms).unwrap_or(0);
+    let made = DateTime::from_timestamp_millis(body.at.saturating_add(offset));
+    if made.is_none_or(|made| (now - made).abs() > qr::HANDOFF_WINDOW) {
+        return fail(format!(
+            "Nothing was recorded: those codes are more than {} minutes old, or the tablet's clock is off. \
+             Have the scout press Hide and show the codes again.",
+            qr::HANDOFF_WINDOW.num_minutes()
+        ));
+    }
+
+    let now = Utc::now();
+    let mut rows = Vec::with_capacity(body.forms.len());
+    let mut receipts = Vec::with_capacity(body.forms.len());
+    for form in &body.forms {
         let queued = queued(state, form, now);
         let heading = heading(state, &queued).await;
         let client_record_id = queued.client_record_id.clone();
@@ -138,13 +162,30 @@ pub async fn receive(
     info!(
         lead = %lead.email,
         scout = %user.email,
-        device = %claims.device,
+        device = %body.scout.device,
         sent = rows.len(),
         recorded,
         "forms handed over by QR"
     );
+    let scan = HandoffScan {
+        at: now,
+        lead_id: lead.id,
+        scout_id: user.id,
+        device_uuid: &body.scout.device,
+        nonce: &body.nonce,
+        sent: rows.len(),
+        recorded,
+    };
+    if let Err(e) = state.repo.record_handoff_scan(&scan).await {
+        // The forms stand; the log line above still names the lead.
+        warn!("recording a handoff scan: {e}");
+    }
     // The forms stand either way; a second scan of fewer records none twice.
-    let Some(receipt) = receipt_frames(&HandoffReceipts { receipts }) else {
+    let receipt = ReceiptBody {
+        nonce: body.nonce.clone(),
+        receipts,
+    };
+    let Some(receipt) = receipt_frames(&key, &receipt) else {
         return fail(format!(
             "The forms were recorded, but their receipt is too big to show as codes. \
              Have the scout send fewer at a time, and scan again for each receipt ({} sent).",
@@ -199,13 +240,24 @@ async fn heading(state: &AppState, queued: &QueuedObservation) -> String {
     format!("{label} · Team {}", queued.team_number)
 }
 
-/// The receipt as codes. A handoff is at most [`MAX_PER_PUSH`] forms, so an
-/// honest receipt is a few frames at most. But each one echoes the record
-/// id and, in a refusal's reason, the match key as the tablet sent them, so
-/// codes made to fill [`qr::MAX_FRAMES`] can come back as more than fit:
-/// `None` then, never a panic.
-fn receipt_frames(receipts: &HandoffReceipts) -> Option<Vec<QrFrame>> {
-    let json = serde_json::to_vec(receipts).ok()?;
+/// The receipt with its MAC by the scout's device key, as the tablet
+/// checks it before deleting anything.
+fn signed_receipt(key: &[u8; 32], receipt: &ReceiptBody) -> HandoffReceipts {
+    let body = serde_json::to_string(receipt).expect("a receipt serializes");
+    HandoffReceipts {
+        mac: token::mac(key, Purpose::Receipt, &body),
+        body,
+    }
+}
+
+/// The receipt as codes, with its MAC by the scout's device key. A handoff
+/// is at most [`MAX_PER_PUSH`] forms, so an honest receipt is a few frames
+/// at most. But each one echoes the record id and, in a refusal's reason,
+/// the match key as the tablet sent them, so codes made to fill
+/// [`qr::MAX_FRAMES`] can come back as more than fit: `None` then, never a
+/// panic.
+fn receipt_frames(key: &[u8; 32], receipt: &ReceiptBody) -> Option<Vec<QrFrame>> {
+    let json = serde_json::to_vec(&signed_receipt(key, receipt)).ok()?;
     let frames = qr::frames(Kind::Receipt, &json).ok()?;
     let count = frames.len();
     frames
@@ -360,19 +412,19 @@ mod tests {
             .unwrap();
         let (status, issued) = send(&state, issue).await;
         assert_eq!(status, 200, "{issued}");
-        let token = serde_json::from_str::<serde_json::Value>(&issued).unwrap()["token"]
-            .as_str()
-            .unwrap()
-            .to_string();
+        let issued: serde_json::Value = serde_json::from_str(&issued).unwrap();
 
         // Two forms saved with no server: one good, one of a robot that is
         // not in the match.
         let watched = Utc::now() - TimeDelta::minutes(20);
-        let handoff = serde_json::json!({
-            "token": token,
-            "forms": [form(GOOD, "254", watched), form(WRONG, "9999", watched)],
-        });
+        let forms = vec![form(GOOD, "254", watched), form(WRONG, "9999", watched)];
+        let (handoff, _) = signed(&issued, forms.clone(), Utc::now());
         let frames = qr::frames(Kind::Handoff, &serde_json::to_vec(&handoff).unwrap()).unwrap();
+        // The codes carry no token, and nothing the sync would take.
+        let shown =
+            String::from_utf8(qr::assemble(frames.iter().map(String::as_str)).unwrap().1).unwrap();
+        assert!(!shown.contains("v4.public."), "{shown}");
+        assert!(!shown.contains(issued["key"].as_str().unwrap()), "{shown}");
 
         // The scanner is a lead's.
         let (status, page) = send(
@@ -405,6 +457,12 @@ mod tests {
         );
         assert!(page.contains("Show this to Kim"), "{page}");
         assert!(page.contains(r#"<svg class="qr""#), "the receipt is a code");
+        // A lead's scan is on the record (T1).
+        let scans = state.repo.handoff_scans(10).await.unwrap();
+        assert_eq!(scans.len(), 1);
+        assert_eq!(scans[0].lead.as_deref(), Some("Sam"));
+        assert_eq!(scans[0].scout.as_deref(), Some("Kim"));
+        assert_eq!((scans[0].sent, scans[0].recorded), (2, 1));
 
         // Recorded as Kim, from Kim's tablet, when Kim watched.
         let pending = state.repo.pending_observations("2026now").await.unwrap();
@@ -441,24 +499,119 @@ mod tests {
         );
         assert_eq!(state.repo.open_refusals().await.unwrap().len(), 1);
 
+        let sent: HandoffBody = serde_json::from_str(&handoff.body).unwrap();
+
+        // Forms swapped under the tablet's MAC, or a MAC by another key:
+        // nothing recorded.
+        let mut swapped = sent.clone();
+        swapped.forms[0].team = "1".into();
+        let swapped = Handoff {
+            body: serde_json::to_string(&swapped).unwrap(),
+            mac: handoff.mac.clone(),
+        };
+        let forged = Handoff {
+            mac: token::mac(&[3; 32], Purpose::Handoff, &handoff.body),
+            ..handoff.clone()
+        };
+        for bad in [swapped, forged] {
+            let codes = qr::frames(Kind::Handoff, &serde_json::to_vec(&bad).unwrap()).unwrap();
+            let (_, page) = post_frames(&state, &sam, &codes).await;
+            assert!(
+                page.contains("were not made by Kim&#39;s tablet, or were changed"),
+                "{page}"
+            );
+        }
+        // Codes made an hour ago: too old.
+        let (stale, _) = signed(&issued, forms.clone(), Utc::now() - TimeDelta::hours(1));
+        let codes = qr::frames(Kind::Handoff, &serde_json::to_vec(&stale).unwrap()).unwrap();
+        let (_, page) = post_frames(&state, &sam, &codes).await;
+        assert!(page.contains("more than 20 minutes old"), "{page}");
+
         // Some parts missing, and nothing recorded.
-        let mut more = handoff.clone();
-        more["forms"] = serde_json::Value::Array(
-            (0..12)
-                .map(|i| {
-                    form(
-                        &format!("0191f7ac-1234-7000-8000-0000000001{i:02}"),
-                        "254",
-                        watched,
-                    )
-                })
-                .collect(),
-        );
+        let more = (0..40)
+            .map(|i| {
+                form(
+                    &format!("0191f7ac-1234-7000-8000-0000000001{i:02}"),
+                    "254",
+                    watched,
+                )
+            })
+            .collect();
+        let (more, _) = signed(&issued, more, Utc::now());
         let long = qr::frames(Kind::Handoff, &serde_json::to_vec(&more).unwrap()).unwrap();
         assert!(long.len() > 1);
         let (_, page) = post_frames(&state, &sam, &long[1..]).await;
         assert!(page.contains("Nothing was recorded: 1 of"), "{page}");
         assert!(page.contains("data-scanner"), "back to the scanner");
+        assert_eq!(state.repo.handoff_scans(10).await.unwrap().len(), 2);
+
+        // Kim's tablet is lost: a lead signs her out everywhere, and its
+        // codes are refused from then on.
+        let holder: HandoffBody = serde_json::from_str(&handoff.body).unwrap();
+        let out = Request::post(format!(
+            "/api/users/{}/sign-out?event=2026now",
+            holder.scout.user_id
+        ))
+        .header(header::COOKIE, &kim)
+        .body(Body::empty())
+        .unwrap();
+        assert_eq!(send(&state, out).await.0, 303, "a scout cannot");
+        assert_eq!(
+            state.repo.token_epoch(holder.scout.user_id).await.unwrap(),
+            0
+        );
+        let out = Request::post(format!(
+            "/api/users/{}/sign-out?event=2026now",
+            holder.scout.user_id
+        ))
+        .header(header::COOKIE, &sam)
+        .body(Body::empty())
+        .unwrap();
+        let (status, _) = send(&state, out).await;
+        assert_eq!(status, 303);
+        assert_eq!(
+            state.repo.token_epoch(holder.scout.user_id).await.unwrap(),
+            1
+        );
+        let (fresh, _) = signed(&issued, forms, Utc::now());
+        let codes = qr::frames(Kind::Handoff, &serde_json::to_vec(&fresh).unwrap()).unwrap();
+        let (_, page) = post_frames(&state, &sam, &codes).await;
+        assert!(page.contains("signed out everywhere since"), "{page}");
+        // And her session with it.
+        let (status, _) = send(
+            &state,
+            Request::get("/account")
+                .header(header::COOKIE, &kim)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(status, 303, "Kim signs in again");
+    }
+
+    /// A handoff of `forms` as Kim's tablet makes it at `at`, and her key.
+    fn signed(
+        issued: &serde_json::Value,
+        forms: Vec<serde_json::Value>,
+        at: DateTime<Utc>,
+    ) -> (Handoff, [u8; 32]) {
+        use base64::Engine;
+        let token = issued["token"].as_str().unwrap();
+        let key: [u8; 32] = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(issued["key"].as_str().unwrap())
+            .unwrap()
+            .try_into()
+            .unwrap();
+        let claims = token::read_unverified(token).unwrap();
+        let body = serde_json::json!({
+            "scout": token::Holder::of(&claims),
+            "nonce": format!("nonce-{}", at.timestamp_millis()),
+            "at": at.timestamp_millis(),
+            "forms": forms,
+        })
+        .to_string();
+        let mac = token::mac(&key, Purpose::Handoff, &body);
+        (Handoff { body, mac }, key)
     }
 
     #[tokio::test]
@@ -471,7 +624,7 @@ mod tests {
                 "not a TealTeam code",
             ),
             (
-                qr::frames(Kind::Receipt, br#"{"receipts":[]}"#).unwrap(),
+                qr::frames(Kind::Receipt, br#"{"body":"{}","mac":""}"#).unwrap(),
                 "That is a receipt from the server",
             ),
             (
@@ -479,7 +632,16 @@ mod tests {
                 "not a scout&#39;s forms",
             ),
             (
+                // As made before T1: a token in the codes.
                 qr::frames(Kind::Handoff, br#"{"token":"v4.public.nope","forms":[]}"#).unwrap(),
+                "not a scout&#39;s forms",
+            ),
+            (
+                qr::frames(
+                    Kind::Handoff,
+                    br#"{"body":"{\"scout\":{\"sub\":\"99\",\"dev\":\"x\",\"ep\":0,\"iat\":\"2099-01-01T00:00:00Z\"},\"nonce\":\"n\",\"at\":0,\"forms\":[]}","mac":"m"}"#,
+                )
+                .unwrap(),
                 "the tablet&#39;s sign-in could not be used",
             ),
         ];
@@ -512,15 +674,50 @@ mod tests {
                 outcome: Outcome::Refused { reason: noise(800) },
             })
             .collect();
-        assert!(receipt_frames(&HandoffReceipts { receipts }).is_none());
+        let key = [5; 32];
+        let nonce = "n".to_string();
+        assert!(
+            receipt_frames(
+                &key,
+                &ReceiptBody {
+                    nonce: nonce.clone(),
+                    receipts
+                }
+            )
+            .is_none()
+        );
 
-        let small = HandoffReceipts {
+        let small = ReceiptBody {
+            nonce,
             receipts: vec![Receipt {
                 client_record_id: GOOD.into(),
                 outcome: Outcome::Recorded,
             }],
         };
-        assert_eq!(receipt_frames(&small).map(|f| f.len()), Some(1));
+        assert_eq!(receipt_frames(&key, &small).map(|f| f.len()), Some(1));
+
+        // The tablet's check: by its key, over the body as sent.
+        let signed = signed_receipt(&key, &small);
+        assert!(token::mac_holds(
+            &key,
+            Purpose::Receipt,
+            &signed.body,
+            &signed.mac
+        ));
+        assert!(!token::mac_holds(
+            &[6; 32],
+            Purpose::Receipt,
+            &signed.body,
+            &signed.mac
+        ));
+        assert!(!token::mac_holds(
+            &key,
+            Purpose::Handoff,
+            &signed.body,
+            &signed.mac
+        ));
+        let said: ReceiptBody = serde_json::from_str(&signed.body).unwrap();
+        assert_eq!(said, small);
     }
 
     #[tokio::test]
@@ -549,6 +746,7 @@ mod tests {
                 "vendor/qrcode-generator/qrcode.js",
                 "js/qr.js",
                 "js/scan.js",
+                "js/hmac.js",
                 "js/handoff.js",
             ] {
                 assert!(

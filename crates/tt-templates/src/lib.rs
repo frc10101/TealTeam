@@ -893,6 +893,8 @@ pub struct DeviceRow {
     pub last_seen: String,
     /// Who was signed in on it last. Empty when nobody was.
     pub last_user: String,
+    /// Their id, for signing them out everywhere (T1); 0 when nobody.
+    pub last_user_id: i64,
     /// `"clock 3 s behind"`; empty until the tablet has measured (S12).
     pub clock: String,
     /// More than a minute out.

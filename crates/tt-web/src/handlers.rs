@@ -561,6 +561,17 @@ pub async fn rename_device(
     assignment_outcome(&state, &user, requested.as_deref(), outcome).await
 }
 
+/// `POST /api/users/{id}/sign-out` (T1): sign a scout out everywhere.
+pub async fn sign_out_everywhere(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
+    Path(id): Path<i64>,
+) -> Response {
+    let outcome = assignments::sign_out_everywhere(&state, &user, requested.as_deref(), id).await;
+    assignment_outcome(&state, &user, requested.as_deref(), outcome).await
+}
+
 /// `POST /api/frc/sync` (I13): refresh upstream data now.
 ///
 /// One route, two callers. A script gets JSON counts. A browser posting the
