@@ -237,6 +237,7 @@ pub fn router(state: AppState) -> Router {
         .route("/sign-in", get(handlers::sign_in_page))
         .route("/sign-up", get(handlers::sign_up_page))
         .route("/account", get(handlers::account))
+        .route("/help", get(handlers::help))
         .route("/submission", get(handlers::submission))
         .route("/teams", get(handlers::team))
         .route("/notes", get(handlers::notes))
@@ -1115,6 +1116,33 @@ mod flow_tests {
         assert!(!body.contains("/lead-scout"));
         assert!(!body.contains("/drive-coach"));
         assert!(!body.contains("/admin/db"));
+    }
+
+    #[tokio::test]
+    async fn help_is_public_and_every_page_links_it() {
+        let state = migrated_state().await;
+        let anonymous = get(&state, "/help", None).await;
+        assert_eq!(anonymous.status(), StatusCode::OK);
+        let body = text(anonymous).await;
+        assert!(body.contains("held on this device, not saved"), "{body}");
+        assert!(body.contains("Server out of reach?"), "{body}");
+        // Signed out there is no team box: team pages need a session.
+        assert!(!body.contains(r#"action="/teams""#), "{body}");
+
+        let admin = signed_up(&state).await;
+        let home = text(get(&state, "/", Some(&admin)).await).await;
+        assert!(home.contains(r#"<a href="/help">Help</a>"#), "{home}");
+        assert!(home.contains(r#"action="/teams""#), "{home}");
+        assert!(home.contains(r#"name="team""#), "{home}");
+    }
+
+    #[tokio::test]
+    async fn the_account_page_does_not_say_nothing_is_kept_over_http() {
+        let state = migrated_state().await;
+        let admin = signed_up(&state).await;
+        let body = text(get(&state, "/account", Some(&admin)).await).await;
+        assert!(!body.contains("keeps nothing on the device"), "{body}");
+        assert!(body.contains("held"), "{body}");
     }
 
     // ── Admin database viewer (U17) ─────────────────────────────────────────

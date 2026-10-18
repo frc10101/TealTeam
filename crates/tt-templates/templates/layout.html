@@ -88,7 +88,22 @@
           </nav>
         {% endif %}
 
+        {# The team box (RS 7 Navigation): a number goes straight to that
+           team's page. Signed in only, since team pages are. #}
+        {% if nav.signed_in %}
+          <form method="get" action="/teams" class="team-jump" role="search">
+            {% if !nav.event.selected.is_empty() %}<input type="hidden" name="event" value="{{ nav.event.selected }}">{% endif %}
+            <label class="visually-hidden" for="team-jump">Team number</label>
+            <input id="team-jump" class="form-input" type="text" name="team" inputmode="numeric"
+                   pattern="[0-9]*" maxlength="5" placeholder="Team #" autocomplete="off">
+            <button type="submit" class="btn btn-secondary">Go</button>
+          </form>
+        {% endif %}
+
+        {# Help sits with the account, not in the tab bar: it is public, so it
+           shows signed out too, and the bar has no room on a phone. #}
         <div class="nav-account">
+          <a href="/help{{ nav.event.query() }}">Help</a>
           {% if nav.signed_in %}
             <a href="/account{{ nav.event.query() }}">{{ nav.name }}</a>
             <form method="post" action="/api/auth/logout" class="inline">

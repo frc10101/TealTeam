@@ -1,0 +1,35 @@
+{% extends "layout.html" %}
+{# U5: public, so it can be read before signing in. Keep it to what the app
+   does now: the chip's words come from tt_core::link, the notices from
+   outbox.js, submission.html and handoff.html. #}
+{% block content %}
+<section class="card narrow">
+  <div class="card-header"><h1>Help</h1></div>
+  <div class="card-body stack">
+    <h2>Scouting a robot</h2>
+    <ol>
+      <li>Sign in, and pick the event at the top if it is not already showing.</li>
+      <li>Open <strong>Scout</strong>. If you have an assignment, the next one is linked at the top.</li>
+      <li>Fill it in while the match runs and press <strong>Save observation</strong>. What you type is kept on the device as you go, so a reload does not lose it.</li>
+    </ol>
+
+    <h2>The chip in the header</h2>
+    <dl class="detail">
+      <dt>Synced</dt><dd>Everything you have entered is on the server.</dd>
+      <dt>Syncing…</dt><dd>Connected, and sending what you entered.</dd>
+      <dt>Offline · nothing unsent</dt><dd>This device can't reach the server. Everything saved before is on it.</dd>
+      <dt>Offline · 2 held</dt><dd>Forms you sent while the server was out of reach are <strong>held on this device, not saved</strong>. They are sent when the server answers; keep the page open and do not clear the browser.</dd>
+      <dt>1 needs review</dt><dd>The server refused something saved on a tablet. A lead scout decides what happens to it.</dd>
+    </dl>
+
+    <h2>Declined</h2>
+    <p>A lead scout can decline a record. The Scout page then says who declined it and why, with a <strong>Record it again</strong> button.</p>
+
+    <h2>Server out of reach for a while</h2>
+    <p>On the Scout page, open <strong>Server out of reach?</strong> and press <strong>Show the code</strong>. A lead scout who can reach the server scans it with <strong>Scan a tablet's forms</strong>, then shows you a receipt; scan it back with <strong>Scan the receipt</strong>. The tablet keeps your forms until the receipt says the server has them.</p>
+
+    <h2>Who to ask</h2>
+    <p>Your lead scout, for assignments, records and anything the chip says. An admin, for accounts and roles.</p>
+  </div>
+</section>
+{% endblock %}

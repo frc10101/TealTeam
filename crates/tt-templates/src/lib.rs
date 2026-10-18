@@ -370,18 +370,13 @@ pub struct SignUpPage {
     pub first_account: bool,
 }
 
-/// A reachable, access-controlled page whose content is still to come.
-///
-/// Exists so the nav never links a 404, and so the guard on a privileged route
-/// is settled before there is anything on it worth protecting.
+/// `GET /help` (U5): how to scout, and what the chip and the notices mean.
+/// Public, so a scout who cannot sign in can still read it.
 #[derive(Template)]
-#[template(path = "pages/placeholder.html")]
-pub struct PlaceholderPage {
+#[template(path = "pages/help.html")]
+pub struct HelpPage {
     pub title: String,
     pub nav: Nav,
-    pub heading: String,
-    pub summary: String,
-    pub season_name: String,
 }
 
 /// The offline shell (C1): what the service worker shows when a page cannot

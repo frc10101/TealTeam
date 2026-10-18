@@ -133,6 +133,13 @@ body.has-tabs { padding-bottom: calc(var(--tap-match) + env(safe-area-inset-bott
   .event-switcher { flex: 1 1 12rem; max-width: 22rem; order: 0; }
 }
 
+/* The team box: beside the event on anything wider, its own row on a phone. */
+.team-jump { display: flex; gap: 0.5rem; order: 1; flex: 1 1 100%; }
+.team-jump .form-input { flex: 1; min-width: 0; }
+@media (min-width: 40rem) {
+  .team-jump { flex: 0 1 11rem; order: 0; }
+}
+
 /* Screen-reader text: present for assistive technology, invisible otherwise. */
 .visually-hidden {
   position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;

@@ -20,10 +20,11 @@
   <div class="card-body" id="device-storage">
     <p data-storage="unknown">Whether this device keeps TealTeam's data is checked by a script, and scripts are off.</p>
     <p data-storage="insecure" hidden>
-      <strong>Nothing is kept here between visits.</strong> Browsers only keep a site's
-      data for pages that come over https, or from the device itself, and this page came
-      over plain http. For now TealTeam keeps nothing on the device, so nothing can be lost
-      from it either.
+      <strong>Kept, but the browser may clear it.</strong> This page came over plain http,
+      so the browser cannot be asked to promise to keep TealTeam's data. It still keeps
+      what you have typed into a form and any form held while the server was out of reach
+      (the chip says <em>held</em>) until the server has it. Clearing this browser's site
+      data, or a private window closing, loses what has not reached the server yet.
     </p>
     <p data-storage="persisted" hidden>
       <strong>Kept.</strong> The browser has agreed not to clear TealTeam's data to make room.

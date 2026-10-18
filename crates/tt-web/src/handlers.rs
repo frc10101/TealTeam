@@ -22,7 +22,9 @@ use chrono::Utc;
 use serde::Deserialize;
 use tt_core::user::{self, Roles};
 use tt_repo::{NewUser, Repo};
-use tt_templates::{AccountPage, LeadScoutPage, LinkChips, Nav, Page, SignInPage, SignUpPage};
+use tt_templates::{
+    AccountPage, HelpPage, LeadScoutPage, LinkChips, Nav, Page, SignInPage, SignUpPage,
+};
 
 use crate::admin;
 use crate::assignments::{self, GridParams};
@@ -329,6 +331,19 @@ fn account_page(nav: Nav, user: &tt_core::user::User, error: String, success: St
         role_labels: user.roles.labels(),
         error,
         success,
+    })
+}
+
+/// `GET /help` (U5): public, so it reads the same signed in or out.
+pub async fn help(
+    State(state): State<AppState>,
+    MaybeAuth(user): MaybeAuth,
+    EventParam(requested): EventParam,
+) -> Response {
+    let (nav, _) = event_page(&state, user.as_ref(), requested.as_deref()).await;
+    html(HelpPage {
+        title: "Help".into(),
+        nav,
     })
 }
 
