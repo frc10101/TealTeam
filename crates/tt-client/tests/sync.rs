@@ -318,6 +318,11 @@ async fn a_refusal_is_kept_with_its_reason_and_can_be_handed_over() {
     assert!(!device.is_queued(OTHER).unwrap());
     let outbox = device.outbox().unwrap();
     assert_eq!(outbox.len(), 2, "kept, not dropped");
+    assert_eq!(
+        device.waiting_count().unwrap(),
+        1,
+        "a refusal is not still to send, so it does not hold a stale copy"
+    );
     assert_eq!(outbox[1].refused.as_deref(), Some("Not saved: no."));
     assert_eq!(
         device.observed_teams("2026here_qm1", 7).await.unwrap(),
@@ -396,10 +401,19 @@ async fn nothing_but_an_echo_empties_the_outbox() {
         stop(Err("no connection to the Pi")).await,
         Some(Stop::Offline("no connection to the Pi".into()))
     );
-    assert_eq!(
-        stop(Ok((422, json!({ "error": "not an outbox" })))).await,
-        Some(Stop::Refused("not an outbox".into()))
-    );
+    // A push refused as a whole still pulls: one bad outbox must not stop
+    // the copy updating.
+    let pi = Pi::answers([
+        Ok((422, json!({ "error": "not an outbox" }))),
+        pulled(schema, json!([echo(50, PIS, 1678, 7, "approved")]), 50),
+    ]);
+    let report = SyncClient::new(&pi, vec![])
+        .sync(&device, at(10))
+        .await
+        .unwrap();
+    assert_eq!(pi.paths().len(), 2, "pulled after the refusal");
+    assert_eq!(report.applied, 1);
+    assert_eq!(report.stopped, Some(Stop::Refused("not an outbox".into())));
     let outbox = device.outbox().unwrap();
     assert_eq!(outbox.len(), 1);
     assert_eq!(outbox[0].attempts, 7);

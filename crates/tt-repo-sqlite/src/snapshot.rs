@@ -39,13 +39,14 @@
 //! rather than changes. Which tables are cut how is [`crate::replication`]'s
 //! lists, so a table added there is handled here without a second decision.
 
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::path::Path;
 
 use chrono::{DateTime, Utc};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode};
 use sqlx::{ConnectOptions, Connection, Row, SqliteConnection};
 use tt_repo::{RepoError, Result};
+
+use crate::scratch::Scratch;
 
 use crate::SqliteRepo;
 use crate::replication::{FROM_UPSTREAM, NEVER_REPLICATED, REPLICATED, SERVER_ONLY};
@@ -85,56 +86,38 @@ pub struct Snapshot {
     pub taken_at: DateTime<Utc>,
 }
 
-/// A file of this process's own, removed when dropped, with its journal.
-struct Scratch(PathBuf);
-
-impl Scratch {
-    fn new() -> Self {
-        static NEXT: AtomicU64 = AtomicU64::new(0);
-        Self(std::env::temp_dir().join(format!(
-            "tt-snapshot-{}-{}.sqlite",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        )))
-    }
-
-    fn path(&self) -> Result<&str> {
-        self.0.to_str().ok_or_else(|| {
-            RepoError::Unavailable(format!("{} is not a UTF-8 path", self.0.display()))
-        })
-    }
-}
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.0);
-        let _ = std::fs::remove_file(self.0.with_extension("sqlite-journal"));
-    }
+/// The scratch copy's path, as `VACUUM INTO` takes it.
+fn utf8(scratch: &Scratch) -> Result<&str> {
+    scratch.path().to_str().ok_or_else(|| {
+        RepoError::Unavailable(format!("{} is not a UTF-8 path", scratch.path().display()))
+    })
 }
 
 /// Make a snapshot of `repo` for `audience`.
 pub async fn build(repo: &SqliteRepo, audience: &(impl Audience + Sync)) -> Result<Snapshot> {
     let taken_at = Utc::now();
-    let scratch = Scratch::new();
+    let scratch = Scratch::new("snapshot")
+        .map_err(|e| RepoError::Unavailable(format!("making a scratch directory: {e}")))?;
     sqlx::query("VACUUM INTO ?")
-        .bind(scratch.path()?)
+        .bind(utf8(&scratch)?)
         .execute(repo.pool())
         .await
         .map_err(|e| query_err("copying the database for a snapshot", e))?;
     // An in-memory database copies into memory too, and leaves no file.
-    if !scratch.0.exists() {
+    if !scratch.path().exists() {
         return Err(RepoError::Unavailable(
             "only a database in a file can be snapshotted".into(),
         ));
     }
 
-    let mut conn = open(&scratch.0).await?;
+    let mut conn = open(scratch.path()).await?;
     let cut = cut(&mut conn, audience, taken_at).await;
     let _ = conn.close().await;
     let (changes, upstream) = cut?;
 
-    let bytes = std::fs::read(&scratch.0)
-        .map_err(|e| RepoError::Unavailable(format!("reading {}: {e}", scratch.0.display())))?;
+    let bytes = std::fs::read(scratch.path()).map_err(|e| {
+        RepoError::Unavailable(format!("reading {}: {e}", scratch.path().display()))
+    })?;
     Ok(Snapshot {
         bytes,
         changes,

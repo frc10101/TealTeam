@@ -157,8 +157,9 @@ struct SyncSummary {
     echoed: usize,
     applied: usize,
     upstream: usize,
-    /// What is still in the outbox afterwards, waiting or refused: what a
-    /// fresh snapshot would lose, and what `exportOutbox` would write.
+    /// What is still to send afterwards: what a fresh snapshot would lose.
+    /// A refused entry is not counted, since the Pi keeps it (C10), so one
+    /// dismissed refusal does not keep an old build's copy for good.
     queued: usize,
     stopped: Option<StopJson>,
 }
@@ -193,7 +194,7 @@ pub async fn sync(bearer: Option<String>) -> JsValue {
             return JsValue::NULL;
         }
     };
-    let queued = repo.outbox().map(|o| o.len()).unwrap_or_else(|e| {
+    let queued = repo.waiting_count().unwrap_or_else(|e| {
         warn(&format!("TealTeam: reading this device's outbox: {e}"));
         0
     });

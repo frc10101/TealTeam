@@ -120,7 +120,9 @@ fn from_row(row: &sqlx::sqlite::SqliteRow) -> Refusal {
 impl SqliteRepo {
     /// Keep a refusal. The same entry refused again, say from an exported
     /// outbox pushed later, gets the newer reason while it still waits, and
-    /// is left alone once a lead has dealt with it.
+    /// is left alone once a lead has dealt with it. Only the scout who sent
+    /// it refreshes it: another's entry under the same record id is dropped,
+    /// not let rewrite theirs.
     pub async fn keep_refusal(&self, refusal: &NewRefusal, now: DateTime<Utc>) -> Result<()> {
         let entry = &refusal.entry;
         sqlx::query(
@@ -130,7 +132,7 @@ impl SqliteRepo {
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) \
              ON CONFLICT (client_record_id) DO UPDATE SET \
                  reason = excluded.reason, refused_at = excluded.refused_at \
-             WHERE resolution IS NULL",
+             WHERE resolution IS NULL AND scouter_id IS excluded.scouter_id",
         )
         .bind(&entry.client_record_id)
         .bind(&entry.match_key)
@@ -253,6 +255,14 @@ mod tests {
             roles: Default::default(),
         };
         repo.create_user(scout, at(0)).await.unwrap();
+        let other = NewUser {
+            email: "alex@example.com".into(),
+            password_hash: "x".into(),
+            name: "Alex".into(),
+            team_number: Some(10101),
+            roles: Default::default(),
+        };
+        repo.create_user(other, at(0)).await.unwrap();
 
         repo.keep_refusal(&refusal("r1", "not on the schedule"), at(2))
             .await
@@ -264,9 +274,21 @@ mod tests {
         repo.keep_refusal(&refusal("r1", "still not on the schedule"), at(4))
             .await
             .unwrap();
+        // Another scout naming r2's record id does not touch Sam's row.
+        repo.keep_refusal(
+            &NewRefusal {
+                scouter_id: Some(2),
+                ..refusal("r2", "not yours")
+            },
+            at(4),
+        )
+        .await
+        .unwrap();
 
         let open = repo.open_refusals().await.unwrap();
         assert_eq!(open.len(), 2);
+        assert_eq!(open[1].reason, "not in that match");
+        assert_eq!(open[1].scouter_id, Some(1));
         assert_eq!(repo.open_refusal_count(None).await.unwrap(), 2);
         assert_eq!(repo.open_refusal_count(Some(1)).await.unwrap(), 2);
         assert_eq!(repo.open_refusal_count(Some(2)).await.unwrap(), 0);

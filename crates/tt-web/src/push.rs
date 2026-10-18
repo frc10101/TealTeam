@@ -898,6 +898,50 @@ mod tests {
         let kept = pending.iter().find(|o| o.team_number == 254).unwrap();
         assert_eq!(kept.schema_version, state.season.version - 1);
         assert_eq!(kept.payload, refusal.entry.payload);
+
+        // Saved some other way since it was refused: the lead's corrections
+        // would go nowhere, so the lead is told and it still waits.
+        let late = QueuedObservation {
+            client_record_id: "0191f7ac-1234-7000-8000-000000000004".into(),
+            team_number: 10101,
+            ..refusal.entry.clone()
+        };
+        let refusal = NewRefusal {
+            entry: late.clone(),
+            ..refusal
+        };
+        state.repo.keep_refusal(&refusal, Utc::now()).await.unwrap();
+        let id = state.repo.open_refusals().await.unwrap()[0].id;
+        let author = Author {
+            scouter_id: refusal.scouter_id,
+            device_id: refusal.device_id,
+            submitting_team: refusal.submitting_team,
+        };
+        let saved = record_as(&state, &late, author, Utc::now()).await.unwrap();
+        assert!(matches!(saved, Ok(Recorded::Created(_))), "{saved:?}");
+        let post = |body: &'static str| {
+            sam.send(
+                Request::post(format!("/api/refused/{id}/record?event=2026now"))
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded"),
+                Body::from(body),
+            )
+        };
+        let told = post(
+            "match=2026now_qm2&team=10101&answers=1&f.starting_position=center&f.teleop_scored=7\
+             &f.auto_scored=&f.penalties=&f.notes=",
+        )
+        .await;
+        assert_eq!(told.status, 200, "{}", told.body);
+        assert!(told.body.contains("already saved"), "{}", told.body);
+        assert_eq!(state.repo.open_refusal_count(None).await.unwrap(), 1);
+        // Posted as it was saved, it is that observation, and is marked so.
+        let marked = post(
+            "match=2026now_qm2&team=10101&answers=1&f.teleop_scored=5\
+             &f.auto_scored=&f.penalties=&f.notes=",
+        )
+        .await;
+        assert_eq!(marked.status, 303, "{}", marked.body);
+        assert_eq!(state.repo.open_refusal_count(None).await.unwrap(), 0);
     }
 
     #[tokio::test]

@@ -112,10 +112,14 @@ impl<T: Transport> SyncClient<T> {
     /// Push the outbox, then pull until caught up, saving as it goes.
     pub async fn sync(&self, repo: &ClientRepo, now: DateTime<Utc>) -> Result<Report> {
         let mut report = Report::default();
-        report.stopped = self.push(repo, now, &mut report).await?;
-        if report.stopped.is_none() {
-            report.stopped = self.pull(repo, now, &mut report).await?;
-        }
+        let pushed = self.push(repo, now, &mut report).await?;
+        // A push refused as a whole will be refused again, so it is no
+        // reason to leave this device's copy as it is: pull anyway, and say
+        // why the push stopped unless the pull has more to say.
+        report.stopped = match pushed {
+            None | Some(Stop::Refused(_)) => self.pull(repo, now, &mut report).await?.or(pushed),
+            stopped => stopped,
+        };
         Ok(report)
     }
 

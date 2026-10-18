@@ -25,6 +25,7 @@ mod observations;
 mod picklist;
 pub mod refused;
 pub mod replication;
+pub mod scratch;
 pub mod snapshot;
 mod standings;
 pub mod storage;

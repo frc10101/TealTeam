@@ -234,6 +234,20 @@ impl ClientRepo {
         tx.commit().ctx("noting a refusal")
     }
 
+    /// How many entries are still to send. A refused one is not: the Pi
+    /// already keeps it (C10), so a fresh copy loses nothing by dropping it.
+    pub fn waiting_count(&self) -> Result<usize> {
+        self.ensure_outbox()?;
+        self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM outbox WHERE refused IS NULL",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .map(|n| n as usize)
+            .ctx("reading the outbox")
+    }
+
     /// Whether `record_id` is still waiting to be sent.
     pub fn is_queued(&self, record_id: &str) -> Result<bool> {
         self.ensure_outbox()?;
