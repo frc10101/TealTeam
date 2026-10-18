@@ -863,6 +863,47 @@ A scout's cycle is: open the scouting page, save, load the page the save redirec
 
 ---
 
+## Audit — what the spec needs that is not built
+
+| # | Action | Source | Effort | Status |
+| --- | --- | --- | --- | --- |
+| AUD | Compare REBUILD_SPEC (routes, data model, business rules, upstream, front end, §12) and RefurbishInstructions against `crates/`, under the resolved decisions below; one row per real gap | Coordinator | S | **Done** — gaps G1–G5 below; findings in "AUD" notes |
+| G1 | **Account administration for admins.** `/admin/users` (the `Admin` extractor): list accounts with team number, roles, and last sign-in; set `is_admin` / `is_lead_scout` / `is_coach` and the team number; reset a forgotten password, which also ends that user's sessions; refuse to remove the last admin. Today the first sign-up is the only admin and every later lead scout or coach takes hand-written SQL | RS §1 Roles, §2.1, §3 | M | Todo |
+| G2 | **Match predictions on the drive coach.** One `tt_core::coach` prediction, per [PREDICTIONS_REIMPLEMENTATION.md](PREDICTIONS_REIMPLEMENTATION.md) step 5 "unify the two algorithms": predicted red and blue scores and the predicted winner on each unplayed card, marked partial when a team has no OPR, with unit tests. The panel shows only each side's OPR total now | PREDICTIONS_REIMPLEMENTATION.md · RS §5.7 | S | Todo |
+| G3 | **Undo a review.** A lead can return an approved or declined observation to waiting (`review_observation` only moves `pending` rows, so a mis-tap is permanent); the scout's decline notice goes away, the change replicates, and who reopened it and when is kept | RI §2F ("there is always an undo") · RS §5.3, §12.5 | S | Todo |
+| G4 | **FIRST schedule as a fallback match source.** When TBA has no matches for an event (no `TBA_AUTH_KEY`, TBA down, or not published yet), fill `matches` from FIRST `/{season}/schedule/{code}` (qualification and playoff) under the keys TBA will use, so a later TBA sync updates the same rows rather than duplicating them; a recorded-payload test. Without matches there is no assignment grid and no coach panel | RS §6.1 · FRC_API_Calls.md | M | Todo |
+| G5 | **Help page and header copy.** Public `/help` (how to scout a robot, what Offline / held / declined mean, the QR handoff, who to ask) with a **Help** link in the nav and a team-number box in the header; correct the account page's "This device" text, which says browsers keep nothing over plain http (C13's outbox does); delete the unused `PlaceholderPage` | RS §4, §7 Navigation · U5 | S | Todo |
+
+### AUD: what the spec needs that is not built
+
+**Method.** Every page and API in RS §4 was checked against the router in `crates/tt-web/src/startup.rs` and the templates in `crates/tt-templates/templates/pages/`; each §5 behavior and §12 defect against its `tt-core` module and tests; RefurbishInstructions' work items through the "Where the old IDs went" table. Queued items (T1, R1b, C6b, C15) and hardware (P1) are not repeated here.
+
+**Built and tested, nothing to add:** scoring and ranking (averaged with `n=`, overrides, the four sorts), match status, assignments (set, auto, clear, rename, rotation, coverage, lock), the review pipeline, the team profile (every TEAM_STATS_DISPLAY.md stat, tallies, private notes), the pick list, upstream sync and the background loop, season schema and payload versioning (aggregates read only the current version), auth and sessions, the guarded DB viewer, backups. `tt-core` has tests in every module with logic.
+
+**Partly built:**
+- *U5 says Done, but there is no help page.* No `/help` route exists; the account page and password change are built. G5.
+- *Predictions.* The coach shows each side's OPR total (the old `calculateAllianceScore`), but no predicted scores or winner. G2.
+- *Roles.* The flags, guards, and first-user-is-admin are built; nothing in the app can change them. G1.
+- *Undo.* Clear-all needs a confirm box and the pick list's cross-off puts back, but a review decision cannot be undone. G3.
+
+**Missing:** the FIRST match schedule (RS §6.1 lists it; only TBA fills `matches`). G4.
+
+**Deliberately dropped, not gaps:**
+- `POST /api/events/select` and `sessions.selected_event_id` — U2 (event is URL state).
+- Every `/hx/*` fragment, `X-Up-Events` / `X-Up-Version` — U8, U9.
+- `GET /api/pick-list`, `POST`/`DELETE /api/pick-list/entry` — Phase 2 notes ("Not built: the retired JSON endpoints"), replaced by `/api/pick-list/doc` (L14).
+- `/hx/teams/fetch-past-events` and the profile's synchronous team sync — U15, RS §12.7.
+- `/api/network/status`, `/hx/network/status` — I11 (the connection chip, `/health`, `/status`).
+- `/development/db` — U17 (`/admin/db`).
+- The per-team FIRST sync on sign-up and login, and the sync after approve — not built and not needed: the event sync already loads every event and roster for `FIRST_COUNTRY` (or the team filter), and `tt-web bulk-load` covers the season (I8). Team 10101 only (decision 4).
+- `awards`, `zebra_data`, `status` / `rejection_reason` — D12.
+- Chat and messaging — X1–X7, "Explicitly dropped".
+- Public HTTPS, service-worker-only offline on phones — decisions 3 and 5 (C1, C2, C4, C5 are optional for secure contexts).
+
+**For a human, not a row:** `crates/tt-core/seasons/2026.json` is a generic form (auto / teleop counts, endgame none / partial / full). Decision 2 has the lead scout and programming lead finalize it against Rebuilt's real scoring before an event. A spreadsheet export of observations (DataPoints.md's diagram shows "Reports / Exports") is not in the spec; the admin DB viewer is the only way out of the app today.
+
+---
+
 ## Open decisions
 
 These need a human, and several block Phase 2 or 3.
