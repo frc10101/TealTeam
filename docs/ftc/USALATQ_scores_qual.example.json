@@ -1,0 +1,90 @@
+{
+  "matchScores": [
+    {
+      "matchLevel": "QUALIFICATION",
+      "matchSeries": 0,
+      "matchNumber": 1,
+      "randomization": 0,
+      "alliances": [
+        {
+          "alliance": "Red",
+          "team": 0,
+
+          "autoHiveTips": 1,
+          "autoRobot1Leave": true,
+          "autoRobot2Leave": true,
+          "autoRobot1Park": true,
+          "autoRobot2Park": false,
+          "autoLeavePoints": 6,
+          "autoParkPoints": 5,
+          "autoHivePoints": 20,
+
+          "teleopHiveTips": 3,
+          "teleopHivePollenNectar": 4,
+          "redAllianceFlower": ["RED_NECTAR", "POLLEN", "POLLEN", "POLLEN", "POLLEN", "RED_NECTAR"],
+          "scoringFlower": [],
+          "blueAllianceFlower": ["POLLEN"],
+          "audienceFlower": [],
+          "teleopGardenPollenNectar": 5,
+          "teleopRobot1Park": true,
+          "teleopRobot2Park": true,
+          "teleopHivePoints": 68,
+          "teleopFlowerPoints": 17,
+          "teleopGardenPoints": 5,
+          "teleopParkPoints": 10,
+
+          "autoPoints": 31,
+          "teleopPoints": 100,
+          "preFoulTotal": 131,
+          "majorFouls": 0,
+          "minorFouls": 1,
+          "foulPointsCommitted": 5,
+          "totalPoints": 131,
+
+          "swarmRP": true,
+          "pollinator1RP": true,
+          "pollinator2RP": false
+        },
+        {
+          "alliance": "Blue",
+          "team": 0,
+
+          "autoHiveTips": 0,
+          "autoRobot1Leave": true,
+          "autoRobot2Leave": false,
+          "autoRobot1Park": false,
+          "autoRobot2Park": false,
+          "autoLeavePoints": 3,
+          "autoParkPoints": 0,
+          "autoHivePoints": 0,
+
+          "teleopHiveTips": 2,
+          "teleopHivePollenNectar": 2,
+          "redAllianceFlower": ["RED_NECTAR", "POLLEN", "POLLEN", "POLLEN", "POLLEN", "RED_NECTAR"],
+          "scoringFlower": [],
+          "blueAllianceFlower": ["POLLEN"],
+          "audienceFlower": [],
+          "teleopGardenPollenNectar": 8,
+          "teleopRobot1Park": false,
+          "teleopRobot2Park": true,
+          "teleopHivePoints": 44,
+          "teleopFlowerPoints": 0,
+          "teleopGardenPoints": 8,
+          "teleopParkPoints": 5,
+
+          "autoPoints": 3,
+          "teleopPoints": 57,
+          "preFoulTotal": 60,
+          "majorFouls": 0,
+          "minorFouls": 0,
+          "foulPointsCommitted": 0,
+          "totalPoints": 65,
+
+          "swarmRP": false,
+          "pollinator1RP": false,
+          "pollinator2RP": false
+        }
+      ]
+    }
+  ]
+}
