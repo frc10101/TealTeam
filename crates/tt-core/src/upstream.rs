@@ -40,7 +40,7 @@ use crate::matches::{ALLIANCE_SIZE, Alliance, CompLevel};
 /// match's `actual_time` until it is played -- and serde's `default` covers
 /// only a field left out. Read `null` as left out, or one null fails a whole
 /// event's sync.
-fn or_default<'de, D, T>(d: D) -> Result<T, D::Error>
+pub(crate) fn or_default<'de, D, T>(d: D) -> Result<T, D::Error>
 where
     D: Deserializer<'de>,
     T: Default + Deserialize<'de>,

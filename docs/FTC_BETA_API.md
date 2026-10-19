@@ -105,7 +105,7 @@ Plumbing that also changes:
 - **Event key:** with code `USALATQ`, `tba_key()` makes `2026usalatq`. Use that
   same code in the F3 import so the two paths agree.
 - **Tablet courier (S7):** it is TBA-only and stays off. No FTC path is needed on the tablet.
-- **Secrets:** today `FIRST_API_USERNAME` / `FIRST_API_KEY`; reuse them for the FTC key.
+- **Secrets:** F7 uses its own `FTC_API_USERNAME` / `FTC_API_KEY`, so FIRST's stay unread while F4 has FIRST off.
 
 ## Recommendation
 
@@ -122,3 +122,25 @@ event's page when it is posted. The smallest useful upstream change is:
 At the event, the Pi's only uplink is the lead's phone tether, and that tether
 watcher is also off in F4. So even with (2) built, the CSV paste stays the plan
 of record.
+
+## Getting a key and switching it on (F7)
+
+F7 built the optional pull in (2): the event, teams, qualification hybrid
+schedule, rankings, and the qualification score sheets (log only) for USALATQ.
+
+1. Register at https://ftc-events.firstinspires.org/services/API/register with
+   the team's email. FIRST emails a username and an API key; approval can
+   take days.
+2. On the Pi, put both in `.env` as `FTC_API_USERNAME=` and `FTC_API_KEY=`, then
+   restart `tt-web`. `FTC_EVENT_CODE` defaults to `USALATQ`.
+3. Plug in the phone tether, open **Lead scout → Schedule**, and press **Pull
+   from FTC Events**. The page says what the pull stored, which matches it
+   removed, and which it kept because they have observations. A 401 means the
+   key is wrong; "busy" means FTC sent a 503 and asked us to wait.
+
+Without both values there is no button and no request. Nothing polls in the
+background: a pull happens only when someone presses the button, so a pasted
+schedule is never replaced behind the lead's back. A second press sends
+`If-Modified-Since` and changes nothing if FTC has nothing new. The pull and
+the CSV paste use the same event key (`2026usalatq`), so either can follow the
+other. The CSV paste stays the plan of record.

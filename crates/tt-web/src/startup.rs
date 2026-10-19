@@ -295,6 +295,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/devices/{id}/rename", post(handlers::rename_device))
         .route("/api/weights", post(handlers::save_weights))
         .route("/api/schedule/import", post(handlers::import_schedule))
+        .route("/api/ftc/pull", post(handlers::pull_ftc))
         .route("/api/pick-list", post(handlers::change_pick_list))
         .route(
             "/api/pick-list/doc",
@@ -5526,5 +5527,104 @@ mod flow_tests {
         let q1: Vec<_> = after.iter().filter(|a| a.0 == "2026rehearse_qm1").collect();
         assert_eq!(q1.len(), 1, "{after:?}");
         assert!([10012, 10011, 10010, 10009].contains(&q1[0].1));
+    }
+
+    // ── Pulling from FTC Events (F7) ─────────────────────────────────────────
+
+    #[tokio::test]
+    async fn without_an_ftc_key_there_is_no_pull_and_nothing_is_requested() {
+        let state = migrated_state().await;
+        let admin = signed_up(&state).await;
+        let page = text(get(&state, "/lead-scout/schedule", Some(&admin)).await).await;
+        assert!(!page.contains("Pull from FTC Events"), "{page}");
+
+        let body = text(post(&state, "/api/ftc/pull", "", Some(&admin)).await).await;
+        assert!(body.contains("No FTC Events API key is set"), "{body}");
+        assert!(state.repo.list_events().await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_lead_scout_pulls_from_ftc_events_and_a_repull_keeps_observed_matches() {
+        use crate::upstream::test_support::{FTC_SCHEDULE, ftc_stub};
+        let stub = ftc_stub().await;
+        let mut state = migrated_state().await;
+        state.upstream = Arc::new(Upstream::disabled().with_ftc(Some(stub.client())));
+        let admin = format!("{}; {DEVICE}", signed_up(&state).await);
+        post(&state, "/api/device/heartbeat", "", Some(&admin)).await;
+
+        let kim = with_kim(&state).await;
+        let response = post(&state, "/api/ftc/pull", "", Some(&kim)).await;
+        assert_ne!(response.status(), StatusCode::OK, "a scout cannot pull");
+        assert_eq!(stub.calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+
+        let page = text(get(&state, "/lead-scout/schedule", Some(&admin)).await).await;
+        assert!(page.contains("Pull from FTC Events"));
+        let body = text(post(&state, "/api/ftc/pull", "", Some(&admin)).await).await;
+        assert!(
+            body.contains(
+                "Pulled 11 teams, 6 matches (1 played), and 11 rankings for Athens \
+                 Qualifier from FTC Events."
+            ),
+            "{body}"
+        );
+        assert!(body.contains("Q6 blue1: 19459"), "the surrogate is named");
+        assert_eq!(
+            state.repo.event_matches("2026usalatq").await.unwrap().len(),
+            6
+        );
+
+        // Q5 is watched.
+        let response = post(
+            &state,
+            "/api/submission?event=2026usalatq",
+            &format!("match=2026usalatq_qm5&team=24378&record_id={RECORD_ID}&{GOOD_ANSWERS}"),
+            Some(&admin),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+
+        let body =
+            text(post(&state, "/api/ftc/pull?event=2026usalatq", "", Some(&admin)).await).await;
+        assert!(
+            body.contains("Nothing has changed at FTC Events since the last pull"),
+            "{body}"
+        );
+
+        // FTC drops Q5 and Q6.
+        let mut schedule: serde_json::Value = serde_json::from_str(FTC_SCHEDULE).unwrap();
+        schedule["schedule"]
+            .as_array_mut()
+            .unwrap()
+            .retain(|m| m["matchNumber"].as_i64() < Some(5));
+        stub.set_schedule(schedule.to_string());
+        let body =
+            text(post(&state, "/api/ftc/pull?event=2026usalatq", "", Some(&admin)).await).await;
+        assert!(body.contains("4 matches"), "{body}");
+        assert!(
+            body.contains("Removed 1 match no longer on the schedule."),
+            "{body}"
+        );
+        assert!(body.contains("Kept Q5"), "{body}");
+        assert!(
+            state
+                .repo
+                .match_by_key("2026usalatq_qm5")
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            state
+                .repo
+                .match_by_key("2026usalatq_qm6")
+                .await
+                .unwrap()
+                .is_none()
+        );
+        let observations: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM observations")
+            .fetch_one(state.repo.pool())
+            .await
+            .unwrap();
+        assert_eq!(observations, 1, "the observation survives");
     }
 }

@@ -167,7 +167,8 @@ fn upstream_zone(raw: &upstream::FirstEvent, report: &mut SyncReport) -> Option<
     zone.map(|tz| tz.name().to_string())
 }
 
-async fn store_roster<R: Repo + Sync>(
+/// Store an event's roster: each team, then its link to the event.
+pub async fn store_roster<R: Repo + Sync>(
     repo: &R,
     event_key: &str,
     teams: &[upstream::FirstTeam],

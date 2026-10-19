@@ -33,6 +33,18 @@
     {% if let Some(stored) = stored %}
       <p class="muted">Stored now: {{ stored.teams }} teams · {{ stored.matches }} matches.</p>
     {% endif %}
+    {% if ftc_configured %}
+      <form class="stack" method="post" action="{{ ftc_href }}">
+        <button class="btn" type="submit">Pull from FTC Events</button>
+        <p class="hint">
+          Fetches the event, its teams, the qualification schedule, and the
+          rankings, and replaces the schedule the way an import does: matches
+          with observations are kept. It needs internet, which the Pi has only
+          through the phone tether. The paste below stays the main way in.
+        </p>
+      </form>
+    {% endif %}
+
     <form class="stack" method="post" action="{{ post_href }}">
       <fieldset class="stack">
         <legend>Event</legend>

@@ -1,0 +1,29 @@
+{
+ "events": [
+  {
+   "eventId": "made-up",
+   "code": "USALATQ",
+   "divisionCode": null,
+   "name": "Athens Qualifier",
+   "remote": false,
+   "hybrid": false,
+   "fieldCount": 1,
+   "published": true,
+   "type": "2",
+   "typeName": "Qualifier",
+   "regionCode": "USAL",
+   "leagueCode": null,
+   "districtCode": null,
+   "venue": "Athens Renaissance School",
+   "address": "601 S Clinton St",
+   "city": "Athens",
+   "stateprov": "AL",
+   "country": "USA",
+   "website": null,
+   "timezone": "America/Chicago",
+   "dateStart": "2026-10-24T00:00:00",
+   "dateEnd": "2026-10-24T00:00:00"
+  }
+ ],
+ "eventCount": 1
+}

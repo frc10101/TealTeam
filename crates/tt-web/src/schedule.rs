@@ -101,6 +101,8 @@ pub async fn page(
         post_href: format!("/api/schedule/import{event_query}"),
         back_href: format!("/lead-scout{event_query}"),
         assignments_href: format!("/lead-scout/assignments{event_query}"),
+        ftc_href: format!("/api/ftc/pull{event_query}"),
+        ftc_configured: state.upstream.ftc.is_some(),
     };
     if let Some(imported) = imported {
         page.report = imported.report;
@@ -280,9 +282,7 @@ async fn store(state: &AppState, event: &Event, parsed: &Schedule) -> tt_repo::R
         .map(|m| format!("{}_qm{}", event.key, m.number))
         .collect();
     let roster: Vec<i32> = parsed.roster.iter().map(|t| t.number).collect();
-    let tidied = state.repo.tidy_schedule(&event.key, &keys, &roster).await?;
 
-    let plural = |n: u64, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
     let mut report = vec![format!(
         "Imported {} and {} for {}.",
         plural(projected.report.matches as u64, "match", "matches"),
@@ -292,6 +292,27 @@ async fn store(state: &AppState, event: &Event, parsed: &Schedule) -> tt_repo::R
     if parsed.roster_from_schedule {
         report.push("No roster was given, so the roster is the schedule's teams.".into());
     }
+    report.extend(tidy(state, &event.key, &keys, &roster).await?);
+    report.extend(projected.report.problems);
+    Ok(report)
+}
+
+pub(crate) fn plural(n: u64, one: &str, many: &str) -> String {
+    format!("{n} {}", if n == 1 { one } else { many })
+}
+
+/// Bring the event in line with a schedule just stored, as an import or an
+/// FTC pull (F7) does, and say what that did: matches with observations are
+/// kept, stale assignments dropped, teams no longer at the event unlinked.
+pub(crate) async fn tidy(
+    state: &AppState,
+    event_key: &str,
+    keys: &[String],
+    roster: &[i32],
+) -> tt_repo::Result<Vec<String>> {
+    let repo = &*state.repo;
+    let tidied = repo.tidy_schedule(event_key, keys, roster).await?;
+    let mut report = Vec::new();
     if tidied.removed_matches > 0 {
         report.push(format!(
             "Removed {} no longer on the schedule.",
@@ -320,6 +341,5 @@ async fn store(state: &AppState, event: &Event, parsed: &Schedule) -> tt_repo::R
             plural(tidied.unlinked_teams, "team", "teams")
         ));
     }
-    report.extend(projected.report.problems);
     Ok(report)
 }

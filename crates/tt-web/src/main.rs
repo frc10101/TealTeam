@@ -17,6 +17,7 @@ mod coach;
 mod config;
 mod errors;
 mod events;
+mod ftc;
 mod handlers;
 mod handoff;
 mod picklist;

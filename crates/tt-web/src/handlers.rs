@@ -847,6 +847,33 @@ pub async fn import_schedule(
     }
 }
 
+/// `POST /api/ftc/pull` (F7): pull from the FTC Events API now. The schedule
+/// page comes back with what the pull did, or why it could not.
+pub async fn pull_ftc(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
+) -> Response {
+    let outcome = crate::ftc::pull(&state).await;
+    tracing::info!(user = %user.email, "FTC pull asked for");
+    let event = outcome.event_key.clone().or(requested);
+    let (nav, context) = event_page(&state, Some(&user), event.as_deref()).await;
+    let imported = outcome
+        .event_key
+        .clone()
+        .map(|event_key| schedule::Imported {
+            event_key,
+            report: outcome.report.clone(),
+            surrogates: outcome.surrogates.clone(),
+        });
+    let mut errors = outcome.errors;
+    if imported.is_none() {
+        // Got as far as FTC Events but stored nothing: say why.
+        errors.extend(outcome.report);
+    }
+    html(schedule::page(&state, nav, &context, None, errors, imported).await)
+}
+
 /// `GET /lead-scout/weights`.
 pub async fn weights(
     State(state): State<AppState>,

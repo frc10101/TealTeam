@@ -12,6 +12,8 @@
 //! write to.
 
 pub mod first;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod ftc;
 pub mod journal;
 pub mod probe;
 #[cfg(not(target_arch = "wasm32"))]
@@ -116,6 +118,21 @@ pub enum UpstreamError {
 
     #[error("credentials for {0} are not configured")]
     NotConfigured(&'static str),
+
+    /// A 503 or 429 that still said "busy" after the retries, or whose
+    /// `Retry-After` asked for longer than a request should wait. The FTC
+    /// Events API's only rate limit (F7).
+    #[error(
+        "{api} {path} is busy ({status}){}",
+        retry_after.map(|s| format!("; it asks to wait {s} s")).unwrap_or_default()
+    )]
+    Busy {
+        api: &'static str,
+        path: String,
+        status: u16,
+        /// `Retry-After`, in seconds, when it was given.
+        retry_after: Option<u64>,
+    },
 }
 
 impl UpstreamError {

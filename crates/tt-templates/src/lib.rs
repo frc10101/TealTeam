@@ -610,6 +610,10 @@ pub struct ScheduleImportPage {
     pub post_href: String,
     pub back_href: String,
     pub assignments_href: String,
+    /// `POST` here pulls from the FTC Events API (F7).
+    pub ftc_href: String,
+    /// `FTC_API_USERNAME` and `FTC_API_KEY` are set.
+    pub ftc_configured: bool,
 }
 
 /// The point values behind the scouting score (L12).

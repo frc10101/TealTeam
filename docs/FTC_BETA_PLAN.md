@@ -146,11 +146,12 @@ table. That table goes in the PR description.
 | F3 | **Manual seed.** Write a small import, either in `tt-load` or as a lead-scout page. It reads a CSV with `match,red1,red2,blue1,blue2` plus a roster, strips the `*` surrogate marker, lists the surrogate slots in the import report, and rejects each bad row by name | A malformed CSV is rejected row by row; the real schedule imports cleanly |
 | F4 | **Turn off what is FRC-only.** Disable TBA/FIRST sync and its triggers: the boot fetch, the S6 phone-tether watcher and the S7 lobby fetch. Remove OPR/DPR/CCWM, predictions and TBA rankings from navigation; their routes return "not available on this build" | No upstream request is made during a full rehearsal; no FRC statistic is visible |
 | F5 | **Pick list, minimal.** Reuse the existing pick list and team pages. The only new work is labeling the schema score "scout estimate" and making sure the team page shows the BIOBUZZ fields. No new analytics before the event | The lead scout can rank the event's teams from the existing views |
+| F7 | **Optional FTC Events pull** (approved after F4; `docs/FTC_BETA_API.md`). With `FTC_API_USERNAME` and `FTC_API_KEY` set, the lead scout's schedule page gets a "Pull from FTC Events" button: event, teams, qual hybrid schedule and rankings for USALATQ, stored as the F3 import stores them, plus the qual score sheets in the log (`api = 'ftc'`, migration 0011). Sends `If-Modified-Since`, waits out a short 503 `Retry-After`, and has no background poll. The CSV paste stays primary | Without a key there is no button and no request; against recorded fixtures a pull stores 11 teams and 6 matches, a re-pull is all 304s, and a re-pull that drops a watched match keeps it |
 | F6 | Pin the commit, tag it `ftc-biobuzz-beta-1`, and build and install it on the Pi | The tag exists; the Pi reports that commit |
 
 **FTC beta (F4):** the switch is `tt_core::upstream::UPSTREAM_ENABLED = false`. In `docs/EVENT_DAY_RUNBOOK.md`, step 7's "check the rankings age" and the "Rankings stale (amber)" row assume TBA data and do not apply; step 5's no-tether rule is moot, because the Pi no longer watches for a tether.
 
-F1 done: 85569bd. F1b done: 37318c8.
+F1 done: 85569bd. F1b done: 37318c8. F7 done: de06d92.
 
 Estimate: F1 is the largest step and the riskiest. Do it first, and on its own commit.
 

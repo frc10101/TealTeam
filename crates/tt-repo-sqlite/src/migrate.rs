@@ -144,6 +144,64 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn the_ftc_migration_keeps_the_log_and_its_cursor() {
+        // Every migration before 0011 by hand, then a log with a pruned head.
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("connect");
+        for m in MIGRATOR.iter().filter(|m| m.version < 11) {
+            sqlx::raw_sql(m.sql.clone())
+                .execute(&pool)
+                .await
+                .expect("an older migration");
+        }
+        for path in ["/a", "/b", "/c"] {
+            sqlx::query(
+                "INSERT INTO upstream (api, path, body, fetched_at) VALUES ('tba', ?, '[]', 'now')",
+            )
+            .bind(path)
+            .execute(&pool)
+            .await
+            .expect("insert");
+        }
+        sqlx::query("DELETE FROM upstream WHERE path = '/c'")
+            .execute(&pool)
+            .await
+            .expect("prune");
+        let ftc = MIGRATOR.iter().find(|m| m.version == 11).expect("0011");
+        sqlx::raw_sql(ftc.sql.clone())
+            .execute(&pool)
+            .await
+            .expect("0011");
+
+        let kept: Vec<(i64, String)> =
+            sqlx::query_as("SELECT seq, path FROM upstream ORDER BY seq")
+                .fetch_all(&pool)
+                .await
+                .expect("rows");
+        assert_eq!(kept, [(1, "/a".to_string()), (2, "/b".to_string())]);
+        let next: i64 = sqlx::query_scalar(
+            "INSERT INTO upstream (api, path, body, fetched_at) VALUES ('ftc', '/d', '{}', 'now') \
+             RETURNING seq",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("an ftc row");
+        assert_eq!(
+            next, 4,
+            "seq 3 was handed out before, so it is never reused"
+        );
+        let other = sqlx::query(
+            "INSERT INTO upstream (api, path, body, fetched_at) VALUES ('x', '/e', '{}', 'now')",
+        )
+        .execute(&pool)
+        .await;
+        assert!(other.is_err(), "the CHECK still holds");
+    }
+
+    #[tokio::test]
     async fn applying_twice_is_a_no_op() {
         let repo = fresh().await;
         apply(repo.pool()).await.expect("second apply must succeed");

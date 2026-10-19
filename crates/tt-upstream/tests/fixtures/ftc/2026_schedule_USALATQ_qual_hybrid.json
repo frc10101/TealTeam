@@ -1,0 +1,364 @@
+{
+ "schedule": [
+  {
+   "description": "Qualification 1",
+   "tournamentLevel": "QUALIFICATION",
+   "series": 0,
+   "matchNumber": 1,
+   "startTime": "2026-10-24T09:00:00",
+   "actualStartTime": "2026-10-24T09:02:10",
+   "postResultTime": "2026-10-24T09:06:30",
+   "videoURL": null,
+   "scoreRedFinal": 51,
+   "scoreRedFoul": 0,
+   "scoreRedAuto": 31,
+   "scoreBlueFinal": 40,
+   "scoreBlueFoul": 5,
+   "scoreBlueAuto": 20,
+   "redWins": true,
+   "blueWins": false,
+   "teams": [
+    {
+     "teamNumber": 7842,
+     "displayTeamNumber": "7842",
+     "station": "Red1",
+     "surrogate": false,
+     "noShow": false,
+     "dq": false,
+     "onField": true,
+     "teamName": "Fixture 7842"
+    },
+    {
+     "teamNumber": 18664,
+     "displayTeamNumber": "18664",
+     "station": "Red2",
+     "surrogate": false,
+     "noShow": false,
+     "dq": false,
+     "onField": true,
+     "teamName": "Fixture 18664"
+    },
+    {
+     "teamNumber": 19459,
+     "displayTeamNumber": "19459",
+     "station": "Blue1",
+     "surrogate": false,
+     "noShow": false,
+     "dq": false,
+     "onField": true,
+     "teamName": "Fixture 19459"
+    },
+    {
+     "teamNumber": 21830,
+     "displayTeamNumber": "21830",
+     "station": "Blue2",
+     "surrogate": false,
+     "noShow": false,
+     "dq": false,
+     "onField": true,
+     "teamName": "Fixture 21830"
+    }
+   ]
+  },
+  {
+   "description": "Qualification 2",
+   "tournamentLevel": "QUALIFICATION",
+   "series": 0,
+   "matchNumber": 2,
+   "startTime": "2026-10-24T09:07:00",
+   "actualStartTime": null,
+   "postResultTime": null,
+   "videoURL": null,
+   "scoreRedFinal": null,
+   "scoreRedFoul": null,
+   "scoreRedAuto": null,
+   "scoreBlueFinal": null,
+   "scoreBlueFoul": null,
+   "scoreBlueAuto": null,
+   "redWins": false,
+   "blueWins": false,
+   "teams": [
+    {
+     "teamNumber": 24148,
+     "displayTeamNumber": "24148",
+     "station": "Red1",
+     "surrogate": false,
+     "noShow": false,
+     "dq": false,
+     "onField": true,
+     "teamName": "Fixture 24148"
+    },
+    {
+     "teamNumber": 24378,
+     "displayTeamNumber": "24378",
+     "station": "Red2",
+     "surrogate": false,
+     "noShow": false,
+     "dq": false,
+     "onField": true,
+     "teamName": "Fixture 24378"
+    },
+    {
+     "teamNumber": 25114,
+     "displayTeamNumber": "25114",
+     "station": "Blue1",
+     "surrogate": false,
+     "noShow": false,
+     "dq": false,
+     "onField": true,
+     "teamName": "Fixture 25114"
+    },
+    {
+     "teamNumber": 27305,
+     "displayTeamNumber": "27305",
+     "station": "Blue2",
+     "surrogate": false,
+     "noShow": false,
+     "dq": false,
+     "onField": true,
+     "teamName": "Fixture 27305"
+    }
+   ]
+  },
+  {
+   "description": "Qualification 3",
+   "tournamentLevel": "QUALIFICATION",
+   "series": 0,
+   "matchNumber": 3,
+   "startTime": "2026-10-24T09:14:00",
+   "actualStartTime": null,
+   "postResultTime": null,
+   "videoURL": null,
+   "scoreRedFinal": null,
+   "scoreRedFoul": null,
+   "scoreRedAuto": null,
+   "scoreBlueFinal": null,
+   "scoreBlueFoul": null,
+   "scoreBlueAuto": null,
+   "redWins": false,
+   "blueWins": false,
+   "teams": [
+    {
+     "teamNumber": 30403,
+     "displayTeamNumber": "30403",
+     "station": "Red1",
+     "surrogate": false,
+     "noShow": false,
+     "dq": false,
+     "onField": true,
+     "teamName": "Fixture 30403"
+    },
+    {
+     "teamNumber": 31017,
+     "displayTeamNumber": "31017",
+     "station": "Red2",
+     "surrogate": false,
+     "noShow": false,
+     "dq": false,
+     "onField": true,
+     "teamName": "Fixture 31017"
+    },
+    {
+     "teamNumber": 35722,
+     "displayTeamNumber": "35722",
+     "station": "Blue1",
+     "surrogate": false,
+     "noShow": false,
+     "dq": false,
+     "onField": true,
+     "teamName": "Fixture 35722"
+    },
+    {
+     "teamNumber": 7842,
+     "displayTeamNumber": "7842",
+     "station": "Blue2",
+     "surrogate": false,
+     "noShow": false,
+     "dq": false,
+     "onField": true,
+     "teamName": "Fixture 7842"
+    }
+   ]
+  },
+  {
+   "description": "Qualification 4",
+   "tournamentLevel": "QUALIFICATION",
+   "series": 0,
+   "matchNumber": 4,
+   "startTime": "2026-10-24T09:21:00",
+   "actualStartTime": null,
+   "postResultTime": null,
+   "videoURL": null,
+   "scoreRedFinal": null,
+   "scoreRedFoul": null,
+   "scoreRedAuto": null,
+   "scoreBlueFinal": null,
+   "scoreBlueFoul": null,
+   "scoreBlueAuto": null,
+   "redWins": false,
+   "blueWins": false,
+   "teams": [
+    {
+     "teamNumber": 18664,
+     "displayTeamNumber": "18664",
+     "station": "Red1",
+     "surrogate": false,
+     "noShow": false,
+     "dq": false,
+     "onField": true,
+     "teamName": "Fixture 18664"
+    },
+    {
+     "teamNumber": 19459,
+     "displayTeamNumber": "19459",
+     "station": "Red2",
+     "surrogate": false,
+     "noShow": false,
+     "dq": false,
+     "onField": true,
+     "teamName": "Fixture 19459"
+    },
+    {
+     "teamNumber": 21830,
+     "displayTeamNumber": "21830",
+     "station": "Blue1",
+     "surrogate": false,
+     "noShow": false,
+     "dq": false,
+     "onField": true,
+     "teamName": "Fixture 21830"
+    },
+    {
+     "teamNumber": 24148,
+     "displayTeamNumber": "24148",
+     "station": "Blue2",
+     "surrogate": false,
+     "noShow": false,
+     "dq": false,
+     "onField": true,
+     "teamName": "Fixture 24148"
+    }
+   ]
+  },
+  {
+   "description": "Qualification 5",
+   "tournamentLevel": "QUALIFICATION",
+   "series": 0,
+   "matchNumber": 5,
+   "startTime": "2026-10-24T09:28:00",
+   "actualStartTime": null,
+   "postResultTime": null,
+   "videoURL": null,
+   "scoreRedFinal": null,
+   "scoreRedFoul": null,
+   "scoreRedAuto": null,
+   "scoreBlueFinal": null,
+   "scoreBlueFoul": null,
+   "scoreBlueAuto": null,
+   "redWins": false,
+   "blueWins": false,
+   "teams": [
+    {
+     "teamNumber": 24378,
+     "displayTeamNumber": "24378",
+     "station": "Red1",
+     "surrogate": false,
+     "noShow": false,
+     "dq": false,
+     "onField": true,
+     "teamName": "Fixture 24378"
+    },
+    {
+     "teamNumber": 25114,
+     "displayTeamNumber": "25114",
+     "station": "Red2",
+     "surrogate": false,
+     "noShow": false,
+     "dq": false,
+     "onField": true,
+     "teamName": "Fixture 25114"
+    },
+    {
+     "teamNumber": 27305,
+     "displayTeamNumber": "27305",
+     "station": "Blue1",
+     "surrogate": false,
+     "noShow": false,
+     "dq": false,
+     "onField": true,
+     "teamName": "Fixture 27305"
+    },
+    {
+     "teamNumber": 30403,
+     "displayTeamNumber": "30403",
+     "station": "Blue2",
+     "surrogate": false,
+     "noShow": false,
+     "dq": false,
+     "onField": true,
+     "teamName": "Fixture 30403"
+    }
+   ]
+  },
+  {
+   "description": "Qualification 6",
+   "tournamentLevel": "QUALIFICATION",
+   "series": 0,
+   "matchNumber": 6,
+   "startTime": "2026-10-24T09:35:00",
+   "actualStartTime": null,
+   "postResultTime": null,
+   "videoURL": null,
+   "scoreRedFinal": null,
+   "scoreRedFoul": null,
+   "scoreRedAuto": null,
+   "scoreBlueFinal": null,
+   "scoreBlueFoul": null,
+   "scoreBlueAuto": null,
+   "redWins": false,
+   "blueWins": false,
+   "teams": [
+    {
+     "teamNumber": 31017,
+     "displayTeamNumber": "31017",
+     "station": "Red1",
+     "surrogate": false,
+     "noShow": false,
+     "dq": false,
+     "onField": true,
+     "teamName": "Fixture 31017"
+    },
+    {
+     "teamNumber": 35722,
+     "displayTeamNumber": "35722",
+     "station": "Red2",
+     "surrogate": false,
+     "noShow": false,
+     "dq": false,
+     "onField": true,
+     "teamName": "Fixture 35722"
+    },
+    {
+     "teamNumber": 19459,
+     "displayTeamNumber": "19459",
+     "station": "Blue1",
+     "surrogate": true,
+     "noShow": false,
+     "dq": false,
+     "onField": true,
+     "teamName": "Fixture 19459"
+    },
+    {
+     "teamNumber": 7842,
+     "displayTeamNumber": "7842",
+     "station": "Blue2",
+     "surrogate": false,
+     "noShow": false,
+     "dq": false,
+     "onField": true,
+     "teamName": "Fixture 7842"
+    }
+   ]
+  }
+ ]
+}

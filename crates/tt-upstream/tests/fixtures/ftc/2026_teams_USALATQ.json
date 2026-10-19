@@ -1,0 +1,140 @@
+{
+ "teams": [
+  {
+   "teamNumber": 7842,
+   "displayTeamNumber": "7842",
+   "nameFull": "Fixture Team 7842",
+   "nameShort": "Fixture 7842",
+   "schoolName": null,
+   "city": "Athens",
+   "stateProv": "AL",
+   "country": "USA",
+   "rookieYear": 2015,
+   "website": null
+  },
+  {
+   "teamNumber": 18664,
+   "displayTeamNumber": "18664",
+   "nameFull": "Fixture Team 18664",
+   "nameShort": "Fixture 18664",
+   "schoolName": null,
+   "city": "Athens",
+   "stateProv": "AL",
+   "country": "USA",
+   "rookieYear": 2015,
+   "website": null
+  },
+  {
+   "teamNumber": 19459,
+   "displayTeamNumber": "19459",
+   "nameFull": "Fixture Team 19459",
+   "nameShort": "Fixture 19459",
+   "schoolName": null,
+   "city": "Athens",
+   "stateProv": "AL",
+   "country": "USA",
+   "rookieYear": 2015,
+   "website": null
+  },
+  {
+   "teamNumber": 21830,
+   "displayTeamNumber": "21830",
+   "nameFull": "Fixture Team 21830",
+   "nameShort": "Fixture 21830",
+   "schoolName": null,
+   "city": "Athens",
+   "stateProv": "AL",
+   "country": "USA",
+   "rookieYear": 2015,
+   "website": null
+  },
+  {
+   "teamNumber": 24148,
+   "displayTeamNumber": "24148",
+   "nameFull": "Fixture Team 24148",
+   "nameShort": "Fixture 24148",
+   "schoolName": null,
+   "city": "Athens",
+   "stateProv": "AL",
+   "country": "USA",
+   "rookieYear": 2015,
+   "website": null
+  },
+  {
+   "teamNumber": 24378,
+   "displayTeamNumber": "24378",
+   "nameFull": "Fixture Team 24378",
+   "nameShort": "Fixture 24378",
+   "schoolName": null,
+   "city": "Athens",
+   "stateProv": "AL",
+   "country": "USA",
+   "rookieYear": 2015,
+   "website": null
+  },
+  {
+   "teamNumber": 25114,
+   "displayTeamNumber": "25114",
+   "nameFull": "Fixture Team 25114",
+   "nameShort": "Fixture 25114",
+   "schoolName": null,
+   "city": "Athens",
+   "stateProv": "AL",
+   "country": "USA",
+   "rookieYear": 2015,
+   "website": null
+  },
+  {
+   "teamNumber": 27305,
+   "displayTeamNumber": "27305",
+   "nameFull": "Fixture Team 27305",
+   "nameShort": "Fixture 27305",
+   "schoolName": null,
+   "city": "Athens",
+   "stateProv": "AL",
+   "country": "USA",
+   "rookieYear": 2015,
+   "website": null
+  },
+  {
+   "teamNumber": 30403,
+   "displayTeamNumber": "30403",
+   "nameFull": "Fixture Team 30403",
+   "nameShort": "Fixture 30403",
+   "schoolName": null,
+   "city": "Athens",
+   "stateProv": "AL",
+   "country": "USA",
+   "rookieYear": 2015,
+   "website": null
+  },
+  {
+   "teamNumber": 31017,
+   "displayTeamNumber": "31017",
+   "nameFull": "Fixture Team 31017",
+   "nameShort": "Fixture 31017",
+   "schoolName": null,
+   "city": "Athens",
+   "stateProv": "AL",
+   "country": "USA",
+   "rookieYear": 2015,
+   "website": null
+  },
+  {
+   "teamNumber": 35722,
+   "displayTeamNumber": "35722",
+   "nameFull": "Fixture Team 35722",
+   "nameShort": "Fixture 35722",
+   "schoolName": null,
+   "city": "Athens",
+   "stateProv": "AL",
+   "country": "USA",
+   "rookieYear": 2015,
+   "website": null
+  }
+ ],
+ "teamCountTotal": 11,
+ "teamCountPage": 11,
+ "pageCurrent": 1,
+ "pageTotal": 1
+}

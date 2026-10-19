@@ -14,6 +14,7 @@ pub mod coach;
 pub mod connectivity;
 pub mod error;
 pub mod form;
+pub mod ftc;
 pub mod graph;
 pub mod link;
 pub mod matches;

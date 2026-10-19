@@ -37,6 +37,7 @@ use tt_repo_sqlite::SqliteRepo;
 use tt_templates::UpstreamPanel;
 use tt_upstream::Uplink;
 use tt_upstream::first::{EventFilters, FirstClient};
+use tt_upstream::ftc::FtcClient;
 use tt_upstream::journal::Recorder;
 use tt_upstream::sync::{self, SyncReport};
 use tt_upstream::tba::TbaClient;
@@ -69,6 +70,12 @@ pub struct Upstream {
     events_synced: AtomicBool,
     /// Where the phone is, as the tether watch last saw it (S6).
     tether: std::sync::Mutex<Tether>,
+    /// The FTC Events API (F7): set only when `FTC_API_USERNAME` and
+    /// `FTC_API_KEY` are, and independent of [`Upstream::enabled`], which
+    /// stays false for FIRST and TBA on this build.
+    pub ftc: Option<FtcClient>,
+    /// Held for the length of an FTC pull, by the button or the poll.
+    pub(crate) ftc_pull: Mutex<()>,
 }
 
 impl Upstream {
@@ -88,7 +95,15 @@ impl Upstream {
             first_sync: Mutex::new(()),
             events_synced: AtomicBool::new(false),
             tether: std::sync::Mutex::new(Tether::Unwatched),
+            ftc: None,
+            ftc_pull: Mutex::new(()),
         }
+    }
+
+    /// Pull from the FTC Events API with `ftc` (F7).
+    pub fn with_ftc(mut self, ftc: Option<FtcClient>) -> Self {
+        self.ftc = ftc;
+        self
     }
 
     pub fn tether(&self) -> Tether {
@@ -116,18 +131,23 @@ impl Upstream {
     /// Read `FIRST_*` and `TBA_AUTH_KEY`. Call after the `.env` files load.
     ///
     /// On a build with upstream switched off, [`Upstream::off`] whatever the
-    /// environment says: the credentials are never read.
+    /// environment says: FIRST's and TBA's credentials are never read. The
+    /// FTC Events key (F7) is read either way.
     pub fn from_env() -> Self {
         if !tt_core::upstream::UPSTREAM_ENABLED {
-            return Self::off();
+            let off = Self::off();
+            let ftc = FtcClient::from_env(off.uplink.clone());
+            return off.with_ftc(ftc);
         }
         let uplink = Uplink::new();
+        let ftc = FtcClient::from_env(uplink.clone());
         Self::new(
             FirstClient::from_env(uplink.clone()),
             TbaClient::from_env(uplink.clone()),
             EventFilters::from_env(),
             uplink,
         )
+        .with_ftc(ftc)
     }
 
     /// Every new response from either API goes to `recorder`, for the
@@ -533,6 +553,90 @@ pub(crate) mod test_support {
             let _ = axum::serve(listener, app).await;
         });
         (format!("http://{addr}"), calls)
+    }
+
+    /// An FTC Events API stub (F7) serving `tt-upstream`'s fixtures, with a
+    /// schedule a test can change. It honours `If-Modified-Since` and counts
+    /// every request.
+    pub struct FtcStub {
+        pub base: String,
+        pub calls: Arc<AtomicUsize>,
+        schedule: Arc<std::sync::Mutex<(usize, String)>>,
+    }
+
+    pub const FTC_SCHEDULE: &str =
+        include_str!("../../tt-upstream/tests/fixtures/ftc/2026_schedule_USALATQ_qual_hybrid.json");
+
+    impl FtcStub {
+        /// Post a new schedule: the next pull gets it, with a new
+        /// Last-Modified.
+        pub fn set_schedule(&self, body: String) {
+            let mut schedule = self.schedule.lock().unwrap();
+            *schedule = (schedule.0 + 1, body);
+        }
+
+        /// A client for it, with the key the stub accepts.
+        pub fn client(&self) -> FtcClient {
+            FtcClient::new("user", "key", Uplink::new())
+                .expect("client")
+                .with_base_url(&self.base)
+        }
+    }
+
+    pub async fn ftc_stub() -> FtcStub {
+        use axum::http::{HeaderMap, StatusCode, Uri, header};
+        use axum::response::IntoResponse;
+
+        const EVENTS: &str =
+            include_str!("../../tt-upstream/tests/fixtures/ftc/2026_events_USALATQ.json");
+        const TEAMS: &str =
+            include_str!("../../tt-upstream/tests/fixtures/ftc/2026_teams_USALATQ.json");
+        const RANKINGS: &str =
+            include_str!("../../tt-upstream/tests/fixtures/ftc/2026_rankings_USALATQ.json");
+        const SCORES: &str =
+            include_str!("../../tt-upstream/tests/fixtures/ftc/2026_scores_USALATQ_qual.json");
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let schedule = Arc::new(std::sync::Mutex::new((0, FTC_SCHEDULE.to_string())));
+        let (counted, current) = (calls.clone(), schedule.clone());
+        let app = Router::new().fallback(move |uri: Uri, headers: HeaderMap| {
+            counted.fetch_add(1, Ordering::SeqCst);
+            let path = uri.path().to_string();
+            let (version, body) = if path.contains("/schedule/") {
+                current.lock().unwrap().clone()
+            } else if path.contains("/events") {
+                (0, EVENTS.to_string())
+            } else if path.contains("/teams") {
+                (0, TEAMS.to_string())
+            } else if path.contains("/rankings/") {
+                (0, RANKINGS.to_string())
+            } else {
+                (0, SCORES.to_string())
+            };
+            let modified = format!("Sat, 24 Oct 2026 14:{:02}:00 GMT", version);
+            let since = headers
+                .get(header::IF_MODIFIED_SINCE)
+                .and_then(|v| v.to_str().ok())
+                .map(str::to_string);
+            async move {
+                if since.as_deref() == Some(modified.as_str()) {
+                    return StatusCode::NOT_MODIFIED.into_response();
+                }
+                ([(header::LAST_MODIFIED, modified)], body).into_response()
+            }
+        });
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        FtcStub {
+            base: format!("http://{addr}"),
+            calls,
+            schedule,
+        }
     }
 
     /// FIRST and TBA both pointed at `base`.
