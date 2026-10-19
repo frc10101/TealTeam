@@ -8,6 +8,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::matches::CompLevel;
 use crate::records::MatchRecord;
 
 /// One robot in one match, and who is watching it.
@@ -326,6 +327,8 @@ pub struct Sighting {
     pub team_number: i32,
     pub scouter_id: Option<i64>,
     pub device_id: Option<i64>,
+    /// A lead scout approved it. Otherwise it is waiting for review.
+    pub approved: bool,
 }
 
 impl Sighting {
@@ -437,6 +440,135 @@ pub fn tallies(
         }
     }
     tallies
+}
+
+// ── Team coverage (F9) ──────────────────────────────────────────────────────
+
+/// Observations of each team the lead scout wants before alliance selection
+/// (FTC_BETA_PLAN.md §7). FTC teams play five or six qualification matches,
+/// so two is what a pick can lean on.
+pub const OBSERVATIONS_WANTED: usize = 2;
+
+/// How one team at the event is covered: what the lead scout checks before
+/// alliance selection, with two to four scouts in the stands (F9).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TeamCoverage {
+    pub team_number: i32,
+    /// Observations a lead scout approved.
+    pub approved: usize,
+    /// Observations waiting for review. Declined ones count nowhere.
+    pub waiting: usize,
+    /// Robots of this team in matches to come with somebody on them and no
+    /// observation yet.
+    pub assigned: usize,
+    /// Qualification matches this team has still to play.
+    pub remaining: usize,
+    /// Of those, the ones with nobody on this team's robot and nothing
+    /// recorded: what assigning can still add.
+    pub open: usize,
+    /// The first of those, to assign.
+    pub next_open: Option<String>,
+}
+
+/// Where a team stands against [`OBSERVATIONS_WANTED`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum CoverageStatus {
+    /// Short, and assigning its open matches can still make it up.
+    CatchUp,
+    /// Short, and not enough matches left to make it up.
+    Short,
+    /// Short now, but enough of its matches to come are assigned.
+    OnTrack,
+    /// Observed enough, approved or waiting.
+    Covered,
+}
+
+impl TeamCoverage {
+    /// Observations that count: approved or waiting.
+    pub fn observed(&self) -> usize {
+        self.approved + self.waiting
+    }
+
+    /// Observations still to find, past those already assigned.
+    pub fn needed(&self) -> usize {
+        OBSERVATIONS_WANTED.saturating_sub(self.observed() + self.assigned)
+    }
+
+    pub fn status(&self) -> CoverageStatus {
+        if self.observed() >= OBSERVATIONS_WANTED {
+            CoverageStatus::Covered
+        } else if self.needed() == 0 {
+            CoverageStatus::OnTrack
+        } else if self.open >= self.needed() {
+            CoverageStatus::CatchUp
+        } else {
+            CoverageStatus::Short
+        }
+    }
+}
+
+/// Coverage of every team at the event: `roster` and every team in the
+/// schedule. Teams that need assigning come first, then those that cannot
+/// make it up, then the rest; by number within each.
+///
+/// An observation of a robot no longer in its match still counts: the robot
+/// was watched. An assignment to one does not, as everywhere else.
+pub fn team_coverage(
+    matches: &[MatchRecord],
+    roster: &[i32],
+    assignments: &[Assignment],
+    sightings: &[Sighting],
+) -> Vec<TeamCoverage> {
+    let mut teams: Vec<i32> = roster.to_vec();
+    teams.extend(matches.iter().flat_map(MatchRecord::teams));
+    teams.sort_unstable();
+    teams.dedup();
+
+    let mut rows: Vec<TeamCoverage> = teams
+        .into_iter()
+        .map(|team| {
+            let mut row = TeamCoverage {
+                team_number: team,
+                approved: 0,
+                waiting: 0,
+                assigned: 0,
+                remaining: 0,
+                open: 0,
+                next_open: None,
+            };
+            for s in sightings.iter().filter(|s| s.team_number == team) {
+                if s.approved {
+                    row.approved += 1;
+                } else {
+                    row.waiting += 1;
+                }
+            }
+            for m in matches
+                .iter()
+                .filter(|m| !m.played && m.alliance_of(team).is_some())
+            {
+                let seen = sightings
+                    .iter()
+                    .any(|s| s.match_key == m.key && s.team_number == team);
+                let on_it = assignments
+                    .iter()
+                    .any(|a| a.match_key == m.key && a.team_number == team);
+                if on_it && !seen {
+                    row.assigned += 1;
+                }
+                if m.comp_level == CompLevel::Qualification {
+                    row.remaining += 1;
+                    if !on_it && !seen {
+                        row.open += 1;
+                        row.next_open.get_or_insert_with(|| m.key.clone());
+                    }
+                }
+            }
+            row
+        })
+        .collect();
+    rows.sort_by_key(|r| (r.status(), r.team_number));
+    rows
 }
 
 /// Assignments naming a robot that is no longer in its match.
@@ -1123,6 +1255,7 @@ mod tests {
             team_number: team,
             scouter_id: scouter,
             device_id: device,
+            approved: false,
         }
     }
 
@@ -1207,5 +1340,109 @@ mod tests {
     fn an_assignment_for_a_match_elsewhere_is_not_this_schedules_business() {
         let matches = [scheduled(1, [1, 2], [3, 4])];
         assert!(stale(&matches, &[assigned("2026nhgrs_qm1", 99)]).is_empty());
+    }
+
+    // ── Team coverage (F9) ──────────────────────────────────────────────────
+
+    fn sighted(match_number: i32, team: i32, approved: bool) -> Sighting {
+        Sighting {
+            approved,
+            ..seen(match_number, team, Some(1), None)
+        }
+    }
+
+    /// Q1 and Q2 played; Q3 to Q5 to come.
+    fn coverage_schedule() -> Vec<MatchRecord> {
+        let mut q1 = scheduled(1, [1, 2], [3, 4]);
+        q1.played = true;
+        let mut q2 = scheduled(2, [1, 5], [6, 7]);
+        q2.played = true;
+        vec![
+            q1,
+            q2,
+            scheduled(3, [1, 2], [5, 6]),
+            scheduled(4, [3, 7], [8, 4]),
+            scheduled(5, [3, 2], [7, 8]),
+        ]
+    }
+
+    fn row(rows: &[TeamCoverage], team: i32) -> &TeamCoverage {
+        rows.iter().find(|r| r.team_number == team).expect("team")
+    }
+
+    #[test]
+    fn team_coverage_counts_approved_waiting_assigned_and_what_is_left() {
+        let sightings = [
+            sighted(1, 1, true),
+            sighted(2, 1, false),
+            sighted(1, 2, true),
+            // Recorded before the match was marked played: not "assigned".
+            sighted(3, 6, false),
+        ];
+        let assignments = [
+            to(3, 2, sam()),
+            to(3, 6, sam()),
+            to(4, 3, sam()),
+            // A robot that has left Q4 is nobody's assignment.
+            to(4, 99, sam()),
+        ];
+        let rows = team_coverage(&coverage_schedule(), &[1, 50], &assignments, &sightings);
+
+        let one = row(&rows, 1);
+        assert_eq!((one.approved, one.waiting, one.observed()), (1, 1, 2));
+        assert_eq!(
+            one.status(),
+            CoverageStatus::Covered,
+            "a waiting one counts"
+        );
+
+        let two = row(&rows, 2);
+        assert_eq!((two.approved, two.assigned, two.remaining), (1, 1, 2));
+        assert_eq!(two.status(), CoverageStatus::OnTrack);
+
+        let three = row(&rows, 3);
+        assert_eq!((three.observed(), three.assigned, three.open), (0, 1, 1));
+        assert_eq!(three.next_open.as_deref(), Some("2026mabil_qm5"));
+        assert_eq!(three.status(), CoverageStatus::CatchUp);
+
+        let four = row(&rows, 4);
+        assert_eq!((four.remaining, four.open, four.needed()), (1, 1, 2));
+        assert_eq!(
+            four.status(),
+            CoverageStatus::Short,
+            "one match left for two"
+        );
+
+        let six = row(&rows, 6);
+        assert_eq!(
+            (six.waiting, six.assigned, six.open, six.remaining),
+            (1, 0, 0, 1)
+        );
+        assert_eq!(six.status(), CoverageStatus::Short);
+
+        let fifty = row(&rows, 50);
+        assert_eq!(
+            (fifty.remaining, fifty.observed()),
+            (0, 0),
+            "on the roster, no matches"
+        );
+        assert_eq!(fifty.status(), CoverageStatus::Short);
+        assert!(rows.iter().all(|r| r.team_number != 99));
+
+        let order: Vec<(CoverageStatus, i32)> =
+            rows.iter().map(|r| (r.status(), r.team_number)).collect();
+        let mut sorted = order.clone();
+        sorted.sort();
+        assert_eq!(order, sorted, "catch-up first, covered last");
+        assert_eq!(order[0], (CoverageStatus::CatchUp, 3));
+    }
+
+    #[test]
+    fn team_coverage_counts_only_qualification_matches_as_left() {
+        let mut playoff = scheduled(9, [1, 2], [3, 4]);
+        playoff.comp_level = CompLevel::Semifinal;
+        let rows = team_coverage(&[playoff], &[], &[], &[]);
+        assert!(rows.iter().all(|r| r.remaining == 0 && r.open == 0));
+        assert!(rows.iter().all(|r| r.status() == CoverageStatus::Short));
     }
 }

@@ -100,6 +100,36 @@
             </table>
           </div>
         {% endif %}
+        {# Team coverage (F9): every team wants two observations before
+           alliance selection. Teams to assign come first, each with its next
+           open match, then those that cannot get there, then the rest. Inside
+           #coverage, so it refreshes with it. #}
+        {% if !teams.is_empty() %}
+          <div class="stack" id="team-coverage">
+            <h2>Teams</h2>
+            <p class="hint">Each team wants {{ tt_core::assignments::OBSERVATIONS_WANTED }} observations, approved or waiting for review. Declined ones do not count.</p>
+            <div class="table-scroll">
+              <table class="data-table team-coverage cards" role="table">
+                <caption class="visually-hidden">How often each team has been scouted</caption>
+                <thead>
+                  <tr><th scope="col">Team</th><th scope="col">Approved</th><th scope="col">Waiting</th><th scope="col">Assigned</th><th scope="col">Quals left</th><th scope="col">Status</th></tr>
+                </thead>
+                <tbody>
+                  {% for t in teams %}
+                    <tr>
+                      <th scope="row"><a href="{{ t.team_href }}">{{ t.team }}</a>{% if !t.team_name.is_empty() %} <span class="muted">{{ t.team_name }}</span>{% endif %}</th>
+                      <td data-label="Approved">{{ t.approved }}</td>
+                      <td data-label="Waiting">{{ t.waiting }}</td>
+                      <td data-label="Assigned">{{ t.assigned }}</td>
+                      <td data-label="Quals left">{{ t.remaining }}</td>
+                      <td data-label="Status"><span class="badge {{ t.badge }}">{{ t.status }}</span>{% if !t.assign_href.is_empty() %} <a href="{{ t.assign_href }}">Assign {{ t.assign_label }}</a>{% endif %}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        {% endif %}
         {# Rotation (L13): who has been on too long, or has far more of the
            event than somebody free. Each button posts the one robot to the
            match save, which grid-live.js does in place. #}

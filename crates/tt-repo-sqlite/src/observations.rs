@@ -257,7 +257,8 @@ impl SqliteRepo {
 
     pub(crate) async fn event_sightings_impl(&self, event_key: &str) -> Result<Vec<Sighting>> {
         let rows = sqlx::query(
-            "SELECT match_key, team_number, scouter_id, device_id FROM observations \
+            "SELECT match_key, team_number, scouter_id, device_id, \
+                    review_state = 'approved' AS approved FROM observations \
              WHERE event_key = ? AND review_state <> 'declined' \
              ORDER BY match_key, team_number, id",
         )
@@ -272,6 +273,7 @@ impl SqliteRepo {
                 team_number: row.get("team_number"),
                 scouter_id: row.get("scouter_id"),
                 device_id: row.get("device_id"),
+                approved: row.get("approved"),
             })
             .collect())
     }
@@ -579,13 +581,26 @@ mod tests {
             .execute(repo.pool())
             .await
             .expect("decline");
-
-        let sightings = repo.event_sightings("2026mabil").await.unwrap();
-        assert_eq!(sightings.len(), 1);
-        assert_eq!(
-            (sightings[0].team_number, sightings[0].scouter_id),
-            (254, Some(1))
+        let Recorded::Created(id) = repo
+            .record_observation(&observation(3, 2), Utc::now())
+            .await
+            .expect("record")
+        else {
+            panic!("created")
+        };
+        assert!(
+            repo.review_observation(id, &Decision::Approve, 2, Utc::now())
+                .await
+                .unwrap()
         );
+
+        // F9: approved and waiting both count, each said which; declined not.
+        let sightings = repo.event_sightings("2026mabil").await.unwrap();
+        let seen: Vec<_> = sightings
+            .iter()
+            .map(|s| (s.team_number, s.scouter_id, s.approved))
+            .collect();
+        assert_eq!(seen, [(2, Some(1), true), (254, Some(1), false)]);
         assert!(repo.event_sightings("2026nope").await.unwrap().is_empty());
     }
 

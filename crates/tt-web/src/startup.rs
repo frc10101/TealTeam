@@ -3454,6 +3454,75 @@ mod flow_tests {
         assert!(table.contains(r#"<td class="missed" data-label="Missed">1</td>"#));
     }
 
+    /// F9: each team's approved, waiting, assigned, and quals left, from a
+    /// schedule of Q1 played and Q2, Q3 to come.
+    #[tokio::test]
+    async fn team_coverage_counts_approved_and_waiting_but_not_declined() {
+        let (state, admin, kim) = two_pending().await;
+        seed_match(&state, 3, false).await;
+        // Team 1 in Q2 too, then declined. 254 approved; 10101 waits.
+        let form = observation_form(1, "0191f7ac-1234-7000-8000-0000000000cc", GOOD_ANSWERS);
+        let saved = post(&state, "/api/submission", &form, Some(&admin)).await;
+        assert_eq!(saved.status(), StatusCode::SEE_OTHER);
+        post(&state, "/api/observations/1/approve", "", Some(&kim)).await;
+        post(
+            &state,
+            "/api/observations/3/decline",
+            "reason=Wrong+robot",
+            Some(&kim),
+        )
+        .await;
+        assert_eq!(review_state(&state, 3).await.0, "declined");
+        // Kim is on 254 in Q3.
+        assign(&state, 3, 254, Some(2), None).await;
+
+        let body = text(
+            get(
+                &state,
+                "/lead-scout/assignments?event=2026now",
+                Some(&admin),
+            )
+            .await,
+        )
+        .await;
+        let coverage = &body[body.find(r#"id="coverage""#).expect("coverage")..];
+        let table = &coverage[coverage.find(r#"id="team-coverage""#).expect("teams")..];
+        let table = &table[..table.find("</table>").unwrap()];
+        let row = |team: i32| {
+            let at = table
+                .find(&format!(r#"team={team}">{team}</a>"#))
+                .unwrap_or_else(|| panic!("row for {team}"));
+            let start = table[..at].rfind("<tr>").unwrap();
+            let end = at + table[at..].find("</tr>").unwrap();
+            table[start..end].to_string()
+        };
+        let counts = |team: i32| {
+            let row = row(team);
+            ["Approved", "Waiting", "Assigned", "Quals left"].map(|label| {
+                let cell = format!(r#"<td data-label="{label}">"#);
+                let at = row.find(&cell).expect(label) + cell.len();
+                row[at..at + row[at..].find("</td>").unwrap()]
+                    .parse::<usize>()
+                    .unwrap()
+            })
+        };
+
+        assert_eq!(counts(254), [1, 0, 1, 2], "approved, and Q3 assigned");
+        assert!(row(254).contains("On track") && !row(254).contains("edit="));
+        assert_eq!(counts(10101), [0, 1, 0, 2], "waiting");
+        assert!(row(10101).contains("Assign 1 more"));
+        assert!(row(10101).contains(
+            r#"href="/lead-scout/assignments?event=2026now&#38;edit=2026now_qm3#edit">Assign Q3</a>"#
+        ));
+        assert_eq!(counts(1), [0, 0, 0, 2], "declined counts nowhere");
+        assert!(row(1).contains("Assign 2 more") && row(1).contains(">Assign Q2</a>"));
+        assert_eq!(counts(2), [0, 0, 0, 2]);
+        assert!(
+            table.find(">10101</a>").unwrap() < table.find(">254</a>").unwrap(),
+            "teams to assign before teams on track"
+        );
+    }
+
     #[tokio::test]
     async fn coverage_and_both_grids_refresh_themselves() {
         let (state, admin) = after_q1().await;

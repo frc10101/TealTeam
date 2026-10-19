@@ -23,7 +23,7 @@ use tt_core::user::User;
 use tt_repo::{DEVICE_ONLINE_WINDOW, Device, NewAssignment, Repo, Scout};
 use tt_templates::{
     AssigneeChoice, AssignmentGrid, AssignmentsPage, DeviceRow, MatchEditor, Nav, PoolEntry,
-    RotationRow, TallyRow, assignments_href,
+    RotationRow, TallyRow, TeamCoverageRow, assignments_href,
 };
 
 use crate::events::EventContext;
@@ -321,6 +321,7 @@ pub async fn page(
         pool: Vec::new(),
         devices: Vec::new(),
         coverage: Vec::new(),
+        teams: Vec::new(),
         rotation: Vec::new(),
         live_href: String::new(),
         stream_href: String::new(),
@@ -427,6 +428,11 @@ pub async fn page(
             missed: t.missed,
             to_come: t.to_come,
         })
+        .collect();
+    let numbers: Vec<i32> = roster.iter().map(|t| t.number).collect();
+    page.teams = assignments::team_coverage(&matches, &numbers, &assignments, &sightings)
+        .iter()
+        .map(|c| TeamCoverageRow::new(&event.key, &matches, &roster, c))
         .collect();
     page.rotation = assignments::rotation(
         &matches,

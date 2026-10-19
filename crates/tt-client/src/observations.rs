@@ -220,7 +220,8 @@ impl ClientRepo {
 
     pub(crate) fn event_sightings_impl(&self, event_key: &str) -> Result<Vec<Sighting>> {
         self.all(
-            "SELECT match_key, team_number, scouter_id, device_id FROM observations \
+            "SELECT match_key, team_number, scouter_id, device_id, \
+                    review_state = 'approved' FROM observations \
              WHERE event_key = ? AND review_state <> 'declined' \
              ORDER BY match_key, team_number, id",
             [event_key],
@@ -230,6 +231,7 @@ impl ClientRepo {
                     team_number: row.get(1)?,
                     scouter_id: row.get(2)?,
                     device_id: row.get(3)?,
+                    approved: row.get(4)?,
                 })
             },
             "listing sightings",

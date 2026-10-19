@@ -899,6 +899,8 @@ pub struct AssignmentsPage {
     pub devices: Vec<DeviceRow>,
     /// How each assignee is doing (L6).
     pub coverage: Vec<TallyRow>,
+    /// How each team is covered (F9), teams to assign first.
+    pub teams: Vec<TeamCoverageRow>,
     /// Robots to move so the rota stays fair (L13).
     pub rotation: Vec<RotationRow>,
     /// The grid's own address, which its live regions refresh from.
@@ -1133,6 +1135,71 @@ pub struct TallyRow {
     pub recorded: usize,
     pub missed: usize,
     pub to_come: usize,
+}
+
+/// One line of the team coverage table (F9): how often a team has been
+/// watched, what is on the way, and what the lead scout can still do.
+#[derive(Debug, Clone)]
+pub struct TeamCoverageRow {
+    pub team: i32,
+    /// Empty when the team is not on the event's roster.
+    pub team_name: String,
+    pub team_href: String,
+    pub approved: usize,
+    pub waiting: usize,
+    pub assigned: usize,
+    pub remaining: usize,
+    /// "Covered", "On track", "Assign 1 more", "Can't reach 2".
+    pub status: String,
+    pub badge: &'static str,
+    /// The next match to assign this team in, when that would help: its
+    /// editor, and its label.
+    pub assign_href: String,
+    pub assign_label: String,
+}
+
+impl TeamCoverageRow {
+    pub fn new(
+        event_key: &str,
+        matches: &[MatchRecord],
+        roster: &[Team],
+        c: &assignments::TeamCoverage,
+    ) -> Self {
+        use assignments::CoverageStatus;
+        let (status, badge) = match c.status() {
+            CoverageStatus::Covered => ("Covered".to_string(), "badge-teal"),
+            CoverageStatus::OnTrack => ("On track".to_string(), "badge-gray"),
+            CoverageStatus::CatchUp => (format!("Assign {} more", c.needed()), "badge-amber"),
+            CoverageStatus::Short => (
+                format!("Can't reach {}", assignments::OBSERVATIONS_WANTED),
+                "badge-red",
+            ),
+        };
+        let next = c
+            .next_open
+            .as_deref()
+            .filter(|_| c.needed() > 0)
+            .and_then(|key| matches.iter().find(|m| m.key == key));
+        Self {
+            team: c.team_number,
+            team_name: roster
+                .iter()
+                .find(|t| t.number == c.team_number)
+                .map(|t| t.name.clone())
+                .unwrap_or_default(),
+            team_href: team_href(event_key, c.team_number),
+            approved: c.approved,
+            waiting: c.waiting,
+            assigned: c.assigned,
+            remaining: c.remaining,
+            status,
+            badge,
+            assign_href: next
+                .map(|m| assignments_href(event_key, Some(&m.key)))
+                .unwrap_or_default(),
+            assign_label: next.map(MatchRecord::label).unwrap_or_default(),
+        }
+    }
 }
 
 /// A rotation suggestion (L13), in words, with the one-tap form that takes it.
@@ -2236,6 +2303,7 @@ mod tests {
             pool: Vec::new(),
             devices: Vec::new(),
             coverage: Vec::new(),
+            teams: Vec::new(),
             rotation: Vec::new(),
             live_href: "/lead-scout/assignments?event=2026mabil".into(),
             stream_href: String::new(),
@@ -2404,6 +2472,7 @@ mod tests {
             team_number: team,
             scouter_id: Some(1),
             device_id: None,
+            approved: false,
         };
         let grid = AssignmentGrid::new(
             "2026mabil",
@@ -2456,6 +2525,7 @@ mod tests {
                 missed: 1,
                 to_come: 4,
             }],
+            teams: Vec::new(),
             rotation: Vec::new(),
             live_href: "/lead-scout/assignments?event=2026mabil".into(),
             stream_href: String::new(),
@@ -2521,6 +2591,7 @@ mod tests {
             pool: Vec::new(),
             devices: Vec::new(),
             coverage: Vec::new(),
+            teams: Vec::new(),
             rotation: vec![row, lonely],
             live_href: "/lead-scout/assignments?event=2026mabil".into(),
             stream_href: String::new(),
