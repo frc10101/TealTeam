@@ -32,7 +32,6 @@ use crate::auth::{
     Admin, Auth, Coach, LeadScout, MaybeAuth, SESSION_COOKIE, Strategist, clear_session_cookie,
     device_uuid, hash_password, new_session, session_cookie, verify_password,
 };
-use crate::coach;
 use crate::events::{self, EventContext, EventParam};
 use crate::handoff;
 use crate::picklist;
@@ -1168,7 +1167,7 @@ pub async fn drive_coach(
     EventParam(requested): EventParam,
 ) -> Response {
     let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
-    html(coach::page(&state, &user, nav, &context).await)
+    html(tt_pages::coach::page(&*state.repo, nav, user.team_number, &context, Utc::now()).await)
 }
 
 // ── Admin database viewer (U17) ─────────────────────────────────────────────

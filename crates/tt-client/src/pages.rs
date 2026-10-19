@@ -4,7 +4,10 @@
 //! Each address runs its `tt_pages` function, the one the server runs, over
 //! this device's copy. An address not listed here is `None`, and the worker
 //! shows the offline shell (C1) as before. C6 moved what a scout reads at an
-//! event: home, a team, the notes, and the graph.
+//! event: home, a team, the notes, and the graph. C6b added the drive coach's
+//! schedule, for the copy's team. The server keeps that page to coaches; the
+//! device knows no roles, so it answers whoever opens the address, and its tab
+//! bar does not offer it. What it shows is the published schedule.
 //!
 //! A device cannot know who is holding it: the session is the server's to
 //! check, and signing in offline is C9. So a page made here has no account
@@ -38,7 +41,7 @@ pub async fn render(
         .collect();
     let arg = |key: &str| query.get(key).map(String::as_str);
     let event = events::requested(arg("event"));
-    if !["/", "/teams", "/notes", "/graph"].contains(&path) {
+    if !["/", "/teams", "/notes", "/graph", "/drive-coach"].contains(&path) {
         return None;
     }
     let ours = viewer_team(repo);
@@ -67,6 +70,9 @@ pub async fn render(
                 .await
                 .render_html()
         }
+        "/drive-coach" => tt_pages::coach::page(repo, nav, ours, &context, now)
+            .await
+            .render_html(),
         _ => return None,
     };
     page.inspect_err(|e| warn!("making {path} on this device: {e}"))
