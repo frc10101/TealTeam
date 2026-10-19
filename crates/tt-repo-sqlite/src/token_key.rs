@@ -50,23 +50,7 @@ impl SqliteRepo {
             .begin()
             .await
             .map_err(|e| query_err("signing out everywhere", e))?;
-        sqlx::query("DELETE FROM sessions WHERE user_id = ?")
-            .bind(user_id)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| query_err("deleting a user's sessions", e))?;
-        let epoch: i64 = sqlx::query_scalar(
-            "INSERT INTO token_epochs (user_id, epoch, bumped_at, bumped_by) VALUES (?, 1, ?, ?) \
-             ON CONFLICT (user_id) DO UPDATE SET epoch = epoch + 1, \
-               bumped_at = excluded.bumped_at, bumped_by = excluded.bumped_by \
-             RETURNING epoch",
-        )
-        .bind(user_id)
-        .bind(to_sql(now))
-        .bind(by)
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(|e| query_err("bumping a token epoch", e))?;
+        let epoch = end_everywhere(&mut tx, user_id, by, now).await?;
         tx.commit()
             .await
             .map_err(|e| query_err("signing out everywhere", e))?;
@@ -145,6 +129,35 @@ pub struct HandoffScanRow {
     pub device_uuid: String,
     pub sent: i64,
     pub recorded: i64,
+}
+
+/// The inside of [`SqliteRepo::sign_out_everywhere`], for a caller that has
+/// more to do in the same transaction -- a password reset (G1) must not
+/// leave a window where the new password is set and the old sessions live.
+pub(crate) async fn end_everywhere(
+    conn: &mut sqlx::SqliteConnection,
+    user_id: i64,
+    by: i64,
+    now: DateTime<Utc>,
+) -> Result<i64> {
+    sqlx::query("DELETE FROM sessions WHERE user_id = ?")
+        .bind(user_id)
+        .execute(&mut *conn)
+        .await
+        .map_err(|e| query_err("deleting a user's sessions", e))?;
+    let epoch: i64 = sqlx::query_scalar(
+        "INSERT INTO token_epochs (user_id, epoch, bumped_at, bumped_by) VALUES (?, 1, ?, ?) \
+         ON CONFLICT (user_id) DO UPDATE SET epoch = epoch + 1, \
+           bumped_at = excluded.bumped_at, bumped_by = excluded.bumped_by \
+         RETURNING epoch",
+    )
+    .bind(user_id)
+    .bind(to_sql(now))
+    .bind(by)
+    .fetch_one(&mut *conn)
+    .await
+    .map_err(|e| query_err("bumping a token epoch", e))?;
+    Ok(epoch)
 }
 
 #[cfg(test)]

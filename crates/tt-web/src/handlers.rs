@@ -26,6 +26,7 @@ use tt_templates::{
     AccountPage, HelpPage, LeadScoutPage, LinkChips, Nav, Page, SignInPage, SignUpPage,
 };
 
+use crate::accounts;
 use crate::admin;
 use crate::assignments::{self, GridParams};
 use crate::auth::{
@@ -1185,4 +1186,56 @@ pub async fn admin_db(
     let table = query.get("table").map(String::as_str);
     let page = query.get("page").and_then(|p| p.parse().ok());
     html(admin::page(&state, nav, table, page).await)
+}
+
+// ── Account administration (G1) ─────────────────────────────────────────────
+
+/// `?event=` to carry back to the page, only if it could be an event key:
+/// it lands in a redirect, so nothing else of the request's goes with it.
+fn event_query(requested: Option<&str>) -> String {
+    requested
+        .filter(|key| key.chars().all(|c| c.is_ascii_alphanumeric()))
+        .map(|key| format!("?event={key}"))
+        .unwrap_or_default()
+}
+
+/// `GET /admin/users?done=&id=`: every account, to change its roles and team
+/// number or reset its password.
+pub async fn admin_users(
+    State(state): State<AppState>,
+    Admin(user): Admin,
+    EventParam(requested): EventParam,
+    Query(query): Query<HashMap<String, String>>,
+) -> Response {
+    let (nav, _) = event_page(&state, Some(&user), requested.as_deref()).await;
+    let done = query
+        .get("done")
+        .and_then(|code| accounts::Done::parse(code))
+        .zip(query.get("id").and_then(|id| id.parse().ok()));
+    html(accounts::page(&state, &user, nav, done).await)
+}
+
+/// `POST /api/admin/users/{id}`: set an account's roles and team number.
+pub async fn save_account(
+    State(state): State<AppState>,
+    Admin(user): Admin,
+    EventParam(requested): EventParam,
+    Path(id): Path<i64>,
+    Form(pairs): Form<Vec<(String, String)>>,
+) -> Response {
+    let back = event_query(requested.as_deref());
+    Redirect::to(&accounts::save(&state, &user, &back, id, &pairs).await).into_response()
+}
+
+/// `POST /api/admin/users/{id}/password`: reset a forgotten password, which
+/// signs that account out everywhere.
+pub async fn reset_account_password(
+    State(state): State<AppState>,
+    Admin(user): Admin,
+    EventParam(requested): EventParam,
+    Path(id): Path<i64>,
+    Form(pairs): Form<Vec<(String, String)>>,
+) -> Response {
+    let back = event_query(requested.as_deref());
+    Redirect::to(&accounts::reset_password(&state, &user, &back, id, &pairs).await).into_response()
 }

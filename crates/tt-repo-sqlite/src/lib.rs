@@ -15,6 +15,7 @@
 //!
 //! The pool is capped at one connection deliberately -- see [`connect`].
 
+pub mod accounts;
 pub mod admin;
 mod assignments;
 pub mod backup;

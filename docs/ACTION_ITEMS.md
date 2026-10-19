@@ -883,7 +883,7 @@ A scout's cycle is: open the scouting page, save, load the page the save redirec
 | # | Action | Source | Effort | Status |
 | --- | --- | --- | --- | --- |
 | AUD | Compare REBUILD_SPEC (routes, data model, business rules, upstream, front end, §12) and RefurbishInstructions against `crates/`, under the resolved decisions below; one row per real gap | Coordinator | S | **Done** — gaps G1–G5 below; findings in "AUD" notes |
-| G1 | **Account administration for admins.** `/admin/users` (the `Admin` extractor): list accounts with team number, roles, and last sign-in; set `is_admin` / `is_lead_scout` / `is_coach` and the team number; reset a forgotten password, which also ends that user's sessions; refuse to remove the last admin. Today the first sign-up is the only admin and every later lead scout or coach takes hand-written SQL | RS §1 Roles, §2.1, §3 | M | Todo |
+| G1 | **Account administration for admins.** `/admin/users` (the `Admin` extractor): list accounts with team number, roles, and last sign-in; set `is_admin` / `is_lead_scout` / `is_coach` and the team number; reset a forgotten password, which also ends that user's sessions; refuse to remove the last admin. Today the first sign-up is the only admin and every later lead scout or coach takes hand-written SQL | RS §1 Roles, §2.1, §3 | M | **Done** — `/admin/users` (Accounts in the admin nav), `POST /api/admin/users/{id}` and `/{id}/password`; rules in `tt_repo_sqlite::accounts` |
 | G2 | **Match predictions on the drive coach.** One `tt_core::coach` prediction, per [PREDICTIONS_REIMPLEMENTATION.md](PREDICTIONS_REIMPLEMENTATION.md) step 5 "unify the two algorithms": predicted red and blue scores and the predicted winner on each unplayed card, marked partial when a team has no OPR, with unit tests. The panel shows only each side's OPR total now | PREDICTIONS_REIMPLEMENTATION.md · RS §5.7 | S | **Dropped** — by the user, 2026-10-17; see Explicitly dropped |
 | G3 | **Undo a review.** A lead can return an approved or declined observation to waiting (`review_observation` only moves `pending` rows, so a mis-tap is permanent); the scout's decline notice goes away, the change replicates, and who reopened it and when is kept | RI §2F ("there is always an undo") · RS §5.3, §12.5 | S | **Done** — `POST /api/observations/{id}/reopen`, "Put back to waiting" on a reviewed observation; `reopen_observation` in both repos |
 | G4 | **FIRST schedule as a fallback match source.** When TBA has no matches for an event (no `TBA_AUTH_KEY`, TBA down, or not published yet), fill `matches` from FIRST `/{season}/schedule/{code}` (qualification and playoff) under the keys TBA will use, so a later TBA sync updates the same rows rather than duplicating them; a recorded-payload test. Without matches there is no assignment grid and no coach panel | RS §6.1 · FRC_API_Calls.md | M | **Done** — `sync::sync_schedule` / `store_schedule` behind `sync_event` when TBA gave no matches; the loop also runs on FIRST alone; tests in `tt-upstream/tests/recorded.rs` |
@@ -907,6 +907,17 @@ replaced stays in the `changes` log, which the update trigger already writes, so
 it replicates like any review. A declined observation the scout has since
 recorded again is not reopened -- the coverage index allows one live record, and
 the new one is what to review.
+
+*G1 notes.* The last-admin rule is inside the one `UPDATE` (it refuses
+when the change drops `is_admin` and that account is the only admin), so two
+admins demoting each other at once cannot both win. A reset writes the new hash
+and runs T1's sign-out-everywhere in one transaction -- sessions deleted and the
+token epoch bumped, so a tablet's offline sign-in goes too; an admin resetting
+their own password is signed out the same way. Role changes need no sign-out:
+every guard and token use re-reads the account. The admin types the new
+password (shown, so it can be read out) and tells the person; it never rides in
+the redirect URL. Emails are shown here, unlike the masked DB viewer: telling
+two Sams apart is the point of the page. No migration.
 
 **Missing:** the FIRST match schedule (RS §6.1 lists it; only TBA fills `matches`). G4.
 

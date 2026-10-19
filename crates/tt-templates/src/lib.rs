@@ -14,7 +14,9 @@
 use askama::Template;
 
 mod admin;
-pub use admin::{AdminCell, AdminPage, AdminRow, AdminTable, AdminTableView};
+pub use admin::{
+    AccountRow, AdminCell, AdminPage, AdminRow, AdminTable, AdminTableView, AdminUsersPage,
+};
 mod coach;
 pub use coach::{AllianceView, CoachCard, CoachTeam, DriveCoachPage};
 mod graph;
@@ -1726,6 +1728,7 @@ mod tests {
         assert!(!html.contains("/lead-scout"));
         assert!(!html.contains("/drive-coach"));
         assert!(!html.contains("/admin/db"));
+        assert!(!html.contains("/admin/users"));
     }
 
     #[test]
@@ -1747,6 +1750,7 @@ mod tests {
         assert!(html.contains("/lead-scout"));
         assert!(html.contains("/drive-coach"));
         assert!(html.contains("/admin/db"));
+        assert!(html.contains("/admin/users"));
     }
 
     #[test]

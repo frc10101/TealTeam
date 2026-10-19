@@ -84,6 +84,7 @@
             {% if nav.can_lead %}<a href="/lead-scout{{ nav.event.query() }}">Lead Scout</a>{% endif %}
             {% if nav.can_coach %}<a href="/drive-coach{{ nav.event.query() }}">Drive Coach</a>{% endif %}
             {% if nav.can_pick %}<a href="/pick-list{{ nav.event.query() }}">Pick List</a>{% endif %}
+            {% if nav.can_admin %}<a href="/admin/users{{ nav.event.query() }}">Accounts</a>{% endif %}
             {% if nav.can_admin %}<a href="/admin/db{{ nav.event.query() }}">Database</a>{% endif %}
           </nav>
         {% endif %}
