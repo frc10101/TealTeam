@@ -18,6 +18,13 @@
 //!   * **TBA's 2026 event list** (`tba/events_2026.json`), cut to a dozen
 //!     events whose TBA key and FIRST code disagree, or agree (I15).
 //!
+//! The FIRST schedules (`first/2026_schedule_*`, G4) are the exception: no
+//! FIRST credentials were to hand when they were wanted, so they are built
+//! in the shape FIRST documents. Magnolia's carries the same matches, teams,
+//! and times as TBA's recording, which is what lets a test check the two land
+//! on the same rows; Milstein's is two qualifications of its real roster.
+//! Replace them with recordings when someone has a key.
+//!
 //! Upstream drifts every season. When a sync breaks on a new shape, record
 //! it here next to these.
 
@@ -60,6 +67,16 @@ async fn recorded_upstream() -> String {
                 }
                 served(format!("tba/{key}_{what}.json"))
             }),
+        )
+        .route(
+            "/{season}/schedule/{code}",
+            get(
+                |Path((season, code)): Path<(String, String)>,
+                 Query(q): Query<HashMap<String, String>>| async move {
+                    let level = q.get("tournamentLevel").cloned().unwrap_or_default();
+                    served(format!("first/{season}_schedule_{code}_{level}.json"))
+                },
+            ),
         )
         .route(
             "/{season}/{what}",
@@ -302,7 +319,8 @@ async fn every_response_lands_in_the_upstream_log_once() {
         sync::sync_events(&*repo, &first, Some(&tba), &only("MSLR"))
             .await
             .expect("events");
-        sync::sync_event(&*repo, &tba, "2026mslr").await;
+        let event = repo.event("2026mslr").await.unwrap().expect("stored");
+        sync::sync_event(&*repo, Some(&tba), None, &event).await;
     }
     drop((first, tba));
     journal.await.expect("journal");
@@ -465,4 +483,101 @@ async fn an_event_that_has_not_happened_is_empty_not_an_error() {
             .rankings
             .is_empty()
     );
+}
+
+// ── FIRST's schedule, when TBA has no matches (G4) ──────────────────────────
+
+#[tokio::test]
+async fn without_tba_the_schedule_comes_from_first_under_tbas_keys() {
+    let base = recorded_upstream().await;
+    let repo = repo().await;
+    let first = first(&base, 2026);
+    sync::sync_events(&repo, &first, None, &only("MSLR"))
+        .await
+        .expect("events");
+    let event = repo.event("2026mslr").await.unwrap().expect("stored");
+
+    let report = sync::sync_event(&repo, None, Some(&first), &event).await;
+    assert!(report.problems.is_empty(), "{:?}", report.problems);
+    assert_eq!(report.matches, 18);
+
+    let stored = repo.event_matches("2026mslr").await.unwrap();
+    let keys: Vec<&str> = stored.iter().map(|m| m.key.as_str()).collect();
+    assert_eq!(
+        keys[..4],
+        [
+            "2026mslr_qm1",
+            "2026mslr_qm2",
+            "2026mslr_qm3",
+            "2026mslr_sf1m1"
+        ]
+    );
+    assert_eq!(
+        keys[15..],
+        ["2026mslr_sf13m1", "2026mslr_f1m1", "2026mslr_f1m2"]
+    );
+    assert!(stored.iter().all(|m| !m.played && m.red_score.is_none()));
+
+    let q1 = &stored[0];
+    assert_eq!(q1.red, [Some(9309), Some(2183), Some(538)]);
+    assert_eq!(q1.blue, [Some(590), Some(1927), Some(11265)]);
+    assert_eq!(
+        q1.scheduled_at.map(|t| t.timestamp()),
+        Some(1_774_014_600),
+        "08:50 in Laurel is 13:50 UTC, TBA's time for it"
+    );
+}
+
+#[tokio::test]
+async fn tba_then_updates_firsts_rows_rather_than_adding_its_own() {
+    let base = recorded_upstream().await;
+    let repo = repo().await;
+    let first = first(&base, 2026);
+    sync::sync_events(&repo, &first, None, &only("MSLR"))
+        .await
+        .expect("events");
+    let event = repo.event("2026mslr").await.unwrap().expect("stored");
+    sync::sync_event(&repo, None, Some(&first), &event).await;
+
+    // TBA publishes: the same eighteen rows, now with results.
+    let report = sync::sync_event(&repo, Some(&tba(&base)), Some(&first), &event).await;
+    assert!(report.problems.is_empty(), "{:?}", report.problems);
+    let stored = repo.event_matches("2026mslr").await.unwrap();
+    assert_eq!(stored.len(), 18, "no duplicates");
+    assert!(stored.iter().all(|m| m.played && m.red_score.is_some()));
+
+    // TBA goes away. FIRST's schedule fills in again but cannot unplay a
+    // match: it has no scores to give.
+    let gone = TbaClient::new("key", Uplink::new())
+        .expect("client")
+        .with_base_url(format!("{base}/gone"));
+    let report = sync::sync_event(&repo, Some(&gone), Some(&first), &event).await;
+    assert_eq!(report.matches, 0, "every match was played: {report:?}");
+    let after = repo.event_matches("2026mslr").await.unwrap();
+    assert_eq!(after.len(), 18);
+    assert!(after.iter().all(|m| m.played && m.red_score.is_some()));
+}
+
+#[tokio::test]
+async fn a_division_schedule_is_asked_for_by_firsts_code_and_kept_under_tbas_key() {
+    let base = recorded_upstream().await;
+    let repo = repo().await;
+    let first = first(&base, 2026);
+    sync::sync_events(&repo, &first, Some(&tba(&base)), &only("MILSTEIN"))
+        .await
+        .expect("events");
+    let event = repo.event("2026mil").await.unwrap().expect("stored");
+
+    // TBA has nothing for 2026mil in the recordings: not published yet.
+    let report = sync::sync_event(&repo, Some(&tba(&base)), Some(&first), &event).await;
+    assert_eq!(report.matches, 2, "{report:?}");
+    let keys: Vec<String> = repo
+        .event_matches("2026mil")
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|m| m.key)
+        .collect();
+    assert_eq!(keys, ["2026mil_qm1", "2026mil_qm2"]);
+    assert!(repo.event_matches("2026milstein").await.unwrap().is_empty());
 }

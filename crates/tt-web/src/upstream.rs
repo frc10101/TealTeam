@@ -4,8 +4,10 @@
 //!
 //!   - **At boot**, the FIRST event sync, bounded at 60 seconds. In the
 //!     background: the server never waits on the internet to start serving.
-//!   - **Then indefinitely**, the TBA loop (I7): every two minutes while an
-//!     event is live, every three hours otherwise.
+//!   - **Then indefinitely**, the sync loop (I7): every two minutes while an
+//!     event is live, every three hours otherwise. TBA's matches and
+//!     statistics, and FIRST's schedule for an event TBA has no matches for
+//!     (G4) -- which, with no TBA key, is every event.
 //!   - **When a lead scout asks**, `POST /api/frc/sync` (I13): the FIRST sync
 //!     again, then a nudge that wakes the loop.
 //!   - **When the phone is plugged in** (S6): the same, by itself, as soon as
@@ -95,6 +97,11 @@ impl Upstream {
         }
     }
 
+    /// Whether the background loop runs: it has something to sync from.
+    pub fn loops(&self) -> bool {
+        self.tba.is_some() || self.first.is_some()
+    }
+
     pub fn mark_events_synced(&self) {
         self.events_synced.store(true, Ordering::SeqCst);
     }
@@ -133,8 +140,7 @@ impl Upstream {
 
 /// Start the boot sync and the background loop, and return at once.
 ///
-/// `None` when there is nothing to run: no credentials, or only FIRST
-/// credentials with the boot sync switched off.
+/// `None` when there is nothing to run: no credentials at all.
 pub fn spawn(
     repo: Arc<SqliteRepo>,
     upstream: Arc<Upstream>,
@@ -152,9 +158,11 @@ pub fn spawn(
         Some(_) => true,
     };
     if upstream.tba.is_none() {
-        info!("TBA_AUTH_KEY not set; background match and stats sync is off");
+        info!(
+            "TBA_AUTH_KEY not set; matches come from FIRST's schedule, without scores or statistics"
+        );
     }
-    if !boot && upstream.tba.is_none() {
+    if !upstream.loops() {
         return None;
     }
 
@@ -163,10 +171,9 @@ pub fn spawn(
         if boot {
             boot_sync(&repo, &upstream).await;
         }
-        if let Some(tba) = upstream.tba.clone() {
-            let (uplink, wake) = (upstream.uplink.clone(), upstream.wake.clone());
-            sync::run_loop(repo, tba, uplink, wake).await;
-        }
+        let (uplink, wake) = (upstream.uplink.clone(), upstream.wake.clone());
+        let (tba, first) = (upstream.tba.clone(), upstream.first.clone());
+        sync::run_loop(repo, tba, first, uplink, wake).await;
     }))
 }
 
@@ -210,8 +217,11 @@ pub struct ManualSync {
     pub teams: usize,
     pub event_teams: usize,
     pub problems: Vec<String>,
-    /// The background loop was woken, so matches and statistics follow.
-    pub tba_pass_started: bool,
+    /// The background loop was woken, so matches follow, and statistics too
+    /// when TBA is configured.
+    pub pass_started: bool,
+    /// TBA is configured, so the pass brings statistics as well as matches.
+    pub statistics: bool,
 }
 
 impl ManualSync {
@@ -230,8 +240,10 @@ impl ManualSync {
             (false, true) => "FIRST returned no events for the configured filters.".into(),
             (false, false) => "The event sync did not complete:".into(),
         };
-        if self.tba_pass_started {
+        if self.pass_started && self.statistics {
             text.push_str(" Matches and statistics are updating in the background.");
+        } else if self.pass_started {
+            text.push_str(" Matches are updating in the background, from FIRST's schedule.");
         }
         text
     }
@@ -276,8 +288,8 @@ pub async fn sync_now(repo: &SqliteRepo, upstream: &Upstream) -> ManualSync {
     }
     // Wake the loop even when the event sync failed: it syncs the events
     // already stored, which is still the freshest data available.
-    let tba_pass_started = upstream.tba.is_some();
-    if tba_pass_started {
+    let pass_started = upstream.loops();
+    if pass_started {
         upstream.wake.notify_one();
     }
 
@@ -288,7 +300,8 @@ pub async fn sync_now(repo: &SqliteRepo, upstream: &Upstream) -> ManualSync {
         teams: report.teams,
         event_teams: report.event_teams,
         problems: report.problems,
-        tba_pass_started,
+        pass_started,
+        statistics: upstream.tba.is_some(),
     }
 }
 
@@ -301,7 +314,7 @@ pub async fn tether_up(repo: &SqliteRepo, upstream: &Upstream) {
     if upstream.first.is_some() && !upstream.events_synced.load(Ordering::SeqCst) {
         let outcome = sync_now(repo, upstream).await;
         info!("sync over the tether: {}", outcome.headline());
-    } else if upstream.tba.is_some() {
+    } else if upstream.loops() {
         upstream.wake.notify_one();
     }
 }
@@ -509,7 +522,15 @@ mod tests {
     #[tokio::test]
     async fn the_boot_sync_can_be_switched_off() {
         let base = first_stub(EVENTS).await;
-        assert!(spawn(repo().await, upstream(Some(&base)), false).is_none());
+        let repo = repo().await;
+        // FIRST alone still runs the loop, for its schedule (G4).
+        let task = spawn(repo.clone(), upstream(Some(&base)), false).expect("the loop");
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        task.abort();
+        assert!(
+            repo.list_events().await.unwrap().is_empty(),
+            "no event sync"
+        );
     }
 
     #[tokio::test]
@@ -518,9 +539,15 @@ mod tests {
         let repo = repo().await;
 
         let task = spawn(repo.clone(), upstream(Some(&base)), true).expect("a task");
-        // With no TBA key the task ends after the boot sync, so it can be
-        // awaited here. With one, it would carry on into the loop.
-        task.await.expect("boot sync task");
+        // The task carries on into the loop, so wait for the events instead.
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while repo.event_teams("2026mabil").await.unwrap().len() < 2 {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .expect("the boot sync landed");
+        task.abort();
 
         let events = repo.list_events().await.expect("list");
         assert_eq!(events.len(), 1);
@@ -542,8 +569,13 @@ mod tests {
 
         assert!(outcome.ok, "{:?}", outcome.problems);
         assert_eq!((outcome.events, outcome.teams), (1, 2));
-        assert!(!outcome.tba_pass_started, "no TBA key, so no pass follows");
-        assert_eq!(outcome.headline(), "Synced 1 event(s) and 2 team(s).");
+        assert!(outcome.pass_started, "FIRST's schedule follows (G4)");
+        assert!(!outcome.statistics, "but no TBA key, so no statistics");
+        assert_eq!(
+            outcome.headline(),
+            "Synced 1 event(s) and 2 team(s). Matches are updating in the background, \
+             from FIRST's schedule."
+        );
         assert!(upstream.uplink.snapshot().last_sync.is_some());
     }
 
@@ -578,7 +610,7 @@ mod tests {
 
         let outcome = sync_now(&*repo().await, &upstream).await;
 
-        assert!(outcome.tba_pass_started);
+        assert!(outcome.pass_started && outcome.statistics);
         assert!(outcome.headline().ends_with("updating in the background."));
         // notify_one stores a permit when nobody is waiting, so the loop picks
         // the nudge up even if it was mid-pass when the request landed.
@@ -595,7 +627,8 @@ mod tests {
             teams: events * 30,
             event_teams: 0,
             problems: Vec::new(),
-            tba_pass_started: false,
+            pass_started: false,
+            statistics: false,
         };
         assert_eq!(
             outcome(2, false).headline(),

@@ -886,7 +886,7 @@ A scout's cycle is: open the scouting page, save, load the page the save redirec
 | G1 | **Account administration for admins.** `/admin/users` (the `Admin` extractor): list accounts with team number, roles, and last sign-in; set `is_admin` / `is_lead_scout` / `is_coach` and the team number; reset a forgotten password, which also ends that user's sessions; refuse to remove the last admin. Today the first sign-up is the only admin and every later lead scout or coach takes hand-written SQL | RS §1 Roles, §2.1, §3 | M | Todo |
 | G2 | **Match predictions on the drive coach.** One `tt_core::coach` prediction, per [PREDICTIONS_REIMPLEMENTATION.md](PREDICTIONS_REIMPLEMENTATION.md) step 5 "unify the two algorithms": predicted red and blue scores and the predicted winner on each unplayed card, marked partial when a team has no OPR, with unit tests. The panel shows only each side's OPR total now | PREDICTIONS_REIMPLEMENTATION.md · RS §5.7 | S | **Dropped** — by the user, 2026-10-17; see Explicitly dropped |
 | G3 | **Undo a review.** A lead can return an approved or declined observation to waiting (`review_observation` only moves `pending` rows, so a mis-tap is permanent); the scout's decline notice goes away, the change replicates, and who reopened it and when is kept | RI §2F ("there is always an undo") · RS §5.3, §12.5 | S | **Done** — `POST /api/observations/{id}/reopen`, "Put back to waiting" on a reviewed observation; `reopen_observation` in both repos |
-| G4 | **FIRST schedule as a fallback match source.** When TBA has no matches for an event (no `TBA_AUTH_KEY`, TBA down, or not published yet), fill `matches` from FIRST `/{season}/schedule/{code}` (qualification and playoff) under the keys TBA will use, so a later TBA sync updates the same rows rather than duplicating them; a recorded-payload test. Without matches there is no assignment grid and no coach panel | RS §6.1 · FRC_API_Calls.md | M | Todo |
+| G4 | **FIRST schedule as a fallback match source.** When TBA has no matches for an event (no `TBA_AUTH_KEY`, TBA down, or not published yet), fill `matches` from FIRST `/{season}/schedule/{code}` (qualification and playoff) under the keys TBA will use, so a later TBA sync updates the same rows rather than duplicating them; a recorded-payload test. Without matches there is no assignment grid and no coach panel | RS §6.1 · FRC_API_Calls.md | M | **Done** — `sync::sync_schedule` / `store_schedule` behind `sync_event` when TBA gave no matches; the loop also runs on FIRST alone; tests in `tt-upstream/tests/recorded.rs` |
 | G5 | **Help page and header copy.** Public `/help` (how to scout a robot, what Offline / held / declined mean, the QR handoff, who to ask) with a **Help** link in the nav and a team-number box in the header; correct the account page's "This device" text, which says browsers keep nothing over plain http (C13's outbox does); delete the unused `PlaceholderPage` | RS §4, §7 Navigation · U5 | S | **Done** — `/help` (`pages/help.html`), Help link with the account, team box in the header; account "This device" copy fixed; `PlaceholderPage` gone |
 
 ### AUD: what the spec needs that is not built
@@ -909,6 +909,20 @@ recorded again is not reopened -- the coverage index allows one live record, and
 the new one is what to review.
 
 **Missing:** the FIRST match schedule (RS §6.1 lists it; only TBA fills `matches`). G4.
+
+*G4 notes.* FIRST's schedule fills `matches` for an event whenever TBA's
+matches call returns none or fails (not when it is offline). Rows go under
+TBA's keys -- `qm{n}`, the bracket's `sf{n}m1` for FIRST's matches 1-13, and
+`f1m{k}` for "Final k" (FIRST's 14+) -- and under TBA's event key, so a division
+is asked for as `MILSTEIN` and kept as `2026mil`. A match already played is
+never overwritten, so TBA going down mid-event loses no scores. Playoffs before
+2023 (best-of-three) are skipped with a problem line, quals are kept. The
+background loop now runs with FIRST credentials and no TBA key, keeping the
+schedule current (two FIRST requests per live event a pass), and the manual
+sync's answer says so; `ManualSync.tba_pass_started` became `pass_started` plus
+`statistics`. The schedule fixtures are built in FIRST's documented shape from
+TBA's Magnolia recording, not recorded from FIRST (no credentials to hand);
+swap in real recordings when someone has a key. No migration.
 
 **Deliberately dropped, not gaps:**
 - `POST /api/events/select` and `sessions.selected_event_id` — U2 (event is URL state).

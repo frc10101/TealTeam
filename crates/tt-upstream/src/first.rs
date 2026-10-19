@@ -14,7 +14,7 @@ use crate::{
     truncate,
 };
 use chrono::Utc;
-use tt_core::upstream::{FirstEvent, FirstTeam};
+use tt_core::upstream::{FirstEvent, FirstScheduledMatch, FirstTeam};
 
 const API: &str = "first";
 pub const DEFAULT_BASE_URL: &str = "https://frc-api.firstinspires.org/v3.0";
@@ -248,6 +248,30 @@ impl FirstClient {
             }
             page += 1;
         }
+    }
+
+    /// An event's match schedule (G4), qualifications then playoffs: one
+    /// request each, because FIRST wants a level when no team is named.
+    /// `season` is the event's, which a bulk load of last year need not share
+    /// with the client.
+    pub async fn schedule(
+        &self,
+        season: i32,
+        event_code: &str,
+    ) -> Result<Vec<FirstScheduledMatch>> {
+        #[derive(serde::Deserialize)]
+        struct Envelope {
+            #[serde(rename = "Schedule", default)]
+            schedule: Vec<FirstScheduledMatch>,
+        }
+        let path = format!("/{season}/schedule/{}", event_code.trim().to_uppercase());
+        let mut matches = Vec::new();
+        for level in ["Qualification", "Playoff"] {
+            let query = HashMap::from([("tournamentLevel".to_string(), level.to_string())]);
+            let envelope: Envelope = self.get(&path, &query).await?;
+            matches.extend(envelope.schedule);
+        }
+        Ok(matches)
     }
 }
 

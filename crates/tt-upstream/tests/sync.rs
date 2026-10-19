@@ -444,7 +444,15 @@ async fn a_pass_during_an_event_syncs_it_and_keeps_polling_fast() {
     let base = stub_server().await;
     let (repo, tba, uplink) = seeded(&base).await;
 
-    let pass = sync::sync_active(&repo, &tba, &uplink, day(3, 13), sync::PASS_TIMEOUT).await;
+    let pass = sync::sync_active(
+        &repo,
+        Some(&tba),
+        None,
+        &uplink,
+        day(3, 13),
+        sync::PASS_TIMEOUT,
+    )
+    .await;
 
     assert!(
         pass.report.problems.is_empty(),
@@ -464,7 +472,15 @@ async fn with_nothing_live_a_pass_falls_back_to_the_surrounding_week() {
     let (repo, tba, uplink) = seeded(&base).await;
 
     // Three days after it ended: the final rankings still need collecting.
-    let pass = sync::sync_active(&repo, &tba, &uplink, day(3, 18), sync::PASS_TIMEOUT).await;
+    let pass = sync::sync_active(
+        &repo,
+        Some(&tba),
+        None,
+        &uplink,
+        day(3, 18),
+        sync::PASS_TIMEOUT,
+    )
+    .await;
     assert_eq!(pass.report.matches, 3, "the finished event is still synced");
     assert_eq!(pass.live_events, 0, "but it is not live");
     assert_eq!(pass.next_interval(), sync::INTERVAL_BETWEEN_EVENTS);
@@ -478,7 +494,7 @@ async fn the_fallback_window_is_seven_days_either_side_inclusive() {
     let synced = |today| {
         let (repo, tba, uplink) = (&repo, &tba, &uplink);
         async move {
-            sync::sync_active(repo, tba, uplink, today, sync::PASS_TIMEOUT)
+            sync::sync_active(repo, Some(tba), None, uplink, today, sync::PASS_TIMEOUT)
                 .await
                 .report
                 .matches
@@ -497,7 +513,15 @@ async fn a_quiet_calendar_makes_a_quiet_pass() {
     let base = stub_server().await;
     let (repo, tba, uplink) = seeded(&base).await;
 
-    let pass = sync::sync_active(&repo, &tba, &uplink, day(6, 1), sync::PASS_TIMEOUT).await;
+    let pass = sync::sync_active(
+        &repo,
+        Some(&tba),
+        None,
+        &uplink,
+        day(6, 1),
+        sync::PASS_TIMEOUT,
+    )
+    .await;
 
     assert_eq!(
         pass,
@@ -527,7 +551,7 @@ async fn a_pass_that_overruns_its_budget_stops_and_says_so() {
 
     let budget = std::time::Duration::from_millis(200);
     let started = std::time::Instant::now();
-    let pass = sync::sync_active(&repo, &tba, &uplink, day(3, 13), budget).await;
+    let pass = sync::sync_active(&repo, Some(&tba), None, &uplink, day(3, 13), budget).await;
 
     assert!(
         started.elapsed() < std::time::Duration::from_secs(5),
@@ -563,7 +587,8 @@ async fn waking_the_loop_runs_a_pass_now_rather_than_after_its_pause() {
     // three-hour pause.
     tokio::spawn(sync::run_loop(
         repo.clone(),
-        tba,
+        Some(tba),
+        None,
         uplink.clone(),
         wake.clone(),
     ));

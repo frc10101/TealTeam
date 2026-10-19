@@ -267,6 +267,110 @@ pub async fn store_matches<R: Repo + Sync>(
     report
 }
 
+// ── FIRST: the schedule, when TBA has none (G4) ─────────────────────────────
+
+/// Pull an event's schedule from FIRST, for when TBA has no matches for it:
+/// no `TBA_AUTH_KEY`, TBA down, or a schedule TBA has not published yet.
+/// Without matches there is no assignment grid and no coach panel.
+pub async fn sync_schedule<R: Repo + Sync>(
+    repo: &R,
+    client: &FirstClient,
+    event: &Event,
+) -> Result<SyncReport> {
+    let split = upstream::split_event_key(&event.key);
+    let season = split.as_ref().map_or(client.season(), |(s, _)| *s);
+    // FIRST's own code: for a division it is not the one in TBA's key.
+    let code = event
+        .event_code
+        .clone()
+        .filter(|c| !c.trim().is_empty())
+        .or_else(|| split.map(|(_, c)| c))
+        .unwrap_or_default();
+    let schedule = client.schedule(season, &code).await?;
+    Ok(store_schedule(repo, event, season, &schedule, Utc::now()).await)
+}
+
+/// Store FIRST's schedule under the keys TBA will use, so TBA's own sync,
+/// when it comes, updates these rows rather than adding a second set.
+///
+/// A match already played is left alone: FIRST's schedule has no scores, and
+/// a row TBA filled before it went down is worth more than this one.
+pub async fn store_schedule<R: Repo + Sync>(
+    repo: &R,
+    event: &Event,
+    season: i32,
+    schedule: &[upstream::FirstScheduledMatch],
+    synced_at: DateTime<Utc>,
+) -> SyncReport {
+    let mut report = SyncReport::default();
+    // Stored as IANA, which `event_zone` takes as it is.
+    let zone = event
+        .timezone
+        .as_deref()
+        .and_then(|z| timezone::event_zone(z, "", ""));
+    let played: std::collections::HashSet<String> = match repo.event_matches(&event.key).await {
+        Ok(stored) => stored
+            .into_iter()
+            .filter(|m| m.played || m.red_score.is_some())
+            .map(|m| m.key)
+            .collect(),
+        Err(e) => {
+            report.problem(format!("reading the matches stored for {}: {e}", event.key));
+            return report;
+        }
+    };
+
+    let mut unplaced = 0;
+    for raw in schedule {
+        let (Some((comp_level, set_number, match_number)), Some(key)) =
+            (raw.tba_slot(season), raw.tba_key(&event.key, season))
+        else {
+            unplaced += 1;
+            continue;
+        };
+        if played.contains(&key) {
+            continue;
+        }
+        let record = MatchRecord {
+            key,
+            event_key: event.key.clone(),
+            comp_level,
+            set_number,
+            match_number,
+            red: raw.red_teams(),
+            blue: raw.blue_teams(),
+            red_score: None,
+            blue_score: None,
+            winner: None,
+            played: false,
+            // The event's clock, so without its zone the time is not known.
+            scheduled_at: zone.and_then(|tz| {
+                raw.local_start()?
+                    .and_local_timezone(tz)
+                    .earliest()
+                    .map(|t| t.with_timezone(&Utc))
+            }),
+            actual_at: None,
+        };
+        match repo.upsert_match(&record, synced_at).await {
+            Ok(()) => report.matches += 1,
+            Err(e) => report.problem(format!("storing match {}: {e}", record.key)),
+        }
+    }
+    if unplaced > 0 {
+        report.problem(format!(
+            "{unplaced} of FIRST's matches for {} have no TBA key this server knows; skipped",
+            event.key
+        ));
+    }
+
+    info!(
+        "stored {} match(es) from FIRST's schedule for {}",
+        report.matches, event.key
+    );
+    report
+}
+
 fn from_unix(seconds: i64) -> Option<chrono::DateTime<Utc>> {
     chrono::DateTime::from_timestamp(seconds, 0)
 }
@@ -386,25 +490,54 @@ fn clamp_i32(value: i64) -> i32 {
 
 // ── Orchestration (I7, I8) ──────────────────────────────────────────────────
 
-/// Everything, for one event.
-pub async fn sync_event<R: Repo + Sync>(repo: &R, tba: &TbaClient, event_key: &str) -> SyncReport {
+/// Everything, for one event: TBA's matches and statistics, and FIRST's
+/// schedule when TBA has no matches to give (G4).
+pub async fn sync_event<R: Repo + Sync>(
+    repo: &R,
+    tba: Option<&TbaClient>,
+    first: Option<&FirstClient>,
+    event: &Event,
+) -> SyncReport {
     let mut report = SyncReport::default();
+    let event_key = event.key.as_str();
 
-    match sync_matches(repo, tba, event_key).await {
-        Ok(r) => report.merge(r),
-        Err(e) if e.is_offline() => {
-            report.offline = true;
-            report.problem(format!("no connection while syncing {event_key}"));
-            return report;
+    let mut from_tba = 0;
+    if let Some(tba) = tba {
+        match sync_matches(repo, tba, event_key).await {
+            Ok(r) => {
+                from_tba = r.matches;
+                report.merge(r);
+            }
+            Err(e) if e.is_offline() => {
+                report.offline = true;
+                report.problem(format!("no connection while syncing {event_key}"));
+                return report;
+            }
+            Err(e) => report.problem(format!("matches for {event_key}: {e}")),
         }
-        Err(e) => report.problem(format!("matches for {event_key}: {e}")),
     }
 
-    match sync_stats(repo, tba, event_key).await {
-        Ok(r) => report.merge(r),
-        Err(e) => {
-            report.offline |= e.is_offline();
-            report.problem(format!("stats for {event_key}: {e}"));
+    if from_tba == 0
+        && let Some(first) = first
+    {
+        match sync_schedule(repo, first, event).await {
+            Ok(r) => report.merge(r),
+            Err(e) if e.is_offline() => {
+                report.offline = true;
+                report.problem(format!("no connection while syncing {event_key}"));
+                return report;
+            }
+            Err(e) => report.problem(format!("FIRST's schedule for {event_key}: {e}")),
+        }
+    }
+
+    if let Some(tba) = tba {
+        match sync_stats(repo, tba, event_key).await {
+            Ok(r) => report.merge(r),
+            Err(e) => {
+                report.offline |= e.is_offline();
+                report.problem(format!("stats for {event_key}: {e}"));
+            }
         }
     }
 
@@ -425,16 +558,15 @@ pub async fn bulk_load<R: Repo + Sync>(
 ) -> Result<SyncReport> {
     let mut report = sync_events(repo, first, tba, filters).await?;
 
-    if let Some(tba) = tba {
-        let events = repo.list_events().await.unwrap_or_default();
-        for event in &events {
-            report.merge(sync_event(repo, tba, &event.key).await);
-            if report.offline {
-                break;
-            }
+    if tba.is_none() {
+        report.problem("TBA key not configured; matches come from FIRST's schedule, without scores or statistics");
+    }
+    let events = repo.list_events().await.unwrap_or_default();
+    for event in &events {
+        report.merge(sync_event(repo, tba, Some(first), event).await);
+        if report.offline {
+            break;
         }
-    } else {
-        report.problem("TBA key not configured; skipped matches and statistics");
     }
 
     uplink.record_sync();
@@ -497,7 +629,8 @@ impl Pass {
 /// next.
 pub async fn sync_active<R: Repo + Sync>(
     repo: &R,
-    tba: &TbaClient,
+    tba: Option<&TbaClient>,
+    first: Option<&FirstClient>,
     uplink: &Uplink,
     today: NaiveDate,
     budget: Duration,
@@ -517,7 +650,7 @@ pub async fn sync_active<R: Repo + Sync>(
 
     let finished = tokio::time::timeout(budget, async {
         for event in &events {
-            report.merge(sync_event(repo, tba, &event.key).await);
+            report.merge(sync_event(repo, tba, first, event).await);
             if report.offline {
                 break;
             }
@@ -563,12 +696,16 @@ async fn pass_targets<R: Repo + Sync>(
 /// The first pass runs immediately. After that, each pass sets the pause before
 /// the next: two minutes while an event is live, three hours otherwise.
 ///
+/// Either client may be missing: with no TBA key the loop keeps FIRST's
+/// schedule current, and that is all (G4).
+///
 /// `wake` cuts a pause short. A manual event sync uses it (I13): a Pi that
 /// booted with an empty calendar chose a three-hour pause, and without a nudge
 /// the events it has just been given would wait out the rest of it.
 pub async fn run_loop<R: Repo + Sync>(
     repo: Arc<R>,
-    tba: TbaClient,
+    tba: Option<TbaClient>,
+    first: Option<FirstClient>,
     uplink: Uplink,
     wake: Arc<Notify>,
 ) {
@@ -578,7 +715,15 @@ pub async fn run_loop<R: Repo + Sync>(
         // to the slow cadence once midnight passed in Greenwich (Q5). Zones
         // ahead of UTC are inside the lookahead already.
         let today = (Utc::now() - TimeDelta::hours(12)).date_naive();
-        let pass = sync_active(&*repo, &tba, &uplink, today, PASS_TIMEOUT).await;
+        let pass = sync_active(
+            &*repo,
+            tba.as_ref(),
+            first.as_ref(),
+            &uplink,
+            today,
+            PASS_TIMEOUT,
+        )
+        .await;
         let next = pass.next_interval();
         info!(
             live_events = pass.live_events,
