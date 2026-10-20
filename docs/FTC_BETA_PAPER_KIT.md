@@ -32,16 +32,11 @@ into the app field-by-field with no re-reading.
 
 ☐ yes ☐ no
 
-**auto_launch_made** — launches that landed in the upward CELL (0–15)
+**auto_launched** — every element launched at the HIVE, in or not; tick one
+box as each leaves the robot (0–20)
 
 ```
-[  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]
-```
-
-**auto_launch_missed** (0–15)
-
-```
-[  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]
+[  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]
 ```
 
 **auto_flower_pollen_pickup** — took POLLEN from a FLOWER's bottom opening
@@ -54,23 +49,24 @@ into the app field-by-field with no re-reading.
 
 ---
 
-## teleop
+## teleop (all 2:00)
 
-**launch_made** (0–60)
-
-```
-[  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]
-[  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]
-```
-
-**launch_missed** (0–60)
+**launched** — every element launched at the HIVE, in or not, endgame
+included (0–60)
 
 ```
-[  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]
-[  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]
+[  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]
+[  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]
+[  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]
 ```
 
-**garden_delivered** — elements pushed/placed into the robot's own GARDEN (0–30)
+**launch_accuracy** — after the match, auto and teleop together; leave blank
+if it never launched (pick one)
+
+☐ most ☐ about_half ☐ few
+
+**garden_delivered** — elements pushed/placed into the robot's own GARDEN,
+endgame included (0–30)
 
 ```
 [  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]
@@ -81,7 +77,7 @@ into the app field-by-field with no re-reading.
 
 ## endgame (last 60 s)
 
-**flower_nectar_placed** (0–8)
+**flower_nectar_placed** — FLOWERS open at 1:00 left (0–8)
 
 ```
 [  ][  ][  ][  ][  ]   [  ][  ][  ]
@@ -93,9 +89,10 @@ into the app field-by-field with no re-reading.
 [  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]   [  ][  ][  ][  ][  ]
 ```
 
-**flower_role** (pick one — see §5 B0 note: this is the field scouts find hardest to judge)
+**flower_role** — the most it did; bottom NECTAR = its NECTAR went into an
+empty FLOWER. Do not judge who owns the top (pick one)
 
-☐ none ☐ attempted ☐ placed_bottom_nectar ☐ took_ownership
+☐ none ☐ attempted ☐ placed ☐ placed_bottom_nectar
 
 **teleop_park** — partly in LOADING ZONE at end of match
 
@@ -112,6 +109,10 @@ into the app field-by-field with no re-reading.
 **defended_against** (pick one)
 
 ☐ not_defended ☐ slowed ☐ shut_down
+
+**driver_skill** — against the other three robots in this match (pick one)
+
+☐ struggling ☐ average ☐ strong ☐ excellent
 
 **fouls_observed** — fouls the scout saw, not the official score sheet (0–10)
 

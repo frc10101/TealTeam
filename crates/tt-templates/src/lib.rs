@@ -1632,9 +1632,9 @@ pub struct FormSection {
 
 #[derive(Debug, Clone)]
 pub struct FormField {
-    /// The input's `name`: `f.launch_made`.
+    /// The input's `name`: `f.launched`.
     pub name: String,
-    /// The input's `id`: `f-launch_made`.
+    /// The input's `id`: `f-launched`.
     pub id: String,
     pub label: String,
     pub help: String,
@@ -2185,7 +2185,7 @@ mod tests {
         assert!(html.contains("Cheesy Poofs"));
         assert!(html.contains(r#"value="0191f7ac-1234-7000-8000-000000000001""#));
         // Counters start at their minimum, so an untouched one is a real zero.
-        assert!(html.contains(r#"name="f.auto_launch_made" value="0""#));
+        assert!(html.contains(r#"name="f.auto_launched" value="0""#));
         assert!(!html.contains(" checked"), "nothing is preselected");
     }
 
@@ -2194,13 +2194,13 @@ mod tests {
         let mut errors = FormErrors::default();
         errors
             .fields
-            .insert("launch_made".into(), "Must be between 0 and 60.".into());
+            .insert("launched".into(), "Must be between 0 and 60.".into());
         errors.form.push(tt_core::form::STALE_FORM.into());
         let draft = Draft {
             record_id: "0191f7ac-1234-7000-8000-000000000001".into(),
             answers: answers(&[
                 ("f.robot_status", "played"),
-                ("f.launch_made", "61"),
+                ("f.launched", "61"),
                 ("f.teleop_park", "on"),
                 ("f.notes", "<b>tippy</b>"),
             ]),

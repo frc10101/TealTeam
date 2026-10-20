@@ -378,7 +378,7 @@ mod tests {
             event_key: "2026mabil".into(),
             team_number,
             alliance: "red",
-            payload: [("launch_made".to_string(), Value::Count(9))].into(),
+            payload: [("launched".to_string(), Value::Count(9))].into(),
             schema_version: 1,
             scouter_id: Some(1),
             device_id: None,
@@ -414,7 +414,7 @@ mod tests {
         .await
         .expect("row");
         assert_eq!(row.get::<String, _>("review_state"), "pending");
-        assert_eq!(row.get::<String, _>("payload"), r#"{"launch_made":9}"#);
+        assert_eq!(row.get::<String, _>("payload"), r#"{"launched":9}"#);
         assert_eq!(row.get::<i64, _>("schema_version"), 1);
         assert_eq!(row.get::<String, _>("alliance"), "red");
         assert_eq!(row.get::<Option<i32>, _>("submitting_team"), Some(10101));

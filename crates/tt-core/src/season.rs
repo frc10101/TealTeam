@@ -833,6 +833,28 @@ mod tests {
     }
 
     #[test]
+    fn shipped_schema_asks_only_what_one_scout_can_see() {
+        // F8: launches are counted as they leave the robot, with landing judged
+        // once after the match, and FLOWER ownership is left to the score sheet.
+        let s = current_season().expect("schema");
+        for gone in ["auto_launch_made", "launch_made", "launch_missed"] {
+            assert!(s.field(gone).is_none(), "{gone}");
+        }
+        assert!(matches!(
+            s.field("auto_launched").unwrap().kind,
+            FieldKind::Counter { max: 20, .. }
+        ));
+        assert!(matches!(
+            s.field("launch_accuracy").unwrap().kind,
+            FieldKind::Select { .. }
+        ));
+        let FieldKind::Select { options } = &s.field("flower_role").unwrap().kind else {
+            panic!("flower_role is a choice");
+        };
+        assert!(!options.iter().any(|o| o.key.contains("owner")));
+    }
+
+    #[test]
     fn shipped_schema_only_scores_what_one_robot_earns() {
         // Table 10-2: LEAVE 3, PARK 5 (auto and teleop), GARDEN 1 each. Every
         // other field starts at 0 until it is measured (D5).
@@ -857,20 +879,20 @@ mod tests {
         let s = current_season().expect("schema");
         let p = payload(&[
             ("robot_status", Value::Text("played".into())),
-            ("auto_leave", Value::Flag(true)),       //        3
-            ("auto_launch_made", Value::Count(3)),   //        0
-            ("auto_launch_missed", Value::Count(1)), //        0
+            ("auto_leave", Value::Flag(true)),  //        3
+            ("auto_launched", Value::Count(3)), //        0
             ("auto_flower_pollen_pickup", Value::Flag(false)),
-            ("auto_park", Value::Flag(true)),          //        5
-            ("launch_made", Value::Count(14)),         //        0
-            ("launch_missed", Value::Count(4)),        //        0
-            ("garden_delivered", Value::Count(6)),     // 6 * 1 = 6
+            ("auto_park", Value::Flag(true)), //        5
+            ("launched", Value::Count(14)),   //        0
+            ("launch_accuracy", Value::Text("about_half".into())),
+            ("garden_delivered", Value::Count(6)), // 6 * 1 = 6
             ("flower_nectar_placed", Value::Count(2)), //        0
             ("flower_pollen_placed", Value::Count(5)), //        0
             ("flower_role", Value::Text("placed_bottom_nectar".into())),
             ("teleop_park", Value::Flag(true)), //        5
             ("defense_played", Value::Text("some".into())),
             ("defended_against", Value::Text("slowed".into())),
+            ("driver_skill", Value::Text("strong".into())),
             ("fouls_observed", Value::Count(1)), //        0
             ("rule_incidents", Value::Text("hit the HIVE".into())),
             ("notes", Value::Text("tippy".into())), // not scored
@@ -901,7 +923,7 @@ mod tests {
         assert!(
             s.validate_payload(&payload(&[
                 played.clone(),
-                ("auto_launch_made", Value::Count(16))
+                ("auto_launched", Value::Count(21))
             ]))
             .is_err()
         );

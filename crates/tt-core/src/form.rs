@@ -25,7 +25,7 @@ use crate::season::{Field, FieldKind, Payload, SeasonSchema, Value};
 /// `match` or `team` without colliding with the form's own inputs.
 pub const FIELD_PREFIX: &str = "f.";
 
-/// The input name for a schema field: `f.launch_made`.
+/// The input name for a schema field: `f.launched`.
 pub fn input_name(field_key: &str) -> String {
     format!("{FIELD_PREFIX}{field_key}")
 }
@@ -445,9 +445,9 @@ mod tests {
             &raw(&[
                 ("f.robot_status", "played"),
                 ("f.auto_leave", "on"),
-                ("f.auto_launch_made", "2"),
-                ("f.launch_made", "9"),
-                ("f.flower_role", "took_ownership"),
+                ("f.auto_launched", "2"),
+                ("f.launched", "9"),
+                ("f.flower_role", "placed_bottom_nectar"),
                 ("f.fouls_observed", "0"),
                 ("f.notes", "tippy on the ramp"),
             ]),
@@ -527,6 +527,6 @@ mod tests {
 
     #[test]
     fn input_names_carry_the_prefix() {
-        assert_eq!(input_name("launch_made"), "f.launch_made");
+        assert_eq!(input_name("launched"), "f.launched");
     }
 }

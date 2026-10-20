@@ -129,7 +129,7 @@ mod tests {
             match_key: "2026now_qm2".into(),
             team_number: 254,
             payload: [
-                ("launch_made".to_string(), Value::Count(9)),
+                ("launched".to_string(), Value::Count(9)),
                 ("teleop_park".to_string(), Value::Flag(true)),
                 ("notes".to_string(), Value::Text("tippy".into())),
             ]

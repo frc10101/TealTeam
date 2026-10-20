@@ -85,7 +85,7 @@ check("Kim's tablet holds a token", await until(`!!(window.ttToken && ttToken.to
 await evaluate(`(() => {
   const form = document.getElementById("scout-form");
   form.elements["f.robot_status"].value = "played";
-  form.elements["f.launch_made"].value = "9";
+  form.elements["f.launched"].value = "9";
   form.elements["f.teleop_park"].checked = true;
   form.elements["f.notes"].value = "tippy on the ramp";
   form.addEventListener("submit", (e) => e.preventDefault());
@@ -120,7 +120,7 @@ await setFiles("[data-photo]", photos);
 const recorded = await until(`document.body.textContent.includes("Recorded 1 of 1 form from Kim's tablet")`, 20000);
 check("the photos are read, and the server records the form as Kim's", recorded,
   recorded ? "" : await evaluate(`(document.querySelector("[data-status]") || document.body).textContent.trim().slice(0, 300)`));
-const db = execFileSync("sqlite3", [`${D}/t.db`, `SELECT u.name, o.team_number, json_extract(o.payload, '$.launch_made'), json_extract(o.payload, '$.notes') FROM observations o JOIN users u ON u.id = o.scouter_id WHERE o.client_record_id = '${recordId}'`]).toString().trim();
+const db = execFileSync("sqlite3", [`${D}/t.db`, `SELECT u.name, o.team_number, json_extract(o.payload, '$.launched'), json_extract(o.payload, '$.notes') FROM observations o JOIN users u ON u.id = o.scouter_id WHERE o.client_record_id = '${recordId}'`]).toString().trim();
 check("as Kim, with the answers typed", db === "Kim|254|9|tippy on the ramp", db);
 await page(`${D}/result.png`);
 const receipt = await shoot("#receipt svg.qr", `${D}/receipt.png`);

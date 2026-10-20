@@ -246,7 +246,7 @@ mod tests {
             &schema,
             &payload(&[
                 ("robot_status", Value::Text("played".into())),
-                ("launch_made", Value::Count(9)),
+                ("launched", Value::Count(9)),
                 ("auto_park", Value::Flag(false)),
                 ("notes", Value::Text("tippy".into())),
             ]),
@@ -261,9 +261,9 @@ mod tests {
             all.contains(&("Robot status", "Played")),
             "the option's label"
         );
-        assert!(all.contains(&("Teleop launches made", "9")));
+        assert!(all.contains(&("Teleop launches", "9")));
         assert!(all.contains(&("Parked in auto", "No")));
-        assert!(all.contains(&("Auto launches made", "—")), "left out");
+        assert!(all.contains(&("Auto launches", "—")), "left out");
         assert_eq!(groups.len(), schema.sections.len());
         assert!(groups.iter().flat_map(|g| &g.answers).any(|a| a.is_text));
     }
@@ -288,7 +288,7 @@ mod tests {
             &schema,
             &payload(&[
                 ("robot_status", Value::Text("played".into())),
-                ("launch_made", Value::Count(9)),
+                ("launched", Value::Count(9)),
                 ("notes", Value::Text("their driver panics".into())),
                 // From an older form: text, so it might be prose.
                 ("scout_opinion", Value::Text("do not pick".into())),
@@ -301,7 +301,7 @@ mod tests {
 
         assert_eq!(find("Robot status").value, "Played", "a choice shows");
         assert!(!find("Robot status").hidden);
-        assert_eq!(find("Teleop launches made").value, "9");
+        assert_eq!(find("Teleop launches").value, "9");
         let notes = find("Anything the numbers miss");
         assert!(notes.is_text, "the notes field");
         assert!(notes.hidden && notes.value.is_empty());

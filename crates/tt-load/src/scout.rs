@@ -163,12 +163,7 @@ fn answers() -> String {
     } else {
         ["no_show", "disabled", "tipped_over"][rng.random_range(0..3)]
     };
-    let role = [
-        "none",
-        "attempted",
-        "placed_bottom_nectar",
-        "took_ownership",
-    ][rng.random_range(0..4)];
+    let role = ["none", "attempted", "placed", "placed_bottom_nectar"][rng.random_range(0..4)];
     let tick = |rng: &mut rand::rngs::ThreadRng, name: &str| {
         if rng.random_bool(0.6) {
             format!("&f.{name}=on")
@@ -179,10 +174,10 @@ fn answers() -> String {
     let leave = tick(&mut rng, "auto_leave");
     let park = tick(&mut rng, "teleop_park");
     format!(
-        "f.robot_status={status}&f.auto_launch_made={}&f.launch_made={}\
+        "f.robot_status={status}&f.auto_launched={}&f.launched={}\
          &f.garden_delivered={}&f.flower_role={role}&f.fouls_observed={}\
          &f.notes=load+test{leave}{park}",
-        rng.random_range(0..=15),
+        rng.random_range(0..=20),
         rng.random_range(0..=60),
         rng.random_range(0..=30),
         rng.random_range(0..=3),

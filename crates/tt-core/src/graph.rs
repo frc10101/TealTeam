@@ -259,12 +259,10 @@ mod tests {
             [
                 "points",
                 "f.auto_leave",
-                "f.auto_launch_made",
-                "f.auto_launch_missed",
+                "f.auto_launched",
                 "f.auto_flower_pollen_pickup",
                 "f.auto_park",
-                "f.launch_made",
-                "f.launch_missed",
+                "f.launched",
                 "f.garden_delivered",
                 "f.flower_nectar_placed",
                 "f.flower_pollen_placed",
@@ -314,16 +312,16 @@ mod tests {
     fn a_value_is_a_count_a_flag_or_a_choices_weighted_points() {
         let schema = current_season().unwrap();
         let mut weights = WeightOverrides::new();
-        weights.set("flower_role", "took_ownership", 10);
+        weights.set("flower_role", "placed_bottom_nectar", 10);
         let p = payload(&[
             ("garden_delivered", Value::Count(7)),
             ("teleop_park", Value::Flag(true)),
-            ("flower_role", Value::Text("took_ownership".into())),
+            ("flower_role", Value::Text("placed_bottom_nectar".into())),
         ]);
         let v = |key: &str| value(&schema, &weights, &metric(&schema, key), &p);
         assert_eq!(v("f.garden_delivered"), Some(7.0));
         assert_eq!(v("f.teleop_park"), Some(1.0));
-        assert_eq!(v("f.auto_launch_made"), None, "left out is not zero");
+        assert_eq!(v("f.auto_launched"), None, "left out is not zero");
         assert_eq!(
             v("points"),
             Some((7 + 5 + 10) as f64),
@@ -336,13 +334,13 @@ mod tests {
     fn a_line_is_a_teams_matches_in_order_with_two_scouts_averaged() {
         let schema = current_season().unwrap();
         let none = WeightOverrides::new();
-        let wanted = [metric(&schema, "f.launch_made"), metric(&schema, "opr")];
+        let wanted = [metric(&schema, "f.launched"), metric(&schema, "opr")];
         let (a, b, c, d, old) = (
-            payload(&[("launch_made", Value::Count(4))]),
-            payload(&[("launch_made", Value::Count(6))]),
-            payload(&[("launch_made", Value::Count(9))]),
+            payload(&[("launched", Value::Count(4))]),
+            payload(&[("launched", Value::Count(6))]),
+            payload(&[("launched", Value::Count(9))]),
             payload(&[]),
-            payload(&[("launch_made", Value::Count(60))]),
+            payload(&[("launched", Value::Count(60))]),
         );
         let sample = |match_key, place: (usize, usize), payload, schema_version| Sample {
             team_number: 254,

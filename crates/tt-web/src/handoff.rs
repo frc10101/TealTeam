@@ -324,7 +324,7 @@ mod tests {
             "saved_at": saved_at.timestamp_millis(),
             "answers": {
                 "f.robot_status": "played",
-                "f.launch_made": "9",
+                "f.launched": "9",
                 "f.teleop_park": true,
                 "f.notes": "tippy on the ramp",
             },
@@ -407,7 +407,7 @@ mod tests {
             saved.observed_at.map(|t| t.timestamp_millis()),
             Some(watched.timestamp_millis())
         );
-        assert_eq!(saved.payload["launch_made"], Value::Count(9));
+        assert_eq!(saved.payload["launched"], Value::Count(9));
         assert_eq!(saved.payload["teleop_park"], Value::Flag(true));
         assert_eq!(saved.payload["auto_park"], Value::Flag(false));
         // The refusal waits for a lead, as a push's does (C10).

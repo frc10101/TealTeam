@@ -66,7 +66,7 @@ from one robot are the only ones we can check a scout against:
 | `autoRobot1Leave`, `autoRobot2Leave` | `auto_leave` | exact, per robot |
 | `autoRobot1Park`, `autoRobot2Park` | `auto_park` | exact, per robot |
 | `teleopRobot1Park`, `teleopRobot2Park` | `teleop_park` | exact, per robot |
-| `autoHiveTips`, `teleopHiveTips` | sum of both robots' `auto_launch_made` / `launch_made` | rough: it gives the TIP threshold (plan D5) |
+| `autoHiveTips`, `teleopHiveTips` | sum of both robots' `auto_launched` / `launched`, scaled by `launch_accuracy` | rough: it gives the TIP threshold (plan D5) |
 | `teleopGardenPollenNectar` | sum of `garden_delivered` | lower bound |
 | `minorFouls`, `majorFouls` | `fouls_observed` | the scout sees the opponent's fouls credited the other way |
 | `swarmRP`, `pollinator1RP`, `pollinator2RP` | none | for the pick list's RP picture |

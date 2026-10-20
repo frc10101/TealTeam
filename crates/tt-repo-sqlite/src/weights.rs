@@ -78,8 +78,8 @@ mod tests {
         assert!(repo.weight_overrides().await.unwrap().is_empty());
 
         let mut first = WeightOverrides::new();
-        first.set("launch_made", "__each", 3);
-        first.set("flower_role", "took_ownership", 10);
+        first.set("launched", "__each", 3);
+        first.set("flower_role", "placed_bottom_nectar", 10);
         repo.replace_weight_overrides(&first, Utc::now())
             .await
             .unwrap();
@@ -88,7 +88,7 @@ mod tests {
         // Saving the form again replaces everything: the FLOWER role went back to its
         // default, so it is no longer stored.
         let mut second = WeightOverrides::new();
-        second.set("launch_made", "__each", 5);
+        second.set("launched", "__each", 5);
         repo.replace_weight_overrides(&second, Utc::now())
             .await
             .unwrap();

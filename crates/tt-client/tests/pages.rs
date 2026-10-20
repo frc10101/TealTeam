@@ -124,9 +124,12 @@ fn game(number: i32, red: [i32; ALLIANCE_SIZE], blue: [i32; ALLIANCE_SIZE]) -> M
 
 fn observation(id: &str, number: i32, writer: i32, scouter: i64) -> NewObservation {
     let mut payload = Payload::new();
-    payload.insert("auto_launch_made".into(), Value::Count(3));
-    payload.insert("launch_made".into(), Value::Count(7));
-    payload.insert("flower_role".into(), Value::Text("took_ownership".into()));
+    payload.insert("auto_launched".into(), Value::Count(3));
+    payload.insert("launched".into(), Value::Count(7));
+    payload.insert(
+        "flower_role".into(),
+        Value::Text("placed_bottom_nectar".into()),
+    );
     payload.insert("notes".into(), Value::Text(format!("{writer}'s notes")));
     NewObservation {
         client_record_id: id.into(),

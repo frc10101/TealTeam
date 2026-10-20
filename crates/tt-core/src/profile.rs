@@ -139,17 +139,17 @@ mod tests {
         vec![
             payload(&[
                 ("robot_status", Value::Text("disabled".into())),
-                ("launch_made", Value::Count(4)),
+                ("launched", Value::Count(4)),
                 ("teleop_park", Value::Flag(true)),
             ]),
             payload(&[
                 ("robot_status", Value::Text("played".into())),
-                ("launch_made", Value::Count(9)),
+                ("launched", Value::Count(9)),
                 ("teleop_park", Value::Flag(false)),
             ]),
             payload(&[
                 ("robot_status", Value::Text("played".into())),
-                ("launch_made", Value::Count(5)),
+                ("launched", Value::Count(5)),
             ]),
         ]
     }
@@ -177,7 +177,7 @@ mod tests {
         let summary = summarize(&schema, &refs);
 
         assert_eq!(
-            field(&summary, "Teleop launches made").summary,
+            field(&summary, "Teleop launches").summary,
             Some(Summary::Counter {
                 average: 6.0,
                 best: 9
@@ -192,7 +192,7 @@ mod tests {
     fn nothing_answered_is_none_not_zero_and_notes_are_not_summarised() {
         let schema = current_season().unwrap();
         let summary = summarize(&schema, &[]);
-        let auto = field(&summary, "Auto launches made");
+        let auto = field(&summary, "Auto launches");
         assert_eq!((auto.answered, &auto.summary), (0, &None));
         assert!(
             !summary
@@ -228,13 +228,13 @@ mod tests {
     #[test]
     fn a_counter_average_keeps_its_fraction() {
         let observations = [
-            payload(&[("launch_made", Value::Count(4))]),
-            payload(&[("launch_made", Value::Count(5))]),
+            payload(&[("launched", Value::Count(4))]),
+            payload(&[("launched", Value::Count(5))]),
         ];
         let refs: Vec<&Payload> = observations.iter().collect();
         let summary = summarize(&current_season().unwrap(), &refs);
         assert_eq!(
-            field(&summary, "Teleop launches made").summary,
+            field(&summary, "Teleop launches").summary,
             Some(Summary::Counter {
                 average: 4.5,
                 best: 5

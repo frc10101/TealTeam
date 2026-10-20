@@ -409,7 +409,7 @@ mod tests {
         assert!(
             slots
                 .iter()
-                .any(|s| s.field_key == "launch_made" && s.default == 0),
+                .any(|s| s.field_key == "launched" && s.default == 0),
             "an unweighted counter can still be tuned on the day (D5)"
         );
         assert!(slots.iter().any(|s| s.option_key == TOGGLE_ON));
@@ -430,7 +430,7 @@ mod tests {
             &schema,
             &form(&[
                 ("weight_garden_delivered____each", " 3 "),
-                ("weight_launch_made____each", "0"),
+                ("weight_launched____each", "0"),
                 ("weight_nonsense__x", "99"),
             ]),
         )
@@ -451,13 +451,13 @@ mod tests {
                 &schema,
                 &form(&[
                     ("weight_garden_delivered____each", "3"),
-                    ("weight_launch_made____each", bad),
+                    ("weight_launched____each", bad),
                 ]),
             )
             .unwrap_err();
             assert_eq!(errors.len(), 1, "{bad:?}");
-            assert!(errors.contains_key("weight_launch_made____each"));
+            assert!(errors.contains_key("weight_launched____each"));
         }
-        assert!(read_weights(&schema, &form(&[("weight_launch_made____each", "-100")])).is_ok());
+        assert!(read_weights(&schema, &form(&[("weight_launched____each", "-100")])).is_ok());
     }
 }

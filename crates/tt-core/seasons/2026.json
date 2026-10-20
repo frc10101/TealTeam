@@ -12,8 +12,16 @@
     "Point values are given only where one robot directly earns them under",
     "Table 10-2 (LEAVE 3, PARK 5, GARDEN 1 each). Everything else starts at 0;",
     "launch weights stay 0 until the HIVE TIP threshold is measured, and a lead",
-    "scout tunes them on the day through the runtime overrides (L12). Counter",
-    "caps are first guesses, to be checked against match video.",
+    "scout tunes them on the day through the runtime overrides (L12).",
+    "",
+    "Every field is something one scout can see one robot do and finish within",
+    "the field reset (F8). Launches are counted as they leave the robot, not",
+    "where they land: a spilling HIVE shared by two robots cannot be judged per",
+    "element, so landing is one accuracy choice after the match. FLOWER",
+    "ownership (whose NECTAR is on top at the buzzer) is an alliance result read",
+    "off the score sheet, so it is not asked. Counter caps are ceilings no robot",
+    "should reach, not expected values. Rationale per field:",
+    "docs/FTC_BETA_SCHEMA_REVIEW.md.",
     "",
     "This file is the single source of truth for three things at once: the",
     "scouting form's fields, the validation applied to submitted payloads, and",
@@ -59,20 +67,12 @@
           "points": 3
         },
         {
-          "key": "auto_launch_made",
-          "label": "Auto launches made",
-          "help": "Landed in the upward CELL.",
+          "key": "auto_launched",
+          "label": "Auto launches",
+          "help": "Every element it launched at the HIVE, in or not. Tap as each one leaves the robot.",
           "type": "counter",
           "min": 0,
-          "max": 15,
-          "points_each": 0
-        },
-        {
-          "key": "auto_launch_missed",
-          "label": "Auto launches missed",
-          "type": "counter",
-          "min": 0,
-          "max": 15,
+          "max": 20,
           "points_each": 0
         },
         {
@@ -94,29 +94,32 @@
 
     {
       "key": "teleop",
-      "label": "Teleop",
+      "label": "Teleop (all 2:00)",
       "fields": [
         {
-          "key": "launch_made",
-          "label": "Teleop launches made",
-          "help": "Landed in the upward CELL.",
+          "key": "launched",
+          "label": "Teleop launches",
+          "help": "Every element it launched at the HIVE, in or not, endgame included.",
           "type": "counter",
           "min": 0,
           "max": 60,
           "points_each": 0
         },
         {
-          "key": "launch_missed",
-          "label": "Teleop launches missed",
-          "type": "counter",
-          "min": 0,
-          "max": 60,
-          "points_each": 0
+          "key": "launch_accuracy",
+          "label": "Launch accuracy",
+          "help": "After the match, auto and teleop together. Leave it blank if it never launched.",
+          "type": "select",
+          "options": [
+            { "key": "most",       "label": "Most went in", "points": 0 },
+            { "key": "about_half", "label": "About half",   "points": 0 },
+            { "key": "few",        "label": "Few went in",  "points": 0 }
+          ]
         },
         {
           "key": "garden_delivered",
           "label": "Elements into own GARDEN",
-          "help": "Pushed or placed. A lower bound: opponents can remove them.",
+          "help": "Pushed or placed, endgame included. A lower bound: opponents can remove them.",
           "type": "counter",
           "min": 0,
           "max": 30,
@@ -132,7 +135,7 @@
         {
           "key": "flower_nectar_placed",
           "label": "NECTAR placed in FLOWERS",
-          "help": "The alliance has 8 NECTAR.",
+          "help": "FLOWERS open at 1:00 left. The alliance has 8 NECTAR.",
           "type": "counter",
           "min": 0,
           "max": 8,
@@ -149,12 +152,13 @@
         {
           "key": "flower_role",
           "label": "FLOWER role",
+          "help": "The most it did. Bottom NECTAR: its NECTAR went into an empty FLOWER. Who owns the top comes from the score sheet.",
           "type": "select",
           "options": [
             { "key": "none",                 "label": "None",                 "points": 0 },
-            { "key": "attempted",            "label": "Attempted",            "points": 0 },
-            { "key": "placed_bottom_nectar", "label": "Placed bottom NECTAR", "points": 0 },
-            { "key": "took_ownership",       "label": "Took ownership (top)", "points": 0 }
+            { "key": "attempted",            "label": "Tried, none stayed",   "points": 0 },
+            { "key": "placed",               "label": "Placed elements",      "points": 0 },
+            { "key": "placed_bottom_nectar", "label": "Placed bottom NECTAR", "points": 0 }
           ]
         },
         {
@@ -189,6 +193,18 @@
             { "key": "not_defended", "label": "Not defended", "points": 0 },
             { "key": "slowed",       "label": "Slowed",       "points": 0 },
             { "key": "shut_down",    "label": "Shut down",    "points": 0 }
+          ]
+        },
+        {
+          "key": "driver_skill",
+          "label": "Driver skill",
+          "help": "Against the other three robots in this match.",
+          "type": "select",
+          "options": [
+            { "key": "struggling", "label": "Struggling", "points": 0 },
+            { "key": "average",    "label": "Average",    "points": 0 },
+            { "key": "strong",     "label": "Strong",     "points": 0 },
+            { "key": "excellent",  "label": "Excellent",  "points": 0 }
           ]
         },
         {

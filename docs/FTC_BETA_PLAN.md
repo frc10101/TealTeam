@@ -53,7 +53,7 @@ Fouls: MINOR = +5 and MAJOR = +20 **credited to the opponent**. Cards follow
 1. **Robot-level points are small and certain; alliance-level points are large
    and shared.** LEAVE and PARK (max 13 per robot) can be counted directly. The
    points that decide matches (TIPS at 20 each, FLOWER ownership) come from both
-   robots. So scouts should record each robot's *contribution* (launches into the
+   robots. So scouts should record each robot's *contribution* (launches at the
    CELL, FLOWER placements), and the app should treat derived points as
    estimates.
 2. **The RP picture favors pick-list fields over raw score.** A partner who
@@ -95,8 +95,15 @@ Fouls: MINOR = +5 and MAJOR = +20 **credited to the opponent**. Cards follow
 On the branch, the FRC `2026.json` is simply replaced. Set `"name": "BIOBUZZ"`,
 keep `version: 1`, and record `TU05` in `_comment`. All fields use the existing types (`select`, `counter`, `toggle`, `text`). Point
 values are given only where a robot directly earns them under Table 10-2. Every
-other field starts at 0, as the migration doc requires. Counter caps are first
-guesses and must be checked against match video (§5, B0).
+other field starts at 0, as the migration doc requires.
+
+F8 (accuracy pass, made without the B0 video test) holds every field to one
+rule: one scout, watching one robot, can see it and finish within the ~60 s
+field reset. So launches are counted as they leave the robot, and landing is a
+single accuracy choice after the match; nothing asks the scout to time the
+1:00 mark, because FLOWERS only score after it anyway; and FLOWER ownership is
+left to the score sheet. Counter caps are ceilings no robot should reach, not
+expected values. The per-field rationale is in `docs/FTC_BETA_SCHEMA_REVIEW.md`.
 
 **match**
 - `robot_status`: select, `played` / `no_show` / `no_movement` /
@@ -105,25 +112,25 @@ guesses and must be checked against match video (§5, B0).
 
 **auto** (first 30 s)
 - `auto_leave`: toggle, **3**.
-- `auto_launch_made`: counter 0–15. Launches that land in the upward CELL. 0 pts (D5).
-- `auto_launch_missed`: counter 0–15, 0 pts.
+- `auto_launched`: counter 0–20. Every element launched at the HIVE, in or not, tapped as it leaves the robot. 0 pts (D5).
 - `auto_flower_pollen_pickup`: toggle. Did the robot take POLLEN from a FLOWER's bottom opening? 0 pts.
 - `auto_park`: toggle, **5**.
 
-**teleop**
-- `launch_made`: counter 0–60, 0 pts (D5).
-- `launch_missed`: counter 0–60, 0 pts.
+**teleop** (all 2:00, endgame included)
+- `launched`: counter 0–60, as in auto. 0 pts (D5).
+- `launch_accuracy`: select, `most` / `about_half` / `few`, 0 pts. One judgement after the match for auto and teleop together; blank if the robot never launched.
 - `garden_delivered`: counter 0–30. Elements pushed or placed into the robot's own GARDEN. **1 each** (only a lower bound, because the opponent can remove them).
 
 **endgame** (last 60 s)
 - `flower_nectar_placed`: counter 0–8. The alliance has 8 NECTAR. 0 pts, because ownership decides the value.
 - `flower_pollen_placed`: counter 0–20, 0 pts.
-- `flower_role`: select, `none` / `attempted` / `placed_bottom_nectar` / `took_ownership`, 0 pts. Scouts may struggle to judge "top-most" from the stands, so B0 checks it.
+- `flower_role`: select, `none` / `attempted` / `placed` / `placed_bottom_nectar`, 0 pts. The most the robot did. "Took ownership" is gone: whose NECTAR is top-most at the buzzer is an alliance result the score sheet's FLOWER arrays record exactly, and the scout is watching the PARK then.
 - `teleop_park`: toggle, **5**.
 
 **play style**
 - `defense_played`: select, `none` / `some` / `primary_role`.
 - `defended_against`: select, `not_defended` / `slowed` / `shut_down`.
+- `driver_skill`: select, `struggling` / `average` / `strong` / `excellent`, 0 pts, against the other three robots in the match. The same choice the FRC form had.
 - `fouls_observed`: counter 0–10, **0 pts**. The scout counts what they saw; official fouls come from the score sheet.
 - `rule_incidents`: text, optional. For example "held 5+ elements" (G407), "touched opponent NECTAR" (G408), "NECTAR in flower early" (G410), "hit the HIVE" (G417), "pin" (G421).
 
@@ -147,6 +154,7 @@ table. That table goes in the PR description.
 | F4 | **Turn off what is FRC-only.** Disable TBA/FIRST sync and its triggers: the boot fetch, the S6 phone-tether watcher and the S7 lobby fetch. Remove OPR/DPR/CCWM, predictions and TBA rankings from navigation; their routes return "not available on this build" | No upstream request is made during a full rehearsal; no FRC statistic is visible |
 | F5 | **Pick list, minimal.** Reuse the existing pick list and team pages. The only new work is labeling the schema score "scout estimate" and making sure the team page shows the BIOBUZZ fields. No new analytics before the event | The lead scout can rank the event's teams from the existing views |
 | F7 | **Optional FTC Events pull** (approved after F4; `docs/FTC_BETA_API.md`). With `FTC_API_USERNAME` and `FTC_API_KEY` set, the lead scout's schedule page gets a "Pull from FTC Events" button: event, teams, qual hybrid schedule and rankings for USALATQ, stored as the F3 import stores them, plus the qual score sheets in the log (`api = 'ftc'`, migration 0011). Sends `If-Modified-Since`, waits out a short 503 `Retry-After`, and has no background poll. The CSV paste stays primary | Without a key there is no button and no request; against recorded fixtures a pull stores 11 teams and 6 matches, a re-pull is all 304s, and a re-pull that drops a watched match keeps it |
+| F8 | **Accuracy pass.** Hold every field to what one scout sees of one robot within the field reset: count launches as they leave the robot and judge landing once (`launch_accuracy`), drop FLOWER ownership, add `driver_skill`, set caps as ceilings | Schema tests and `./check.sh` pass; the 18-field form saves at 360 px with no sideways scroll |
 | F6 | Pin the commit, tag it `ftc-biobuzz-beta-1`, and build and install it on the Pi | The tag exists; the Pi reports that commit |
 | F9 | **Team coverage.** On the assignment page, beside each scout's tally, a Teams table: per team, observations approved, observations waiting for review (declined ones count nowhere), robots assigned but not yet scouted, and qualification matches left. Each team is Covered (2 observed), On track (enough assigned), *Assign N more* with a link to its next open match's editor, or *Can't reach 2*; teams to assign come first. It refreshes with the coverage region, and needs no new assignment logic | Tests count an approved, a waiting and a declined observation; the lead scout can see before alliance selection which teams are below 2 |
 
@@ -179,10 +187,10 @@ If F1 is not green by **Saturday night (10-17)**, stop and fall back to paper fo
 - Use early-season BIOBUZZ match video. If too little exists, score robot practice on our own field instead.
 - Measure:
   - completion time after the match ends: the target is under 60 s;
-  - agreement between the two scouts: ±2 on launches, exact on toggles;
-  - fields left blank or guessed (watch `flower_role`).
+  - agreement between the two scouts: ±2 on launches, one step on `launch_accuracy`, exact on toggles;
+  - fields left blank or guessed (watch `flower_role` and `launch_accuracy`).
 - Where official score breakdowns exist, compare each alliance's scouted LEAVE and PARK points with the official numbers.
-- If launch agreement is poor, swap in a `launch_volume` select (none/few/many) **before** the freeze.
+- If launch agreement is still poor after F8's switch to counting at the robot, swap in a `launch_volume` select (none/few/many) **before** the freeze.
 
 ### B1 — dress rehearsal (Wed 10-21)
 - Use the real Pi and wired setup (`docs/EVENT_DAY_RUNBOOK.md`), real phones, and the scouts who will actually go.
@@ -223,7 +231,7 @@ If F1 is not green by **Saturday night (10-17)**, stop and fall back to paper fo
 | F1 misses a 3-slot assumption, and a page shows a ghost third robot or skips coverage | Grep gate in F1, 4-robot fixtures, and a manual click-through of every page in B1 |
 | A tablet still holds FRC drafts or snapshots | Wipe all devices before B1. The format-version bump in F1 makes stale data fail loudly |
 | Something still reaches TBA/FIRST, for example the S6 tether trigger | F4 gate: rehearse with traffic logging on and confirm zero upstream calls |
-| Launch counts are unreliable when the HIVE spills | B0 agreement data; fall back to `launch_volume` |
+| Launch counts are unreliable when the HIVE spills | F8 counts launches at the robot and judges landing once; B0 agreement data; fall back to `launch_volume` |
 | The schedule is posted late or changes | F3 import is fast and re-runnable; keep the paper kit |
 | Nine days is tight; F1 runs long | Hard stop Saturday 10-17 (§5). F5 is already cut back to reuse |
 | With 2 scouts, some teams barely get seen | F1b team-coverage ordering; the lead scout checks per-team counts before alliance selection |

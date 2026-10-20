@@ -501,7 +501,7 @@ mod tests {
             [
                 ("robot_status", Value::Text(status.into())),
                 ("flower_role", Value::Text(role.into())),
-                ("launch_made", Value::Count(made)),
+                ("launched", Value::Count(made)),
                 ("auto_leave", Value::Flag(leave)),
                 ("rule_incidents", Value::Text("hit the HIVE".into())),
             ]
@@ -510,7 +510,7 @@ mod tests {
             .collect()
         };
         let payloads = [
-            payload("played", "took_ownership", 12, true),
+            payload("played", "placed_bottom_nectar", 12, true),
             payload("played", "attempted", 6, true),
             payload("disabled", "none", 0, false),
         ];
@@ -528,9 +528,9 @@ mod tests {
         // A tie keeps the form's order.
         assert_eq!(
             line("FLOWER role"),
-            "None 1 · Attempted 1 · Took ownership (top) 1"
+            "None 1 · Tried, none stayed 1 · Placed bottom NECTAR 1"
         );
-        assert_eq!(line("Teleop launches made"), "avg 6.0 · best 12");
+        assert_eq!(line("Teleop launches"), "avg 6.0 · best 12");
         assert_eq!(line("Left the perimeter wall"), "2 of 3");
         assert!(
             !sections

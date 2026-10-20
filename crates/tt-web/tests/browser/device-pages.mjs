@@ -41,7 +41,7 @@ for (const [t, name] of [[254, "Poofs"], [1678, "Citrus"], [10101, "Teal"]]) {
 }
 sql += `INSERT INTO team_event_stats (team_number, event_key, opr, synced_at) VALUES (254, '2026demo', 61.25, '${new Date().toISOString()}');\n`;
 sql += `INSERT INTO matches (tba_key, event_key, comp_level, match_number, red1, red2, blue1, blue2, played, created_at, updated_at) VALUES ('2026demo_qm1', '2026demo', 'qm', 1, 254, 1678, 971, 10101, 1, 'x', 'x');\n`;
-const payload = JSON.stringify({ robot_status: "played", auto_launch_made: 4, launch_made: 9, flower_role: "took_ownership", notes: "Fast intake, slow climb" });
+const payload = JSON.stringify({ robot_status: "played", auto_launched: 4, launched: 9, flower_role: "placed_bottom_nectar", notes: "Fast intake, slow climb" });
 const seen = new Date().toISOString();
 sql += `INSERT INTO observations (client_record_id, match_key, team_number, event_key, alliance, payload, schema_version, review_state, scouter_id, submitting_team, observed_at, created_at, updated_at) VALUES ('r1', '2026demo_qm1', 254, '2026demo', 'red', '${payload}', 1, 'approved', 1, 10101, '${seen}', '${seen}', '${seen}');\n`;
 writeFileSync(`${D}/seed.sql`, sql);
