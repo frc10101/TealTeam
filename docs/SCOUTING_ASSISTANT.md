@@ -1,8 +1,11 @@
 # Scouting assistant: ask a question, answered from our data
 
-*Feasibility and design, 2026-10-20. Item **AI1** in `ACTION_ITEMS.md`. Built
-first on the FTC beta branch (`ftc-biobuzz`) for the Athens Qualifier
-(Sat 2026-10-24), behind a setting that is off unless configured.*
+*Feasibility and design, 2026-10-20; revised 2026-10-21 (the laptops are
+Chromebooks, so only the Pi can run a model at the venue). Item **AI1** in
+`ACTION_ITEMS.md`. Built first on the FTC beta branch (`ftc-biobuzz`) for the
+Athens Qualifier (Sat 2026-10-24), behind a setting that is off unless
+configured. **Low priority:** it will not be tested at Athens, where the aim
+is to shake out the core app and its UX.*
 
 A lead scout or drive coach types a question such as *"Which teams park
 reliably in auto?"* or *"Compare 12345 and 23456 for a second pick"*. The
@@ -36,10 +39,17 @@ So **at the venue the model must run on hardware we bring, wired to the
 LAN**, and **a hosted model is for use away from the venue**: the night
 before, between event days, or after the event for the debrief and findings.
 
+The team's laptops are Lenovo Chromebooks only. They cannot host a model:
+ChromeOS needs Linux or developer mode to run `llama-server`, which managed
+Chromebooks lock, their CPUs and 4 GB or so of memory are weaker than the
+Pi 5, and a model in the browser needs WebGPU, which Chrome allows only on
+HTTPS or localhost, and the event LAN is plain HTTP. **That leaves the Pi as
+the only place a model can run at the venue.**
+
 | Where the model runs | At the venue | Answer time (estimate) | Cost | Verdict |
 | --- | --- | --- | --- | --- |
-| **A team laptop on the wired LAN**, running `llama-server` (llama.cpp) with a 3B–8B model | Yes | A few seconds on a recent laptop, longer on a weak one | Free | **Best option at the venue**, if someone brings a laptop with a decent CPU, or better, a GPU or Apple silicon. Chromebooks cannot do this |
-| **The Pi itself**, `llama-server` with a 1.5B model, held to 2 of the Pi's 4 cores | Yes | 10–15 tokens/s generation[^speed]; reading the data before answering is the slow part and is unmeasured, so probably 30 s to over a minute | Free | **Fallback.** It works, but it is slow, it competes with the server for CPU and memory, and a 1.5B model makes more mistakes |
+| **The Pi itself**, `llama-server` with a 3B model (1.5B if 3B is too slow), held to 2 of the Pi's 4 cores | Yes | 4–6 tokens/s generation for 3B, 10–15 for 1.5B[^speed]; reading the sheet first is the slow part and is unmeasured, which the trimmed sheet (§2) keeps to a few hundred tokens for a question that names teams | Free | **The only option at the venue.** Slow, competes with the server for CPU, and a small model makes more mistakes |
+| **A laptop with a decent CPU, a GPU or Apple silicon**, running `llama-server` with a 7B–8B model | Yes, if one came | A few seconds | Free | Best local answers, but the team's laptops are Chromebooks, which cannot do this |
 | **Claude (Anthropic API)**, from the Pi or a laptop with internet | **No** (no uplink; no radio for event data) | Seconds | Cents per question[^cost] | **Best answers, off-site only**: event preparation, the debrief, `FTC_BETA_FINDINGS.md` |
 
 [^speed]: Third-party Pi 5 measurements: about 10–14 tokens/s generation for
@@ -50,9 +60,10 @@ before, between event days, or after the event for the debrief and findings.
     $4/$20 per million input/output tokens, one question costs about
     $0.01–$0.03. Sonnet 5.5 or Haiku 5.5 cost less, if the team chooses one.
 
-**Recommendation for Athens.** Build it with both backends, off by default.
-At the venue, point it at a team laptop running `llama-server` if one is
-available, or at the Pi as a fallback. Use Claude only off-site. Treat its
+**Recommendation for Athens.** Leave it off. It is built with both backends,
+off by default, and is not part of what Athens tests. After Athens, try a 3B
+model on the Pi with `llama-bench` and a rehearsal event before relying on it
+at a later event. Use Claude only off-site. Treat its
 answers as a fast way to look things up, never as the pick list: the pick
 list and the team pages stay the source of record.
 
@@ -92,6 +103,15 @@ The sheet is sized for a small model. A 30-team event comes to about 4,000
 tokens without notes. Notes are capped so the whole sheet stays under a fixed
 budget, and the page says when notes were cut.
 
+**A question that names teams gets a trimmed sheet.** Every number in the
+question that is a team at the event is given in full, with its notes; every
+other team gets one line (official rank, times scouted, scout estimate and
+its rank), so "compare 12345 and 23456" or "is 12345 a good second pick"
+still knows where the rest stand. That is a few hundred tokens rather than a
+few thousand, which matters on the Pi, where reading the sheet is most of the
+wait. A question that names no team, such as "who parks in auto?", gets the
+whole sheet. The page says which teams were given in full.
+
 ---
 
 ## 3. What is in the build
@@ -115,6 +135,7 @@ budget, and the page says when notes were cut.
   wait on it.
 - **One question at a time.** A second question while one is running is
   told to wait, so a queue of questions cannot pin the Pi's CPU.
+- **The trimmed sheet** for a question that names teams (§2).
 
 Not built: conversation memory (each question stands alone), streaming the
 answer word by word, and asking from a phone with no connection to the Pi.
@@ -122,7 +143,8 @@ answer word by word, and asking from a phone with no connection to the Pi.
 **Checked:** core tests for the sheet (official and scouted numbers, the
 notes rule, the budget counting notes it leaves out rather than cutting one
 in half, a note that cannot break out of its line, another form version not
-counting, scout-estimate order, and equal scores sharing a rank). Web tests
+counting, scout-estimate order, equal scores sharing a rank, and a question
+naming teams giving those in full and the rest in one line each). Web tests
 for the settings, a local model answering, a slow one timing out while a
 second question is told to wait, nothing listening, Claude's refusal and its
 text blocks, and the role guards. A run of the real binary against a
@@ -133,33 +155,35 @@ pages link to it.
 
 **Not checked:** a real model, local or Claude. How good the answers are,
 and how long the Pi takes, are both unknown until someone runs `llama-server`
-with a real model against a rehearsal event (B1).
+with a real model against a rehearsal event. That is after Athens.
 
 ---
 
 ## 4. Turning it on
 
-**A team laptop on the LAN (the venue).** On the laptop, wired to the
-switch:
+**The Pi (the venue).** Install llama.cpp and download the model at home;
+there is no internet at the venue. Run it on the Pi's loopback only, on 2
+cores and below the server's priority:
 
 ```
-llama-server -m qwen2.5-7b-instruct-q4_k_m.gguf --host 0.0.0.0 --port 8080 -c 8192
+nice -n 10 llama-server -m qwen2.5-3b-instruct-q4_k_m.gguf \
+  --host 127.0.0.1 --port 8080 --threads 2 -c 8192
 ```
 
-Then, in the Pi's `/opt/tealteam/.env`:
+Then, in `/opt/tealteam/.env`:
 
 ```
 ASK_BACKEND=local
-ASK_URL=http://<laptop's 10.101.0.x address>:8080
+ASK_URL=http://127.0.0.1:8080
 ```
 
-and `sudo systemctl restart tealteam`. The laptop needs a fixed lease, or its
-address checked after it plugs in. Download the model file at home; there is
-no internet at the venue.
+and `sudo systemctl restart tealteam`. If 3B answers too slowly, use
+`qwen2.5-1.5b-instruct-q4_k_m.gguf`. A model under 1.5B is not worth turning
+on: it loses track of the sheet and invents team numbers.
 
-**The Pi as fallback.** Install llama.cpp and a 1.5B model on the Pi
-beforehand, run `llama-server` with `--threads 2` under `nice -n 10` on
-`127.0.0.1:8080`, and set `ASK_URL=http://127.0.0.1:8080`.
+**A capable laptop, if one ever comes.** The same `llama-server` with a 7B
+model and `--host 0.0.0.0`, wired to the switch, and
+`ASK_URL=http://<its 10.101.0.x address>:8080`.
 
 **Claude, off-site.** `ASK_BACKEND=anthropic` and `ANTHROPIC_API_KEY=…` in
 `.env`. Take the key out of `.env` before the event, so the Pi carries no
@@ -172,16 +196,17 @@ credential it should not use there.
 | Risk | Mitigation |
 | --- | --- |
 | A wrong answer gets into a pick decision | The sheet is shown under every answer; the team pages and pick list stay the record; the B1 rehearsal checks answers against the pages |
-| The model slows the server on the Pi | Prefer a laptop; on the Pi, 2 threads and `nice`; one question at a time; a timeout |
+| The model slows the server on the Pi | 2 threads and `nice`; one question at a time; a timeout; the trimmed sheet for questions that name teams |
 | Too few observations make a confident-sounding answer | Every team line carries its observation count, and the prompt makes the model say it |
 | Notes reach someone who should not read them | The sheet uses the same `Notes::for_viewer` rule as every other page |
 | Data leaves the LAN by radio | The `anthropic` backend is for off-site use only; the runbook says to take the key out before the event |
-| A small model ignores the instructions | A 7B model on a laptop is markedly better than 1.5B on the Pi; the sheet underneath lets a person check |
+| A small model ignores the instructions | 3B rather than 1.5B on the Pi; the server does the arithmetic; the sheet underneath lets a person check |
 
 ## 6. Decisions for the team
 
-1. **Is a laptop that can run a 7B model coming to Athens?** If none is, the
-   assistant runs on the Pi, slowly, or not at all.
+1. **Is a laptop that can run a 7B model coming to Athens?** Answered
+   2026-10-21: no, the laptops are Chromebooks. At the venue the assistant
+   runs on the Pi or not at all, and at Athens it stays off.
 2. **Which roles may ask?** The build allows leads, coaches and admins.
 3. **Claude at all?** The `anthropic` backend costs cents per question and
    needs a key that the team owns.
