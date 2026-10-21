@@ -27,7 +27,7 @@
 // scout's entries as another's. The value is an exported outbox, the shape
 // tt_client::outbox's export_outbox writes, which the push takes as it is:
 //
-//   { "format": "tealteam-outbox", "version": 1, "observations": [{
+//   { "format": "tealteam-outbox", "version": 2, "observations": [{
 //       "client_record_id", "match_key", "team_number", "payload",
 //       "schema_version", "observed_at",       <- tt_core::outbox::QueuedObservation
 //       "queued_at", "attempts", "tried_at",
@@ -71,7 +71,7 @@
   function store(list) {
     try {
       if (list.length) {
-        window.localStorage.setItem(KEY, JSON.stringify({ format: FORMAT, version: 1, observations: list }));
+        window.localStorage.setItem(KEY, JSON.stringify({ format: FORMAT, version: 2, observations: list }));
       } else {
         window.localStorage.removeItem(KEY);
       }
@@ -244,7 +244,7 @@
     flushing = fetch("/api/sync/push?schema=" + encodeURIComponent(meta("tt-schema")), {
       method: "POST",
       headers: headers,
-      body: JSON.stringify({ observations: batch.map(wire) }),
+      body: JSON.stringify({ version: 2, observations: batch.map(wire) }),
       credentials: "same-origin",
       redirect: "manual",
       cache: "no-store",
@@ -387,7 +387,7 @@
       if (!list.length) return null;
       return JSON.stringify({
         format: FORMAT,
-        version: 1,
+        version: 2,
         exported_at: new Date().toISOString(),
         schema: Number(meta("tt-schema")) || null,
         observations: list,

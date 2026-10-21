@@ -305,7 +305,7 @@
       remove(OUTBOX);
       return true;
     }
-    return write(OUTBOX, { format: FORMAT, version: 1, observations: list });
+    return write(OUTBOX, { format: FORMAT, version: 2, observations: list });
   }
   function waiting(list) {
     return list.filter(function (entry) {
@@ -449,7 +449,7 @@
       credentials: "omit",
       cache: "no-store",
       headers: { "content-type": "application/json", authorization: "Bearer " + credential },
-      body: JSON.stringify({ observations: batch.map(wire) }),
+      body: JSON.stringify({ version: 2, observations: batch.map(wire) }),
       signal: abort && abort.signal,
     })
       .then(

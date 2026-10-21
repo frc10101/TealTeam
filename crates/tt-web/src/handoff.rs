@@ -882,7 +882,7 @@ mod tests {
         assert!(page.contains(".scout-form"), "the stylesheet");
         assert!(page.contains("window.ttToken = {"), "scout-file.js");
         assert!(page.contains("window.ttHmac"), "hmac.js");
-        assert!(page.contains(r#"name="f.teleop_scored""#), "the form");
+        assert!(page.contains(r#"name="f.launched""#), "the form");
         assert!(page.contains("data-handoff"), "the QR handoff");
         // Plain http, as at an event: nothing that needs a secure context.
         assert!(!page.contains("serviceWorker.register"));
@@ -934,12 +934,12 @@ mod tests {
                 "client_record_id": id,
                 "match_key": "2026now_qm2",
                 "team_number": team,
-                "payload": {"starting_position": "center", "teleop_scored": 9, "broke_down": true},
+                "payload": {"robot_status": "played", "launched": 9},
                 "schema_version": state.season.version,
                 "observed_at": Utc::now() - TimeDelta::minutes(30),
             })
         };
-        let push = serde_json::json!({ "observations": [entry(GOOD, 254), entry(WRONG, 9999)] });
+        let push = serde_json::json!({ "version": 2, "observations": [entry(GOOD, 254), entry(WRONG, 9999)] });
         let request = Request::post("/api/sync/push")
             .header(header::ORIGIN, "null")
             .header(header::AUTHORIZATION, &credential)
@@ -947,7 +947,7 @@ mod tests {
             .body(Body::from(push.to_string()))
             .unwrap();
         let response = router(state.clone()).oneshot(request).await.unwrap();
-        assert_eq!(response.status(), 200);
+        assert_eq!(response.status(), 200, "{push}");
         assert_eq!(response.headers()["access-control-allow-origin"], "*");
         let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await

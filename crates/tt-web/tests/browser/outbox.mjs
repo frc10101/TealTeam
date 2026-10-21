@@ -94,7 +94,7 @@ const fill = (notes) => evaluate(`(() => {
     else if (el.type === 'number' && el.value === '') el.value = el.min || '0';
     else if (el.tagName === 'TEXTAREA' && !el.value) el.value = 'x';
   }
-  const box = form.querySelector('textarea'); box.value = ${JSON.stringify(notes)};
+  const box = form.querySelector('textarea[name="f.notes"]'); box.value = ${JSON.stringify(notes)};
   box.dispatchEvent(new Event('input', { bubbles: true }));
   return true; })()`);
 const chip = () => evaluate(`(() => { const s = [...document.querySelectorAll('#link-chip [data-link]')].find(e => !e.hidden);

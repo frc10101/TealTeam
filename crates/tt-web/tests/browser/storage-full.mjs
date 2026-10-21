@@ -139,7 +139,11 @@ await evaluate(`(async () => { for (const k of Object.keys(localStorage)) if (k.
   for await (const name of d.keys()) if (name.startsWith("filler")) await d.removeEntry(name);
   return true; })()`);
 const retry = await evaluate(reason(`ttSnapshot.bootstrap({ events: ["2026load"] })`));
-check("with room again, the snapshot downloads", retry === "resolved", retry);
+// The device's sync loop (C12) tries the snapshot itself on each page load; a
+// two-robot (FTC) snapshot is small enough to fit in the little room above, so
+// the copy may already be there ("exists"), which is the same as downloading.
+const haveCopy = retry === "exists" && (await evaluate(`ttSnapshot.local()`)) !== null;
+check("with room again, the snapshot downloads", retry === "resolved" || haveCopy, retry);
 await go(`${local}/teams`);
 await sleep(1500);
 const shellBack = await evaluate(`navigator.serviceWorker.ready.then(() => caches.keys()).then(ks => ks.length)`);

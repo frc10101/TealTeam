@@ -965,7 +965,7 @@ mod tests {
         // would go nowhere, so the lead is told and it still waits.
         let late = QueuedObservation {
             client_record_id: "0191f7ac-1234-7000-8000-000000000004".into(),
-            team_number: 10101,
+            team_number: 2,
             ..refusal.entry.clone()
         };
         let refusal = NewRefusal {
@@ -989,8 +989,8 @@ mod tests {
             )
         };
         let told = post(
-            "match=2026now_qm2&team=10101&answers=1&f.starting_position=center&f.teleop_scored=7\
-             &f.auto_scored=&f.penalties=&f.notes=",
+            "match=2026now_qm2&team=2&answers=1&f.robot_status=played&f.launched=7\
+             &f.auto_launched=&f.fouls_observed=&f.notes=",
         )
         .await;
         assert_eq!(told.status, 200, "{}", told.body);
@@ -998,8 +998,8 @@ mod tests {
         assert_eq!(state.repo.open_refusal_count(None).await.unwrap(), 1);
         // Posted as it was saved, it is that observation, and is marked so.
         let marked = post(
-            "match=2026now_qm2&team=10101&answers=1&f.teleop_scored=5\
-             &f.auto_scored=&f.penalties=&f.notes=",
+            "match=2026now_qm2&team=2&answers=1&f.launched=5\
+             &f.auto_launched=&f.fouls_observed=&f.notes=",
         )
         .await;
         assert_eq!(marked.status, 303, "{}", marked.body);
