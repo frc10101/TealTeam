@@ -3,11 +3,13 @@
 # the Pi. The lead scout works on this laptop at http://localhost:PORT/; the
 # Chromebooks use its address on the same network.
 #
-#   deploy/laptop/omenMaxwell-setup.sh [start] [--dir DIR] [--port PORT] [--build]
+#   deploy/laptop/omenMaxwell-setup.sh [start] [--dir DIR] [--port PORT] [--build | --binary FILE]
 #   deploy/laptop/omenMaxwell-setup.sh stop [--close-firewall]
 #   deploy/laptop/omenMaxwell-setup.sh status
 #
-# start: builds the release binary if there is none (or with --build), copies
+# start: builds the release binary if there is none (or with --build), or
+# takes one built elsewhere with --binary (any x86_64 Linux build runs here:
+# it needs glibc 2.34, and the Omen needs no Rust toolchain), copies
 # it into DIR (default ~/tealteam-demo) with a prod .env, opens PORT in ufw
 # (asks for sudo), and starts it in the background under systemd-inhibit, so
 # closing the lid or idling does not suspend the laptop while it serves. An
@@ -26,15 +28,16 @@ ROOT="$(cd "$HERE/../.." && pwd)"
 say() { printf '==> %s\n' "$*"; }
 note() { printf '    %s\n' "$*"; }
 
-action=start dir="$HOME/tealteam-demo" port=8080 build=0 close=0
+action=start dir="$HOME/tealteam-demo" port=8080 build=0 close=0 bin="$ROOT/target/release/tt-web"
 if [[ $# -gt 0 && $1 != --* ]]; then action="$1"; shift; fi
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --dir) dir="${2:?--dir needs a folder}"; shift 2 ;;
         --port) port="${2:?--port needs a number}"; shift 2 ;;
         --build) build=1; shift ;;
+        --binary) bin="${2:?--binary needs a file}"; shift 2 ;;
         --close-firewall) close=1; shift ;;
-        *) echo "usage: $0 [start|stop|status] [--dir DIR] [--port PORT] [--build] [--close-firewall]" >&2; exit 2 ;;
+        *) echo "usage: $0 [start|stop|status] [--dir DIR] [--port PORT] [--build | --binary FILE] [--close-firewall]" >&2; exit 2 ;;
     esac
 done
 pidfile="$dir/server.pid"
@@ -73,8 +76,8 @@ if running; then
 fi
 
 say "binary"
-bin="$ROOT/target/release/tt-web"
 if [[ $build -eq 1 || ! -x $bin ]]; then
+    [[ $bin == "$ROOT/target/release/tt-web" ]] || { echo "no binary at $bin" >&2; exit 1; }
     "$ROOT/deploy/build-release.sh"
 fi
 mkdir -p "$dir/data" "$dir/backups"
