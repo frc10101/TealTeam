@@ -3,7 +3,7 @@
 Printable fallback for the `ftc-biobuzz` branch (see `docs/FTC_BETA_PLAN.md`
 §3 for the schema this mirrors, and §5 "Event day" for when to use it). Use
 only when the app is down. **One sheet per robot per match.** Print enough
-copies for a full day before Fri 10-23 (§5).
+copies for a full day before Fri 10-23 (§5). Print `docs/print/scouting-sheet.pdf` (one page, built from the season schema; edit the .docx if needed); the paper-switch log is on `docs/print/event-checklists.pdf`.
 
 Field order below matches the schema in §3 exactly, so a sheet can be typed
 into the app field-by-field with no re-reading.

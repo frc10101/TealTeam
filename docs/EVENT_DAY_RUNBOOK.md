@@ -1,6 +1,6 @@
 # Event day: set up the scouting server
 
-*One page. Print it, laminate it, tape it to the Pi's case. Detail: `docs/PI_NETWORK.md` (network), `docs/PI_STORAGE.md` (SSD, backups).*
+*One page. Print `docs/print/event-day-runbook.pdf` (or edit the .docx), laminate it, tape it to the Pi's case. Detail: `docs/PI_NETWORK.md` (network), `docs/PI_STORAGE.md` (SSD, backups).*
 
 First-time setup of the Pi, the Chromebooks and the accounts: `docs/SETUP_GUIDE.md`.
 

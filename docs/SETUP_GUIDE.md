@@ -115,6 +115,8 @@ On the Pi, `deploy/event/prep-event.sh PROFILE` (the quick start above). It sign
 
 ---
 
+*Printable copies of these checklists and the Chromebook card (two to a page): `docs/print/event-checklists.pdf` and `docs/print/chromebook-card.pdf`, with .docx versions to edit. Rebuild with `python3 docs/print/build.py`.*
+
 ## Night before
 
 - [ ] Pi built from the final tag; `status.sh` clean; `check-backup` ok; backup on the stick.
