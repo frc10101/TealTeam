@@ -1889,7 +1889,8 @@ mod flow_tests {
         let body = text(get(&state, "/", Some(&cookie)).await).await;
 
         assert!(body.contains("2 teams · 0 matches"), "{body}");
-        assert!(body.contains(r#"<li class="you"><strong>10101</strong>"#));
+        assert!(body.contains(r#"<li class="you"><a href="/teams?"#));
+        assert!(body.contains(r#"team=10101"><strong>10101</strong>"#));
         assert!(!body.contains("Your team is not listed"));
         assert!(body.contains(r#"<option value="2026now" selected>"#));
     }
@@ -1903,7 +1904,7 @@ mod flow_tests {
 
         let body = text(get(&state, "/?event=2026past", Some(&cookie)).await).await;
 
-        assert!(body.contains(r#"<li class="you"><strong>10101</strong>"#));
+        assert!(body.contains(r#"team=10101"><strong>10101</strong>"#));
         assert!(body.contains(r#"<option value="2026past" selected>"#));
         for link in ["/submission", "/lead-scout", "/drive-coach"] {
             assert!(
@@ -4279,6 +4280,54 @@ mod flow_tests {
     }
 
     #[tokio::test]
+    async fn rankings_show_what_scouts_recorded_a_column_each_and_sort_by_it() {
+        // DR1. 254's two approved observations are both of Q2: one match,
+        // launched 9 and 1, so 5.0 a match.
+        let (state, admin) = ranked().await;
+        let page = |query: &str| {
+            let state = state.clone();
+            let admin = admin.clone();
+            let url = format!("/lead-scout/rankings?event=2026now{query}");
+            async move { text(get(&state, &url, Some(&admin)).await).await }
+        };
+
+        // Every count by default, each a sort link that keeps the columns.
+        let body = page("").await;
+        assert!(body.contains(">Teleop launches</a>"), "{body}");
+        assert!(body.contains(r#"title="fewer is better""#), "fouls");
+        assert!(
+            !body.contains(">Parked at the end</a>"),
+            "yes/no only when asked"
+        );
+        assert!(
+            ranking_row(&body, 254).contains(r#"data-label="Teleop launches">5.0</td>"#),
+            "{}",
+            ranking_row(&body, 254)
+        );
+        assert!(ranking_row(&body, 10101).contains(r#"data-label="Teleop launches">—</td>"#));
+        assert!(body.contains("sort=m.launched&#38;col=auto_launched&#38;col=launched"));
+        assert!(body.contains(r#"value="teleop_park"> <span>Parked at the end (how often)"#));
+
+        // Sorted by it: the team that did it most first, the column marked.
+        let body = page("&sort=m.launched").await;
+        assert!(
+            body.find("<th scope=\"row\">254</th>").unwrap()
+                < body.find("<th scope=\"row\">10101</th>").unwrap()
+        );
+        assert!(
+            body.contains(r#"<td class="num metric current" data-label="Teleop launches">5.0"#)
+        );
+        assert!(body.contains(r#"<input type="hidden" name="sort" value="m.launched">"#));
+
+        // Chosen columns, and none.
+        let body = page("&cols=1&col=teleop_park").await;
+        assert!(ranking_row(&body, 254).contains(r#"data-label="Parked at the end">100%</td>"#));
+        assert!(!body.contains(">Teleop launches</a>"));
+        let body = page("&cols=1").await;
+        assert!(!body.contains(r#"class="num metric""#));
+    }
+
+    #[tokio::test]
     async fn rankings_average_approved_observations_and_say_how_many() {
         let (state, admin) = ranked().await;
         let none = tt_core::season::WeightOverrides::new();
@@ -4361,8 +4410,9 @@ mod flow_tests {
             body.find("<th scope=\"row\">254</th>") < body.find("<th scope=\"row\">10101</th>")
         );
         assert!(body.contains(
-            r#"<a href="/lead-scout/rankings?event=2026now&#38;sort=number" class="current">Team</a>"#
+            r#"<a href="/lead-scout/rankings?event=2026now&#38;sort=number&#38;col=auto_launched"#
         ));
+        assert!(body.contains(r#" class="current">Team</a>"#));
 
         let body = text(
             get(
@@ -4374,7 +4424,7 @@ mod flow_tests {
         )
         .await;
         assert!(
-            body.contains(r#"sort=rank" class="current">Rank</a>"#),
+            body.contains(r#" class="current">Rank</a>"#),
             "unknown is the default"
         );
     }
@@ -4854,9 +4904,7 @@ mod flow_tests {
         let (state, sam) = graphed().await;
         let rankings =
             text(get(&state, "/lead-scout/rankings?event=2026now", Some(&sam)).await).await;
-        assert!(rankings.contains(
-            r#"<form class="card-header" method="get" action="/compare" id="rank-compare">"#
-        ));
+        assert!(rankings.contains(r#"<form method="get" action="/compare" id="rank-compare">"#));
         assert!(
             rankings
                 .contains(r#"<input type="checkbox" name="team" value="254" form="rank-compare""#)

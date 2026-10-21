@@ -834,7 +834,7 @@ pub async fn rankings(
     params: RankingParams,
 ) -> Response {
     let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
-    html(ranking::page(&state, nav, &context, params.sort).await)
+    html(ranking::page(&state, nav, &context, &params).await)
 }
 
 /// `GET /lead-scout/rankings/enter`: type the rankings in (I14).

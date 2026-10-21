@@ -1,31 +1,38 @@
 //! Rankings (L11) and the point values behind them (L12).
 
-use std::collections::{BTreeSet, HashMap};
+use std::cmp::Ordering;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::convert::Infallible;
 
 use axum::extract::{FromRequestParts, Query};
 use axum::http::request::Parts;
 use chrono::Utc;
 use tracing::{info, warn};
+use tt_core::compare::{self, Better, Cell, TeamMatches, Window};
 use tt_core::connectivity::Freshness;
+use tt_core::graph;
 use tt_core::ranking::{self, RankingRow, Scored, SortKey, WeightErrors};
 use tt_core::review::ReviewState;
 use tt_core::user::User;
 use tt_pages::teams::latest_scouted;
 use tt_repo::{Repo, StoredObservation};
 use tt_templates::{
-    Nav, RankingView, RankingsPage, SCORE_LABEL, SortLink, THIN_BELOW, WeightGroup, WeightInput,
-    WeightsPage,
+    MetricChoice, MetricColumn, Nav, RankingView, RankingsPage, SCORE_LABEL, SortLink, THIN_BELOW,
+    WeightGroup, WeightInput, WeightsPage,
 };
 
 use crate::events::EventContext;
 use crate::startup::AppState;
 
-/// `?sort=`, and `?saved=` after a weights save. Never rejects: an unknown
-/// sort is the default one.
+/// `?sort=`, `?col=` for each metric column, and `?saved=` after a weights
+/// save. Never rejects: an unknown sort is the default one.
 #[derive(Debug, Default)]
 pub struct RankingParams {
     pub sort: SortKey,
+    /// `?sort=m.<field key>`: by a metric column, best first.
+    pub metric_sort: Option<String>,
+    /// The metric columns asked for; `None` for the defaults.
+    pub cols: Option<Vec<String>>,
     pub saved: Option<String>,
 }
 
@@ -33,27 +40,46 @@ impl<S: Send + Sync> FromRequestParts<S> for RankingParams {
     type Rejection = Infallible;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Infallible> {
-        let query = Query::<HashMap<String, String>>::from_request_parts(parts, state)
+        let pairs = Query::<Vec<(String, String)>>::from_request_parts(parts, state)
             .await
             .map(|Query(q)| q)
             .unwrap_or_default();
+        let query: HashMap<&str, &str> = pairs
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        let sort = query.get("sort").map(|s| s.trim()).unwrap_or_default();
+        // `cols=1` marks a chosen set, so ticking none is not the defaults.
+        let cols =
+            (query.contains_key("cols") || pairs.iter().any(|(k, _)| k == "col")).then(|| {
+                pairs
+                    .iter()
+                    .filter(|(k, _)| k == "col")
+                    .map(|(_, v)| v.trim().to_string())
+                    .filter(|v| !v.is_empty())
+                    .collect()
+            });
         Ok(Self {
-            sort: query
-                .get("sort")
-                .and_then(|s| SortKey::parse(s.trim()))
-                .unwrap_or_default(),
-            saved: query.get("saved").cloned(),
+            sort: SortKey::parse(sort).unwrap_or_default(),
+            metric_sort: sort.strip_prefix(METRIC_SORT).map(str::to_string),
+            cols,
+            saved: query.get("saved").map(|s| s.to_string()),
         })
     }
 }
 
-/// The rankings table for `context`'s event, ordered by `sort`.
+/// A metric column's sort, `m.<field key>`.
+const METRIC_SORT: &str = "m.";
+
+/// The rankings table for `context`'s event, ordered and with the columns
+/// `params` asks for.
 pub async fn page(
     state: &AppState,
     nav: Nav,
     context: &EventContext,
-    sort: SortKey,
+    params: &RankingParams,
 ) -> RankingsPage {
+    let sort = params.sort;
     let storage_ready = nav.storage_ready;
     let mut page = RankingsPage {
         title: "Rankings".into(),
@@ -68,6 +94,11 @@ pub async fn page(
         latest_scouted: String::new(),
         ranks_updated: String::new(),
         ranks_stale: false,
+        metrics: Vec::new(),
+        metric_choices: Vec::new(),
+        sort: String::new(),
+        shown_cols: Vec::new(),
+        cols_chosen: params.cols.is_some(),
     };
     let Some(event) = &context.selected else {
         page.unavailable = if storage_ready {
@@ -164,9 +195,134 @@ pub async fn page(
     }
     ranking::sort(&mut rows, sort);
 
+    // What scouts recorded, per team: the rows Compare shows, for everyone
+    // here at once (DR1). Counts and point-carrying choices are an average
+    // per match; yes/no fields are how often. Tallies have no order to sort.
+    let mut by_team: BTreeMap<i32, BTreeMap<&str, Vec<&tt_core::season::Payload>>> =
+        BTreeMap::new();
+    for o in approved
+        .iter()
+        .filter(|o| o.review_state == ReviewState::Approved)
+        .filter(|o| o.schema_version == state.season.version)
+    {
+        by_team
+            .entry(o.team_number)
+            .or_default()
+            .entry(o.match_key.as_str())
+            .or_default()
+            .push(&o.payload);
+    }
+    let team_matches: Vec<TeamMatches> = rows
+        .iter()
+        .map(|r| TeamMatches {
+            team_number: r.team_number,
+            matches: by_team
+                .get(&r.team_number)
+                .map(|m| m.values().cloned().collect())
+                .unwrap_or_default(),
+            stats: None,
+        })
+        .collect();
+    let table = compare::table(&state.season, &overrides, &team_matches, Window::All);
+    let offered: Vec<&compare::Row> = table
+        .groups
+        .iter()
+        .flat_map(|g| &g.rows)
+        .filter(|r| r.key != graph::POINTS)
+        .filter(|r| matches!(r.cells.first(), Some(Cell::Spread(_) | Cell::Rate { .. })))
+        .collect();
+    // By default every count: what a robot does, in the order of the form.
+    let shown: Vec<&compare::Row> = match &params.cols {
+        Some(asked) => offered
+            .iter()
+            .filter(|r| asked.contains(&r.key))
+            .copied()
+            .collect(),
+        None => offered
+            .iter()
+            .filter(|r| matches!(r.cells.first(), Some(Cell::Spread(_))))
+            .copied()
+            .collect(),
+    };
+    let by_metric = params
+        .metric_sort
+        .as_deref()
+        .and_then(|key| shown.iter().position(|r| r.key == key));
+    // Rows are in table order here; a metric sort reorders both together.
+    let mut order: Vec<usize> = (0..rows.len()).collect();
+    if let Some(m) = by_metric {
+        let row = shown[m];
+        order.sort_by(|a, b| {
+            let (x, y) = (row.cells[*a].value(), row.cells[*b].value());
+            match (x, y) {
+                (Some(x), Some(y)) => match row.better {
+                    Better::Lower => x.total_cmp(&y),
+                    _ => y.total_cmp(&x),
+                },
+                (Some(_), None) => Ordering::Less,
+                (None, Some(_)) => Ordering::Greater,
+                (None, None) => Ordering::Equal,
+            }
+            .then(rows[*a].team_number.cmp(&rows[*b].team_number))
+        });
+    }
+    let cols_query: String = shown
+        .iter()
+        .map(|r| format!("&col={}", r.key))
+        .collect::<String>()
+        + if params.cols.is_some() { "&cols=1" } else { "" };
+    let sort_href = |key: &str| {
+        format!(
+            "/lead-scout/rankings?event={}&sort={key}{cols_query}",
+            event.key
+        )
+    };
+    page.sort = match by_metric {
+        Some(m) => format!("{METRIC_SORT}{}", shown[m].key),
+        None => sort.as_str().to_string(),
+    };
+    page.metrics = shown
+        .iter()
+        .enumerate()
+        .map(|(i, r)| MetricColumn {
+            value: format!("{METRIC_SORT}{}", r.key),
+            label: r.label.clone(),
+            href: sort_href(&format!("{METRIC_SORT}{}", r.key)),
+            current: by_metric == Some(i),
+            hint: match r.better {
+                Better::Lower => "fewer is better".into(),
+                _ => String::new(),
+            },
+        })
+        .collect();
+    page.shown_cols = shown.iter().map(|r| r.key.clone()).collect();
+    page.metric_choices = offered
+        .iter()
+        .map(|r| MetricChoice {
+            key: r.key.clone(),
+            label: match r.cells.first() {
+                Some(Cell::Rate { .. }) => format!("{} (how often)", r.label),
+                _ => r.label.clone(),
+            },
+            checked: shown.iter().any(|s| s.key == r.key),
+        })
+        .collect();
+    let metric_text = |cell: &Cell| match cell {
+        Cell::Spread(Some(s)) => format!("{:.1}", s.mean),
+        Cell::Rate { yes, of } if *of > 0 => format!("{:.0}%", 100.0 * *yes as f64 / *of as f64),
+        _ => String::new(),
+    };
+    let metric_cells: Vec<Vec<String>> = (0..rows.len())
+        .map(|i| shown.iter().map(|r| metric_text(&r.cells[i])).collect())
+        .collect();
+    let mut slots: Vec<Option<(RankingRow, Vec<String>)>> =
+        rows.into_iter().zip(metric_cells).map(Some).collect();
+    let rows: Vec<(RankingRow, Vec<String>)> =
+        order.iter().filter_map(|i| slots[*i].take()).collect();
+
     page.rows = rows
         .into_iter()
-        .map(|row| {
+        .map(|(row, metrics)| {
             let n = row.score.as_ref().map_or(0, |s| s.n);
             RankingView {
                 rank: row.rank.map(|r| r.to_string()).unwrap_or_default(),
@@ -178,6 +334,7 @@ pub async fn page(
                     .unwrap_or_default(),
                 n,
                 thin: n < THIN_BELOW,
+                metrics,
             }
         })
         .collect();
@@ -189,13 +346,10 @@ pub async fn page(
     ]
     .into_iter()
     .map(|(label, key, numeric)| SortLink {
+        value: key.as_str(),
         label,
-        href: format!(
-            "/lead-scout/rankings?event={}&sort={}",
-            event.key,
-            key.as_str()
-        ),
-        current: key == sort,
+        href: sort_href(key.as_str()),
+        current: by_metric.is_none() && key == sort,
         numeric,
     })
     .collect();

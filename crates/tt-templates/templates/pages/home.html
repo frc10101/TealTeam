@@ -1,6 +1,8 @@
 {% extends "layout.html" %}
 {% block content %}
-<section class="card">
+{# Signed in, a laptop leads with scouting; a phone only reads (device
+   roles), so it opens on the teams here. #}
+<section class="card{% if nav.signed_in && event.summary.is_some() %} laptop-only{% endif %}">
   <div class="card-header"><h1>TealTeam Scouting</h1></div>
   <div class="card-body">
     {% if nav.signed_in %}
@@ -51,7 +53,7 @@
       {% else %}
         <ul class="roster" aria-label="Teams attending">
           {% for team in summary.roster %}
-            <li{% if team.is_viewer %} class="you"{% endif %}><strong>{{ team.number }}</strong> {{ team.name }}</li>
+            <li{% if team.is_viewer %} class="you"{% endif %}><a href="/teams?{% if !nav.event.selected.is_empty() %}event={{ nav.event.selected }}&amp;{% endif %}team={{ team.number }}"><strong>{{ team.number }}</strong> {{ team.name }}</a></li>
           {% endfor %}
         </ul>
       {% endif %}

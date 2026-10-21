@@ -56,14 +56,45 @@
 
 {% if !rows.is_empty() %}
   <section class="card">
-    {# Tick teams, then Compare: the checkboxes belong to this form by its id. #}
-    <form class="card-header" method="get" action="/compare" id="rank-compare">
-      {% if !nav.event.selected.is_empty() %}<input type="hidden" name="event" value="{{ nav.event.selected }}">{% endif %}
-      <input type="hidden" name="chosen" value="1">
-      <span class="hint">Tick up to 6 teams to see side by side.</span>
-      <button class="btn btn-secondary btn-sm" type="submit">Compare ticked</button>
-    </form>
+    <div class="card-header rank-tools">
+      {# Tick teams, then Compare: the checkboxes belong to this form by its id. #}
+      <form method="get" action="/compare" id="rank-compare">
+        {% if !nav.event.selected.is_empty() %}<input type="hidden" name="event" value="{{ nav.event.selected }}">{% endif %}
+        <input type="hidden" name="chosen" value="1">
+        <span class="hint laptop-only">Tick up to 6 teams to see side by side.</span>
+        <button class="btn btn-secondary btn-sm" type="submit">Compare ticked</button>
+      </form>
+      {# Which of what scouts recorded are columns (DR1). In the URL, so a
+         view can be bookmarked. #}
+      {% if !metric_choices.is_empty() %}
+        <details class="rank-columns" id="rank-columns">
+          <summary class="btn btn-secondary btn-sm">Columns</summary>
+          <form method="get" class="rank-columns-panel">
+            {% if !nav.event.selected.is_empty() %}<input type="hidden" name="event" value="{{ nav.event.selected }}">{% endif %}
+            <input type="hidden" name="sort" value="{{ sort }}">
+            <input type="hidden" name="cols" value="1">
+            <p class="hint">Each team's average per match, or how often for a yes/no.</p>
+            {% for choice in metric_choices %}
+              <label class="toggle"><input type="checkbox" name="col" value="{{ choice.key }}"{% if choice.checked %} checked{% endif %}> <span>{{ choice.label }}</span></label>
+            {% endfor %}
+            <button class="btn btn-primary btn-sm" type="submit">Show</button>
+          </form>
+        </details>
+      {% endif %}
+    </div>
     <div class="card-body table-scroll">
+      {# On a phone the column headers are hidden: one small dropdown sorts. #}
+      <form method="get" class="rank-sort phone-only">
+        {% if !nav.event.selected.is_empty() %}<input type="hidden" name="event" value="{{ nav.event.selected }}">{% endif %}
+        {% for col in shown_cols %}<input type="hidden" name="col" value="{{ col }}">{% endfor %}
+        {% if cols_chosen %}<input type="hidden" name="cols" value="1">{% endif %}
+        <label class="form-label" for="rank-sort">Sort by</label>
+        <select class="form-select" id="rank-sort" name="sort" data-autosubmit>
+          {% for column in columns %}<option value="{{ column.value }}"{% if column.current %} selected{% endif %}>{{ column.label }}</option>{% endfor %}
+          {% for metric in metrics %}<option value="{{ metric.value }}"{% if metric.current %} selected{% endif %}>{{ metric.label }}</option>{% endfor %}
+        </select>
+        <noscript><button class="btn btn-secondary btn-sm" type="submit">Sort</button></noscript>
+      </form>
       <table class="data-table rankings cards" role="table">
         <caption class="visually-hidden">Teams, sorted by the underlined column</caption>
         <thead>
@@ -71,6 +102,11 @@
             {% for column in columns %}
               <th scope="col"{% if column.numeric %} class="num"{% endif %}{% if column.current %} aria-sort="{% if column.label == crate::SCORE_LABEL %}descending{% else %}ascending{% endif %}"{% endif %}>
                 <a href="{{ column.href }}"{% if column.current %} class="current"{% endif %}>{{ column.label }}</a>
+              </th>
+            {% endfor %}
+            {% for metric in metrics %}
+              <th scope="col" class="num metric"{% if metric.current %} aria-sort="descending"{% endif %}{% if !metric.hint.is_empty() %} title="{{ metric.hint }}"{% endif %}>
+                <a href="{{ metric.href }}"{% if metric.current %} class="current"{% endif %}>{{ metric.label }}</a>
               </th>
             {% endfor %}
             <th scope="col" class="num count">n</th>
@@ -84,6 +120,10 @@
               <th scope="row">{{ row.team }}</th>
               <td class="name">{{ row.name }}</td>
               <td class="num score" data-label="{{ crate::SCORE_LABEL }}">{% if row.score.is_empty() %}—{% else %}{{ row.score }}{% endif %}</td>
+              {% for value in row.metrics %}
+                {% let metric = metrics[loop.index0] %}
+                <td class="num metric{% if metric.current %} current{% endif %}" data-label="{{ metric.label }}">{% if value.is_empty() %}—{% else %}{{ value }}{% endif %}</td>
+              {% endfor %}
               <td class="num count{% if row.thin %} thin{% endif %}" data-label="n">{{ row.n }}{% if row.thin && row.n > 0 %} <span class="badge badge-gray">thin</span>{% endif %}</td>
               <td class="compare-tick" data-label="Compare"><input type="checkbox" name="team" value="{{ row.team }}" form="rank-compare" aria-label="Compare {{ row.team }}"></td>
             </tr>

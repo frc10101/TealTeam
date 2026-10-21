@@ -537,10 +537,43 @@ pub struct RankingsPage {
     pub ranks_updated: String,
     /// Old enough, while the event runs, that the ranks may have moved.
     pub ranks_stale: bool,
+    /// What scouts recorded, a column each, after the score (DR1).
+    pub metrics: Vec<MetricColumn>,
+    /// Every metric that can be a column, for the Columns picker.
+    pub metric_choices: Vec<MetricChoice>,
+    /// The sort in force, kept when the columns change.
+    pub sort: String,
+    /// The metric columns shown, kept when the sort changes.
+    pub shown_cols: Vec<String>,
+    /// The columns were chosen, not the defaults.
+    pub cols_chosen: bool,
+}
+
+/// A metric's column on Rankings: a team's average per match, or how often.
+#[derive(Debug, Clone)]
+pub struct MetricColumn {
+    /// `?sort=` for this column.
+    pub value: String,
+    pub label: String,
+    /// Sorts by this column, best first.
+    pub href: String,
+    pub current: bool,
+    /// `"fewer is better"`, said where it is so.
+    pub hint: String,
+}
+
+/// A metric the Columns picker offers.
+#[derive(Debug, Clone)]
+pub struct MetricChoice {
+    pub key: String,
+    pub label: String,
+    pub checked: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct SortLink {
+    /// `?sort=` for this column.
+    pub value: &'static str,
     pub label: &'static str,
     pub href: String,
     /// This column orders the table.
@@ -561,6 +594,8 @@ pub struct RankingView {
     pub n: usize,
     /// Too few observations to lean on.
     pub thin: bool,
+    /// One per metric column: `"4.5"`, `"67%"`, or empty.
+    pub metrics: Vec<String>,
 }
 
 /// Fewer observations than this and a score is marked as thin.

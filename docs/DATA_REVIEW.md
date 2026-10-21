@@ -87,7 +87,19 @@ sideways inside its card, with the row names held in place.
 - the role click-through (`role-split.mjs`) now opens Compare on a laptop
   and on two phone sizes.
 
-## 2. Graph (`/graph`)
+## 2. Rankings by what scouts recorded
+
+Built 2026-10-21 (was "next" item 5). Rankings gets a column for each thing
+scouts count, after the scout estimate: the team's average per match, from
+the same numbers as Compare. Each column header sorts, best first (fouls:
+fewest first, and the header says so). **Columns** picks which: any count,
+any choice that carries points, and any yes/no as how often ("67%"). The
+choice and the sort are in the URL.
+
+On a phone the headers are hidden, so one **Sort by** dropdown sorts, and
+each card shows the metric it is sorted by.
+
+## 3. Graph (`/graph`)
 
 Unchanged apart from the right-hand axis: a yes/no (0–1) beside points
 (10–40) no longer lies flat along the bottom. The page says which metric is
@@ -95,7 +107,7 @@ on the right. `tests/browser/graph.mjs` checks both cases.
 
 ---
 
-## 3. Next, after Athens
+## 4. Next, after Athens
 
 In order of value for selection, from what the beta shows:
 
@@ -108,14 +120,13 @@ In order of value for selection, from what the beta shows:
    discrete fields: parked or not, disabled or not, per match.
 4. **A distribution view:** a histogram of one metric for every team at the
    event, to see where a team sits in the field, not just against 6 others.
-5. **Rankings by any metric:** a column per key metric (auto, teleop,
-   endgame, fouls), sortable, beside the scout estimate.
+5. ~~**Rankings by any metric**~~: built, section 2.
 6. **Compare offline:** move it to the pages the device can build with no
    server (C6), as the team page and Graph already are. Built in `tt-pages`
    so this is a registration in `tt-client`, not a rewrite.
 7. **Bring it to `rebuild`** with the FTC findings.
 
-## 4. Questions for the team
+## 5. Questions for the team
 
 1. **Is 6 teams the right width?** Eight would match Graph's colours but
    gets cramped on a Chromebook screen.
