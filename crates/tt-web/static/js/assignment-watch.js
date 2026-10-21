@@ -73,8 +73,7 @@
     box.hidden = false;
   }
 
-  var source = new EventSource(watch.stream);
-  source.addEventListener("change", function (event) {
+  var onChange = function (event) {
     var change;
     try {
       change = JSON.parse(event.data);
@@ -93,5 +92,18 @@
     clearTimeout(timer);
     // A move is a removal and an addition: say them together.
     timer = setTimeout(say, 500);
+  };
+  var source = new EventSource(watch.stream);
+  source.addEventListener("change", onChange);
+  // A page left behind (back/forward cache) keeps its stream open, and a
+  // browser lets only six connections go to one host: the stream of a page
+  // nobody can see must not hold one the next save needs.
+  window.addEventListener("pagehide", function () {
+    source.close();
+  });
+  window.addEventListener("pageshow", function (event) {
+    if (!event.persisted) return;
+    source = new EventSource(watch.stream);
+    source.addEventListener("change", onChange);
   });
 })();
