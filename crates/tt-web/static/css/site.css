@@ -714,6 +714,17 @@ details.card:not([open]) > summary { border-bottom: 0; }
 .file-button { position: relative; overflow: hidden; }
 .file-button input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 
+/* The scouting assistant (AI1). The sheet is long plain text: it wraps
+   rather than scrolling sideways, and scrolls inside itself. */
+.ask-answer-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.ask-sheet pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.85rem;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
 @media (min-width: 40rem) {
   h1, h2 { font-size: 1.5rem; }
   .page { padding: 1.5rem; }

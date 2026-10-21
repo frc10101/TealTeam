@@ -9,6 +9,7 @@
 
 mod accounts;
 mod admin;
+mod ask;
 mod assets;
 mod assignments;
 mod auth;

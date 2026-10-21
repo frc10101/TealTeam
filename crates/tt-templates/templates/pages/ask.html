@@ -1,0 +1,48 @@
+{% extends "layout.html" %}
+{#
+  The scouting assistant (AI1, docs/SCOUTING_ASSISTANT.md). One question at a
+  time, answered by a language model from the data sheet alone. The sheet is
+  shown under the answer, because the answer is only as good as the model,
+  and the team pages and pick list stay the record.
+#}
+{% block content %}
+<section class="card">
+  <div class="card-header">
+    <h1>Ask{% if !event_name.is_empty() %} · {{ event_name }}{% endif %}</h1>
+  </div>
+  <div class="card-body stack">
+    {% if !unavailable.is_empty() %}
+      <p>{{ unavailable }}</p>
+    {% else %}
+      <p class="hint">
+        Ask about the teams at this event. Answers come from our approved
+        observations and the event's published results only, from
+        {{ backend }}. Check anything that matters against the team pages.
+      </p>
+      <form class="stack" method="post" action="{{ post_href }}">
+        <label class="form-label" for="question">Question</label>
+        <textarea class="form-input" id="question" name="question" rows="3"
+                  maxlength="500" required
+                  placeholder="Which teams park reliably in auto?">{{ question }}</textarea>
+        <button class="btn btn-primary" type="submit">Ask</button>
+      </form>
+      {% if !error.is_empty() %}
+        <p class="alert alert-error" role="alert">{{ error }}</p>
+      {% endif %}
+      {% if !answer.is_empty() %}
+        <div class="ask-answer" role="status">
+          <h2>Answer</h2>
+          <p class="ask-answer-text">{{ answer }}</p>
+          <p class="muted">Not an official result. Check it against the team pages before a pick.</p>
+        </div>
+      {% endif %}
+      {% if !sheet.is_empty() %}
+        <details class="ask-sheet">
+          <summary>What it was given · {{ sheet_about }}</summary>
+          <pre>{{ sheet }}</pre>
+        </details>
+      {% endif %}
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

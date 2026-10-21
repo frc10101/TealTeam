@@ -53,7 +53,7 @@ use crate::upstream::{self, ManualSync};
 const LOGIN_FAILED: &str = "Invalid email or password";
 
 /// Render a template, or return a 500 that says so.
-fn html(page: impl Page) -> Response {
+pub(crate) fn html(page: impl Page) -> Response {
     match page.render_html() {
         Ok(body) => axum::response::Html(body).into_response(),
         Err(e) => {
@@ -83,7 +83,7 @@ pub(crate) async fn nav_for(state: &AppState, user: Option<&tt_core::user::User>
 }
 
 /// Nav with the event switcher, plus the event the page is about (U2).
-async fn event_page(
+pub(crate) async fn event_page(
     state: &AppState,
     user: Option<&tt_core::user::User>,
     requested: Option<&str>,

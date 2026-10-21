@@ -40,6 +40,7 @@
 <section class="card">
   <div class="card-header">
     <h1>Drive Coach{% if !team.is_empty() %} · {{ team }}{% endif %}{% if !event_name.is_empty() %} at {{ event_name }}{% endif %}</h1>
+    <a class="btn btn-secondary" href="/ask{{ nav.event.query() }}">Ask</a>
   </div>
   {% if !unavailable.is_empty() %}
     <div class="card-body"><p>{{ unavailable }}</p></div>

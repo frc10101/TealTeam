@@ -60,6 +60,7 @@ fn prepare() -> anyhow::Result<Config> {
     // .env files.
     config::load_dotenv_files();
     init_tracing();
+    crate::ask::init_from_env();
 
     // 3. The only fatal validation step.
     Config::from_env().context("invalid configuration")
@@ -272,6 +273,7 @@ pub fn router(state: AppState) -> Router {
         .route("/lead-scout/schedule", get(handlers::schedule_page))
         .route("/lead-scout/scan", get(handlers::scan_page))
         .route("/pick-list", get(handlers::pick_list))
+        .route("/ask", get(crate::ask::get).post(crate::ask::post))
         .route("/admin/db", get(handlers::admin_db))
         .route("/admin/users", get(handlers::admin_users))
         // Forms
@@ -1073,6 +1075,7 @@ mod flow_tests {
             "/lead-scout",
             "/lead-scout/assignments",
             "/drive-coach",
+            "/ask",
             "/admin/db",
         ] {
             let response = get(&state, path, None).await;
@@ -1103,6 +1106,7 @@ mod flow_tests {
             "/lead-scout",
             "/lead-scout/assignments",
             "/drive-coach",
+            "/ask",
             "/admin/db",
         ] {
             let response = get(&state, path, Some(&scout)).await;
@@ -1124,12 +1128,25 @@ mod flow_tests {
             "/lead-scout",
             "/lead-scout/assignments",
             "/drive-coach",
+            "/ask",
             "/submission",
             "/admin/db",
         ] {
             let response = get(&state, path, Some(&admin)).await;
             assert_eq!(response.status(), StatusCode::OK, "{path}");
         }
+    }
+
+    #[tokio::test]
+    async fn the_assistant_says_it_is_not_set_up_rather_than_failing() {
+        let state = migrated_state().await;
+        let admin = signed_up(&state).await;
+        let body = text(get(&state, "/ask", Some(&admin)).await).await;
+        assert!(body.contains("not set up on this server"), "{body}");
+        assert!(!body.contains("name=\"question\""));
+        let response = post(&state, "/ask", "question=who%20parks%3F", Some(&admin)).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(text(response).await.contains("not set up on this server"));
     }
 
     #[tokio::test]

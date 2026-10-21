@@ -21,6 +21,7 @@
 <section class="card">
   <div class="card-header">
     <h1>Pick list{% if !event_name.is_empty() %} · {{ event_name }}{% endif %}</h1>
+    <a class="btn btn-secondary" href="/ask{{ nav.event.query() }}">Ask</a>
   </div>
   <div class="card-body stack">
     {% if !unavailable.is_empty() %}

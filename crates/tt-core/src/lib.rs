@@ -9,6 +9,7 @@
 //! every push. If that job fails, a server-only dependency has leaked in and
 //! the code belongs in an adapter crate instead.
 
+pub mod ask;
 pub mod assignments;
 pub mod coach;
 pub mod connectivity;
