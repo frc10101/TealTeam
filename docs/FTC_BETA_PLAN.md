@@ -1,6 +1,6 @@
 # FTC BIOBUZZ beta-test plan
 
-Status: **plan only — nothing implemented.** Setting up the Pi and laptops: [`docs/SETUP_GUIDE.md`](SETUP_GUIDE.md).
+Status: **built, and frozen since 2026-10-21**: F1–F17 are done, and only fixes found in setup or rehearsal go in. What is left is §5's hardware rehearsal and F6's tag. Setting up the Pi and laptops: [`docs/SETUP_GUIDE.md`](SETUP_GUIDE.md).
 
 **Scope decision (2026-10-15): a separate, FTC-only branch, `ftc-biobuzz`, for one
 test event: **Alabama Athens Qualifier 1, Saturday 2026-10-24.** It is never merged back into `rebuild`.** The migration doc
@@ -162,6 +162,9 @@ table. That table goes in the PR description.
 | F12 | **Setup kit** (`docs/SETUP_GUIDE.md`): `deploy/pi/bootstrap.sh` turns a fresh Pi into the running service from `deploy/profiles/ftc-qual-4robot.env`; `deploy/event/prep-event.sh` creates the accounts, loads the schedule (CSV or FTC pull) and auto-assigns from the Pi over SSH; a printable Chromebook card; optional Linux/Mac/Windows laptop scripts. **Done** — scripts checked with `--dry-run`, prep-event.sh run against a local server (rehearsal CSV, 4 scouts + a lead, 64 of 64 robots covered); bootstrap and the Chromebook steps untested on hardware | A person who is not a developer can bring up the Pi and the laptops from the guide |
 | F13 | **Dev environment** (`docs/DEV_ENVIRONMENT.md`): `cargo run -- dev` (also `cargo dev`) serves a throwaway database in `./dev-data/` of fake data (an event of 14 teams, 21 four-robot matches, 12 played with FTC-style ranks and OPR, every role, a second team, a signed-out scout, a tablet, refusals, an undone review), ignoring `DATABASE_URL`, refusing `TEALTEAM_ENV=prod`, with no network; `--fresh`, `--check`, `--port`. About 680 route x role, notes, sync, snapshot, `/ask`, token and write checks run on it and in `cargo test`. **Done** — `crates/tt-web/src/dev/`, `tests/dev_check.rs`; the workspace's `default-members` is `tt-web` so a bare `cargo run` works (check.sh and CI use `--workspace`/`-p`, unchanged) | One command gives a person a server to click through as any role, and a failing access rule turns `./check.sh` red |
 | F14 | **Compare teams for alliance selection** (DR1, user 2026-10-21; `docs/DATA_REVIEW.md`). `/compare` puts up to 6 teams side by side with each metric's spread, a shared-scale box plot, the row's best marked, an optional reference team and a last-3/last-5 window; linked from Rankings, the team page, the pick list and Graph. Graph gets a right-hand axis | Rankings → tick 2–6 teams → Compare shows them; a lead can say from the page who is steadier and by how much, at laptop width; a phone can read it |
+| F15 | **Team branding** (user 2026-10-21; BR1). Critical Hit's colours (cyan `#00c1c1`, yellow `#fbca13`, red `#f10101`), Bangers titles (vendored, OFL) and logo, from criticalhitrobotics.org. Dark on black or light on cream, following the device; **Theme** in the account menu picks one for that device (`static/js/theme.js`). The app icons are the logo. **Done** — bacd192 | Every page reads in both themes at 1366×768 and 390 px with no sideways scroll; the browser suites pass |
+| F16 | **Printable paper kit** (user 2026-10-21; PK1). `docs/print/build.py` writes the scouting sheet (from the season file), the event-day runbook, the Chromebook card and the checklists as one-page .docx and .pdf. **Done** — e282171 | Each prints on one page; the sheet asks what the form asks |
+| F17 | **Demo server on a laptop** (user 2026-10-21; LS1). `deploy/laptop/omenMaxwell-setup.sh` runs the release binary on Maxwell's Omen (Omarchy) in place of the Pi: a prod `.env` in `~/tealteam-demo`, port 8080 opened in ufw, held awake by systemd-inhibit, `stop` and `status`; `--binary` takes a build from another machine. **Done** — 9439d85, 5edf295; run on another laptop, not yet on the Omen | Chromebooks on the same network open `http://IP:8080/`; a restart keeps the data |
 
 **FTC beta (F4):** the switch is `tt_core::upstream::UPSTREAM_ENABLED = false`. In `docs/EVENT_DAY_RUNBOOK.md`, step 7's "check the rankings age" and the "Rankings stale (amber)" row assume TBA data and do not apply; step 5's no-tether rule is moot, because the Pi no longer watches for a tether.
 
@@ -206,6 +209,15 @@ If F1 is not green by **Saturday night (10-17)**, stop and fall back to paper fo
   - a refused observation, then a lead-scout correction;
   - pulling the power;
   - backup → wipe → restore.
+
+**Run 2026-10-21 on a laptop, not the Pi.** The release build in prod mode on a fresh database, with headless Chromium standing in for the laptops and phones:
+- prep-event.sh made a lead and 4 scouts, imported 16 matches and covered 64 of 64 robots;
+- 4 scouts saved Q1–Q8 at once: 32 forms, a median 0.4 s each from opening the form to saved, and each scout landed on their next robot;
+- the lead approved all 32, and 15 pages opened with no errors at 1366×768 and at 390 px;
+- a backup to a stick while scouting passed `check-backup`; `kill -9` lost nothing; wipe → restore brought all 32 back;
+- in the browser suites, offline saving, the QR handoff and the phones' offline copy pass.
+
+Still to do on the real hardware: the Pi (bootstrap, clock, wired network, `tealteam.local`), the Chromebooks, and the scouts who will go.
 
 ### Event day (Sat 10-24)
 - Seed from the official schedule as soon as it is posted (no later than 15 min before quals, §13.6.1). Check every match against the printed sheet.
