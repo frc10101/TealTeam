@@ -13,6 +13,7 @@ What the project is doing. Keep these current; if one is wrong, fix it.
 | **[ACTION_ITEMS.md](ACTION_ITEMS.md)** | **The work list.** Both source documents merged into one dependency-ordered set of items across four phases, with open decisions and dropped items. Start here, and use its IDs in commits. |
 | [REBUILD_SPEC.md](REBUILD_SPEC.md) | The authoritative specification: domain, full data model, complete route surface, business rules, upstream API behavior, front-end conventions, configuration, and §12 — the 13 defects not to repeat. Written so the app can be rebuilt from an empty directory. |
 | [REFURBISH_PLAN.md](REFURBISH_PLAN.md) | The forward plan: what should be *different* — offline-first client, season-driven schemas, sync design, chat, and the reasoning behind each decision. |
+| [SCOUTING_ASSISTANT.md](SCOUTING_ASSISTANT.md) | Feasibility and design of the question box that answers from our data (AI1): where a model can run with no uplink, how answers stay grounded, and how to turn it on. |
 | [REFURBISH_NOTES.txt](REFURBISH_NOTES.txt) | The team's raw notes, verbatim, that the refurbish plan was worked up from. Source material, not a decision record. |
 
 The spec is the *backward* record — what the app did and why. The refurbish plan

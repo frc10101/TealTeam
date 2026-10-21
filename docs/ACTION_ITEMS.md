@@ -730,6 +730,7 @@ A test fails if a table is in no list or in two, if a listed table does not exis
 | X6 | `#team` / `#match` autocomplete and context chips — the reason to build chat in-app rather than adopt Matrix | RI-M6 | M | **Vetoed** — no chat or messaging features |
 | X7 | **Moderation: mentor log view, retract-not-delete, rate limiting.** Non-negotiable; the users are minors | RI-M7 | M | **Vetoed** — no chat or messaging features |
 | S13 | QR transfer: Rust encoder, browser scanner with `BarcodeDetector` + zxing-wasm fallback | RI-N6, RI-S12 | L | **Done** — `tt_core::qr`; a tablet's **Server out of reach?** panel (`handoff.js`), the lead's `/lead-scout/scan` (`scan.js`, `receive.js`), `POST /api/handoff`; see notes |
+| AI1 | **Scouting assistant.** Ask a question at `/ask` and a language model answers from a data sheet of our approved observations and the event's published results, with the sheet shown underneath. Read-only: no tools, no writes. Off unless `ASK_BACKEND` is set; a local model on the event LAN, or Claude off-site. Not the vetoed chat (X1-X7): nobody messages anybody | User 2026-10-20 · `docs/SCOUTING_ASSISTANT.md` | M | **Built on the FTC beta branch only** (`ftc/ask`, lands on `ftc-biobuzz` after the beta-1 tag). Porting to FRC needs nothing FTC-specific; it waits on the Athens findings |
 
 ### Phase 4 notes
 
