@@ -7,6 +7,9 @@
 //! still known by the device's offline token (C9, `crate::token`). The answer is a [`Receipt`] per entry:
 //! recorded (now, or already), or refused with a reason a person can read.
 //! The Pi keeps each refusal for the lead scout (C10, `crate::refused`).
+//! The downloadable scouting page (C15) posts here from a file, with its
+//! credential and no cookie, so the push answers any origin ([`preflight`],
+//! [`open_to_files`]).
 //! The device clears an entry only once it comes back through the change
 //! log (`tt_core::outbox` says why).
 //!
@@ -23,7 +26,11 @@ use std::collections::HashMap;
 use axum::Json;
 use axum::body::Bytes;
 use axum::extract::{Query, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::header::{
+    ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN,
+    ACCESS_CONTROL_MAX_AGE,
+};
+use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use chrono::{DateTime, TimeDelta, Utc};
 use serde_json::json;
@@ -34,8 +41,47 @@ use tt_core::user::User;
 use tt_repo::{Device, NewObservation, Recorded, Repo, RepoError};
 use tt_repo_sqlite::refused::NewRefusal;
 
-use crate::auth::device_uuid;
 use crate::startup::AppState;
+
+/// `OPTIONS /api/sync/push`: the browser asking, before the downloadable
+/// scouting page (C15) posts, whether a page from no origin may. It may:
+/// the push takes a credential in `Authorization`, which no other page has,
+/// and never a cookie on a cross-origin post, since [`open_to_files`]
+/// allows none.
+pub async fn preflight(headers: HeaderMap) -> Response {
+    let mut response = StatusCode::NO_CONTENT.into_response();
+    let out = response.headers_mut();
+    out.insert(
+        ACCESS_CONTROL_ALLOW_METHODS,
+        HeaderValue::from_static("POST"),
+    );
+    out.insert(
+        ACCESS_CONTROL_ALLOW_HEADERS,
+        HeaderValue::from_static("authorization, content-type"),
+    );
+    out.insert(ACCESS_CONTROL_MAX_AGE, HeaderValue::from_static("600"));
+    // Chrome's Private Network Access: a page from a file asking a LAN
+    // address.
+    if headers.contains_key("access-control-request-private-network") {
+        out.insert(
+            "access-control-allow-private-network",
+            HeaderValue::from_static("true"),
+        );
+    }
+    response
+}
+
+/// Every answer to the push readable by the downloadable scouting page
+/// (C15), opened from a file, whose origin is `null`. `*` and no
+/// `Allow-Credentials`: the browser sends no cookie with such a post, so
+/// the page must send its credential, and no other page can read an answer
+/// made for a session.
+pub async fn open_to_files(mut response: Response) -> Response {
+    response
+        .headers_mut()
+        .insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
+    response
+}
 
 fn refuse(status: StatusCode, error: impl Into<String>) -> Response {
     (status, Json(json!({ "error": error.into() }))).into_response()
@@ -47,7 +93,7 @@ pub async fn push(
     Query(query): Query<HashMap<String, String>>,
     body: Bytes,
 ) -> Response {
-    let Some(user) = crate::token::sync_user(&state, &headers).await else {
+    let Some(caller) = crate::token::sync_caller(&state, &headers).await else {
         return refuse(
             StatusCode::UNAUTHORIZED,
             "sign in to send what this device saved",
@@ -72,7 +118,8 @@ pub async fn push(
         );
     }
 
-    let device = match device_uuid(&headers) {
+    let user = caller.user;
+    let device = match caller.device {
         Some(uuid) => state.repo.device_by_uuid(&uuid).await.unwrap_or_else(|e| {
             warn!("looking up device: {e}");
             None
@@ -1084,7 +1131,6 @@ mod tests {
             wire(Some(DEVICE.into()), Some(token.clone())),
             wire(Some(DEVICE.into()), Some(other_key)),
             wire(Some(DEVICE.into()), Some("v4.public.nonsense".into())),
-            wire(None, Some(credential.clone())),
         ] {
             let refused = &refused;
             assert_eq!(
@@ -1098,6 +1144,17 @@ mod tests {
             assert_eq!(refused.get("/api/sync/pull").await.unwrap().status, 401);
         }
 
+        // With no cookie at all, as the downloadable page posts from a file
+        // (C15): taken as from the tablet the token names.
+        let from_file = wire(None, Some(credential.clone()));
+        let reply = (&from_file)
+            .post_json("/api/sync/push", push.clone())
+            .await
+            .unwrap();
+        assert_eq!(reply.status, 200, "{}", reply.body);
+        let reply: PushReply = serde_json::from_str(&reply.body).unwrap();
+        assert_eq!(reply.receipts[0].outcome, Outcome::Recorded);
+
         // Signed out everywhere (T1): the tablet's credential is void too.
         assert_eq!((&tablet).get("/api/sync/pull").await.unwrap().status, 200);
         state
@@ -1106,6 +1163,15 @@ mod tests {
             .await
             .unwrap();
         assert_eq!((&tablet).get("/api/sync/pull").await.unwrap().status, 401);
+        assert_eq!(
+            (&from_file)
+                .post_json("/api/sync/push", push.clone())
+                .await
+                .unwrap()
+                .status,
+            401,
+            "and the downloaded page's"
+        );
     }
 
     /// TBA for 2026now, on localhost: Q2 played, and an OPR for 254.

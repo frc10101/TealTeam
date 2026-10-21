@@ -359,6 +359,24 @@ pub struct Handoff {
     pub mac: String,
 }
 
+/// A tablet's forms saved as a file (C15), for a lead to upload where the
+/// tablet cannot reach the Pi and showing codes will not do. The body is
+/// the same [`HandoffBody`] a [`Handoff`] carries, but its `mac` is for
+/// [`Purpose::File`](crate::token::Purpose): a file is not tied to
+/// [`HANDOFF_WINDOW`], so it must never pass for codes. It lasts as long as
+/// the token it names, and each form records once.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct FormsFile {
+    /// [`FORMS_FILE`].
+    pub format: String,
+    pub version: u32,
+    pub body: String,
+    pub mac: String,
+}
+
+/// A [`FormsFile`]'s `format`.
+pub const FORMS_FILE: &str = "tealteam-forms";
+
 /// What a [`Handoff`]'s MAC covers.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct HandoffBody {

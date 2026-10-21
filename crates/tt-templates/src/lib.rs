@@ -1596,6 +1596,44 @@ impl ScoutForm {
     }
 }
 
+/// The downloadable scouting page (C15): one file, with everything it needs
+/// inside it, that a scout saves on their tablet and opens with no server.
+/// `static/js/scout-file.js` runs it from `data`.
+#[derive(Template)]
+#[template(path = "pages/scout_file.html")]
+pub struct ScoutFilePage {
+    pub scout: String,
+    pub event_name: String,
+    /// When it was saved from the server, on the event's clock.
+    pub made: String,
+    /// When its token runs out, on the event's clock.
+    pub expires: String,
+    /// The season form's version, as the scouting page's `tt-form`.
+    pub form_version: i64,
+    /// The season's form, blank.
+    pub sections: Vec<FormSection>,
+    pub notes_unshared: bool,
+    /// The stylesheet, inlined.
+    pub css: String,
+    /// What the page knows, as JSON safe inside a `<script>` element
+    /// ([`json_in_script`]).
+    pub data: String,
+    /// The scripts it runs, in order, each [`script_safe`].
+    pub scripts: Vec<String>,
+}
+
+/// A script's text as it can sit inside an inline `<script>` element: no
+/// `</` to end it early. `<\/` means `</` wherever a script can say it.
+pub fn script_safe(text: &str) -> String {
+    text.replace("</", "<\\/")
+}
+
+/// JSON as it can sit inside a `<script type="application/json">`: every
+/// `<`, which JSON only has inside strings, as `\u003c`.
+pub fn json_in_script(json: &str) -> String {
+    json.replace('<', "\\u003c")
+}
+
 /// The schema's sections and fields, filled in with any answers so far.
 ///
 /// With no answer yet a counter shows its minimum, so leaving it alone records

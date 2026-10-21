@@ -126,6 +126,9 @@ pub enum Purpose {
     Handoff,
     /// The Pi's answer to them ([`crate::qr::HandoffReceipts`]).
     Receipt,
+    /// The same forms saved as a file (C15), which a lead uploads: not
+    /// bound to [`crate::qr::HANDOFF_WINDOW`], so never taken as codes.
+    File,
 }
 
 impl Purpose {
@@ -133,6 +136,7 @@ impl Purpose {
         match self {
             Purpose::Handoff => b"tt-handoff:v1\n",
             Purpose::Receipt => b"tt-receipt:v1\n",
+            Purpose::File => b"tt-file:v1\n",
         }
     }
 }
@@ -530,6 +534,7 @@ mod tests {
         let made = mac(&key, Purpose::Handoff, "the forms");
         assert!(mac_holds(&key, Purpose::Handoff, "the forms", &made));
         assert!(!mac_holds(&key, Purpose::Receipt, "the forms", &made));
+        assert!(!mac_holds(&key, Purpose::File, "the forms", &made));
         assert!(!mac_holds(&key, Purpose::Handoff, "other forms", &made));
         assert!(!mac_holds(&[1u8; 32], Purpose::Handoff, "the forms", &made));
 

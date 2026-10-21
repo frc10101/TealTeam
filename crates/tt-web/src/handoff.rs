@@ -26,7 +26,9 @@ use chrono::{DateTime, Utc};
 use tracing::{info, warn};
 use tt_core::form::{RawAnswers, read_answers_as_given};
 use tt_core::outbox::{MAX_PER_PUSH, Outcome, QueuedObservation, Receipt};
-use tt_core::qr::{self, HandedForm, Handoff, HandoffBody, HandoffReceipts, Kind, ReceiptBody};
+use tt_core::qr::{
+    self, FormsFile, HandedForm, Handoff, HandoffBody, HandoffReceipts, Kind, ReceiptBody,
+};
 use tt_core::token::{self, Purpose};
 use tt_core::user::User;
 use tt_repo::Repo;
@@ -67,20 +69,85 @@ pub async fn receive(
                 .into(),
         );
     }
-    let not_forms = |e: serde_json::Error| {
-        fail(format!(
-            "Nothing was recorded: those codes are not a scout's forms ({e})."
-        ))
-    };
     let handoff: Handoff = match serde_json::from_slice(&bytes) {
         Ok(handoff) => handoff,
-        Err(e) => return not_forms(e),
+        Err(e) => {
+            return fail(format!(
+                "Nothing was recorded: those codes are not a scout's forms ({e})."
+            ));
+        }
     };
+    let what = Carried {
+        are: "those codes are",
+        were: "those codes were",
+        purpose: Purpose::Handoff,
+        windowed: true,
+    };
+    take(state, lead, &handoff.body, &handoff.mac, what, query).await
+}
+
+/// Record what a scout's saved file carries (C15): the forms the
+/// downloadable scouting page could not deliver, as `static/js/scout-file.js`
+/// saves them. The same checks as codes, but by [`Purpose::File`], and with
+/// no [`qr::HANDOFF_WINDOW`]: the file lasts as long as the token it names.
+pub async fn receive_file(
+    state: &AppState,
+    lead: &User,
+    text: &str,
+    query: &str,
+) -> Result<HandoffResult, Vec<String>> {
+    let file: FormsFile = match serde_json::from_str::<FormsFile>(text) {
+        Ok(file) if file.format == qr::FORMS_FILE && file.version == 1 => file,
+        Ok(_) => {
+            return Err(vec![
+                "Nothing was recorded: that file is not a scout's saved forms.".into(),
+            ]);
+        }
+        Err(e) => {
+            return Err(vec![format!(
+                "Nothing was recorded: that file is not a scout's saved forms ({e})."
+            )]);
+        }
+    };
+    let what = Carried {
+        are: "that file is",
+        were: "that file was",
+        purpose: Purpose::File,
+        windowed: false,
+    };
+    take(state, lead, &file.body, &file.mac, what, query).await
+}
+
+/// How the forms came: codes, or a file.
+struct Carried {
+    /// For the lead: `"those codes are"`, `"those codes were"`.
+    are: &'static str,
+    were: &'static str,
+    purpose: Purpose,
+    /// Codes must be fresh; a file need not be.
+    windowed: bool,
+}
+
+/// Check a body and its MAC as `what` says, and record its forms.
+async fn take(
+    state: &AppState,
+    lead: &User,
+    signed_body: &str,
+    mac: &str,
+    what: Carried,
+    query: &str,
+) -> Result<HandoffResult, Vec<String>> {
+    let fail = |why: String| Err(vec![why]);
     // Read before it is checked, for who to check it as; nothing in it is
     // believed until the MAC holds.
-    let body: HandoffBody = match serde_json::from_str(&handoff.body) {
+    let body: HandoffBody = match serde_json::from_str(signed_body) {
         Ok(body) => body,
-        Err(e) => return not_forms(e),
+        Err(e) => {
+            return fail(format!(
+                "Nothing was recorded: {} not a scout's forms ({e}).",
+                what.are
+            ));
+        }
     };
     if body.forms.len() > MAX_PER_PUSH {
         return fail(format!(
@@ -96,11 +163,11 @@ pub async fn receive(
             ));
         }
     };
-    if !token::mac_holds(&key, Purpose::Handoff, &handoff.body, &handoff.mac) {
+    if !token::mac_holds(&key, what.purpose, signed_body, mac) {
         info!(lead = %lead.email, scout = %user.email, "refused a handoff whose MAC does not hold");
         return fail(format!(
-            "Nothing was recorded: those codes were not made by {}'s tablet, or were changed. {signed_in_again}",
-            user.name
+            "Nothing was recorded: {} not made by {}'s tablet, or changed since. {signed_in_again}",
+            what.were, user.name
         ));
     }
     let device = state
@@ -117,7 +184,7 @@ pub async fn receive(
     // last measurement (S12) says.
     let offset = device.as_ref().and_then(|d| d.clock_offset_ms).unwrap_or(0);
     let made = DateTime::from_timestamp_millis(body.at.saturating_add(offset));
-    if made.is_none_or(|made| (now - made).abs() > qr::HANDOFF_WINDOW) {
+    if what.windowed && made.is_none_or(|made| (now - made).abs() > qr::HANDOFF_WINDOW) {
         return fail(format!(
             "Nothing was recorded: those codes are more than {} minutes old, or the tablet's clock is off. \
              Have the scout press Hide and show the codes again.",
@@ -165,7 +232,8 @@ pub async fn receive(
         device = %body.scout.device,
         sent = rows.len(),
         recorded,
-        "forms handed over by QR"
+        by = if what.windowed { "QR" } else { "file" },
+        "forms handed over"
     );
     let scan = HandoffScan {
         at: now,
@@ -517,7 +585,7 @@ mod tests {
             let codes = qr::frames(Kind::Handoff, &serde_json::to_vec(&bad).unwrap()).unwrap();
             let (_, page) = post_frames(&state, &sam, &codes).await;
             assert!(
-                page.contains("were not made by Kim&#39;s tablet, or were changed"),
+                page.contains("were not made by Kim&#39;s tablet, or changed since"),
                 "{page}"
             );
         }
@@ -755,5 +823,269 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Kim's tablet, known to the Pi, and the token and key it was given.
+    async fn kims_tablet(state: &AppState) -> (String, serde_json::Value) {
+        let kim = sign_up(state, "Kim").await;
+        let kims_tablet = format!("{kim}; {KIMS_TABLET}");
+        let heartbeat = Request::post("/api/device/heartbeat")
+            .header(header::COOKIE, &kims_tablet)
+            .body(Body::empty())
+            .unwrap();
+        assert_eq!(send(state, heartbeat).await.0, 200);
+        let issue = Request::post("/api/auth/token")
+            .header(header::COOKIE, &kims_tablet)
+            .body(Body::empty())
+            .unwrap();
+        let (status, issued) = send(state, issue).await;
+        assert_eq!(status, 200, "{issued}");
+        (kims_tablet, serde_json::from_str(&issued).unwrap())
+    }
+
+    #[tokio::test]
+    async fn a_scout_downloads_a_scouting_page_that_needs_no_server() {
+        let state = state().await;
+        let _sam = sign_up(&state, "Sam").await;
+        let (kims_tablet, _) = kims_tablet(&state).await;
+
+        let request = Request::get("/submission/download?event=2026now")
+            .header(header::COOKIE, &kims_tablet)
+            .header(header::HOST, "pi.lan:8080")
+            .header(header::ACCEPT, "text/html")
+            .body(Body::empty())
+            .unwrap();
+        let response = router(state.clone()).oneshot(request).await.unwrap();
+        assert_eq!(response.status(), 200);
+        let saved_as = response.headers()[header::CONTENT_DISPOSITION]
+            .to_str()
+            .unwrap()
+            .to_string();
+        assert_eq!(
+            saved_as,
+            r#"attachment; filename="tealteam-scouting-2026now-kim.html""#
+        );
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let page = String::from_utf8(bytes.to_vec()).unwrap();
+
+        // Everything is inside it: it loads nothing from anywhere.
+        for outside in ["<script src", "<link", "@import", r#"href="/"#] {
+            assert!(!page.contains(outside), "{outside}");
+        }
+        assert_eq!(
+            page.matches("<script").count(),
+            page.matches("</script>").count(),
+            "no script ends early"
+        );
+        assert!(page.contains(".scout-form"), "the stylesheet");
+        assert!(page.contains("window.ttToken = {"), "scout-file.js");
+        assert!(page.contains("window.ttHmac"), "hmac.js");
+        assert!(page.contains(r#"name="f.teleop_scored""#), "the form");
+        assert!(page.contains("data-handoff"), "the QR handoff");
+        // Plain http, as at an event: nothing that needs a secure context.
+        assert!(!page.contains("serviceWorker.register"));
+        assert!(!page.contains("navigator.storage.getDirectory"));
+
+        let data = page
+            .split(r#"id="tt-file-data">"#)
+            .nth(1)
+            .and_then(|rest| rest.split("</script>").next())
+            .unwrap();
+        let data: serde_json::Value = serde_json::from_str(data).unwrap();
+        assert_eq!(data["pi"], "http://pi.lan:8080");
+        assert_eq!(data["scout"], "Kim");
+        assert_eq!(data["event"], "2026now");
+        assert_eq!(data["matches"][0]["key"], "2026now_qm2");
+        assert_eq!(data["matches"][0]["red"][1], 254);
+        let credential = format!(
+            "Bearer {}~{}",
+            data["token"].as_str().unwrap(),
+            data["key"].as_str().unwrap()
+        );
+
+        // Opened from a file its origin is null, and it sends no cookie:
+        // the browser asks first, then posts with the credential.
+        let ask = Request::options("/api/sync/push")
+            .header(header::ORIGIN, "null")
+            .header("access-control-request-method", "POST")
+            .header(
+                "access-control-request-headers",
+                "authorization, content-type",
+            )
+            .header("access-control-request-private-network", "true")
+            .body(Body::empty())
+            .unwrap();
+        let answer = router(state.clone()).oneshot(ask).await.unwrap();
+        assert_eq!(answer.status(), 204);
+        let allowed = |name: &str| answer.headers()[name].to_str().unwrap().to_string();
+        assert_eq!(allowed("access-control-allow-origin"), "*");
+        assert!(allowed("access-control-allow-headers").contains("authorization"));
+        assert_eq!(allowed("access-control-allow-private-network"), "true");
+        assert!(
+            !answer
+                .headers()
+                .contains_key("access-control-allow-credentials")
+        );
+
+        let entry = |id: &str, team: i32| {
+            serde_json::json!({
+                "client_record_id": id,
+                "match_key": "2026now_qm2",
+                "team_number": team,
+                "payload": {"starting_position": "center", "teleop_scored": 9, "broke_down": true},
+                "schema_version": state.season.version,
+                "observed_at": Utc::now() - TimeDelta::minutes(30),
+            })
+        };
+        let push = serde_json::json!({ "observations": [entry(GOOD, 254), entry(WRONG, 9999)] });
+        let request = Request::post("/api/sync/push")
+            .header(header::ORIGIN, "null")
+            .header(header::AUTHORIZATION, &credential)
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(push.to_string()))
+            .unwrap();
+        let response = router(state.clone()).oneshot(request).await.unwrap();
+        assert_eq!(response.status(), 200);
+        assert_eq!(response.headers()["access-control-allow-origin"], "*");
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let reply: tt_core::outbox::PushReply = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(reply.receipts[0].outcome, Outcome::Recorded);
+        assert!(matches!(reply.receipts[1].outcome, Outcome::Refused { .. }));
+        let pending = state.repo.pending_observations("2026now").await.unwrap();
+        assert_eq!(pending[0].scouter_name.as_deref(), Some("Kim"));
+        let open = state.repo.open_refusals().await.unwrap();
+        assert!(
+            open[0].device_name.is_some(),
+            "from the tablet the token names"
+        );
+
+        // A refusal of the whole push is readable from the file too.
+        let request = Request::post("/api/sync/push")
+            .header(header::ORIGIN, "null")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from(push.to_string()))
+            .unwrap();
+        let response = router(state.clone()).oneshot(request).await.unwrap();
+        assert_eq!(response.status(), 401);
+        assert_eq!(response.headers()["access-control-allow-origin"], "*");
+
+        // The scouting page offers it; with no device id there is no file.
+        let (_, scout) = send(
+            &state,
+            Request::get("/submission?event=2026now")
+                .header(header::COOKIE, &kims_tablet)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert!(
+            scout.contains(r#"href="/submission/download?event=2026now""#),
+            "{scout}"
+        );
+        let kim = kims_tablet.split("; ").next().unwrap();
+        let request = Request::get("/submission/download?event=2026now")
+            .header(header::COOKIE, kim)
+            .body(Body::empty())
+            .unwrap();
+        assert_eq!(send(&state, request).await.0, 400);
+    }
+
+    async fn post_file(state: &AppState, cookie: &str, file: &str) -> (u16, String) {
+        let body: String = form_urlencoded::Serializer::new(String::new())
+            .append_pair("file", file)
+            .finish();
+        let request = Request::post("/api/handoff?event=2026now")
+            .header(header::COOKIE, cookie)
+            .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .body(Body::from(body))
+            .unwrap();
+        send(state, request).await
+    }
+
+    #[tokio::test]
+    async fn a_lead_uploads_the_forms_a_scout_saved_as_a_file() {
+        let state = state().await;
+        let sam = sign_up(&state, "Sam").await;
+        let (_, issued) = kims_tablet(&state).await;
+        // Saved hours ago, far outside the codes' window: a file need not
+        // be fresh.
+        let then = Utc::now() - TimeDelta::hours(3);
+        let (codes, key) = signed(&issued, vec![form(GOOD, "254", then)], then);
+        let file = |mac: &str| {
+            serde_json::json!({
+                "format": "tealteam-forms",
+                "version": 1,
+                "body": codes.body,
+                "mac": mac,
+            })
+            .to_string()
+        };
+        let file_mac = token::mac(&key, Purpose::File, &codes.body);
+
+        // A MAC made for codes does not pass as a file's, nor a file's as
+        // codes': the window is the codes' only.
+        let (status, page) = post_file(&state, &sam, &file(&codes.mac)).await;
+        assert_eq!(status, 200);
+        assert!(
+            page.contains("that file was not made by Kim&#39;s tablet"),
+            "{page}"
+        );
+        let as_codes = Handoff {
+            body: codes.body.clone(),
+            mac: file_mac.clone(),
+        };
+        let frames = qr::frames(Kind::Handoff, &serde_json::to_vec(&as_codes).unwrap()).unwrap();
+        let (_, page) = post_frames(&state, &sam, &frames).await;
+        assert!(
+            page.contains("those codes were not made by Kim&#39;s tablet"),
+            "{page}"
+        );
+        let (_, page) = post_file(&state, &sam, "{}").await;
+        assert!(
+            page.contains("that file is not a scout&#39;s saved forms"),
+            "{page}"
+        );
+        assert!(
+            state
+                .repo
+                .pending_observations("2026now")
+                .await
+                .unwrap()
+                .is_empty()
+        );
+
+        let (status, page) = post_file(&state, &sam, &file(&file_mac)).await;
+        assert_eq!(status, 200);
+        assert!(
+            page.contains("Recorded 1 of 1 form from Kim&#39;s tablet"),
+            "{page}"
+        );
+        assert!(
+            page.contains("Show this to Kim"),
+            "with the receipt to scan"
+        );
+        let pending = state.repo.pending_observations("2026now").await.unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].scouter_name.as_deref(), Some("Kim"));
+        // Uploaded twice, recorded once.
+        let (_, page) = post_file(&state, &sam, &file(&file_mac)).await;
+        assert!(page.contains("Recorded 1 of 1 form"), "{page}");
+        assert_eq!(
+            state
+                .repo
+                .pending_observations("2026now")
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+
+        // A scout cannot upload one.
+        let kim = sign_up(&state, "Lee").await;
+        assert_eq!(post_file(&state, &kim, &file(&file_mac)).await.0, 303);
     }
 }

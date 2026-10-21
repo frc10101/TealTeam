@@ -12,7 +12,9 @@
 //! and whose 24-hour session ran out overnight: the outbox still goes as
 //! them. The token must verify, the key must be its own, it must name this
 //! device and the user's current token epoch, and its user must still
-//! exist. Pages still need a session; a token signs no one in.
+//! exist. Sent with no device cookie at all (the downloadable scouting
+//! page, C15), it is taken as from the tablet it names. Pages still need a
+//! session; a token signs no one in.
 //! [`holder_key`] checks who a QR handoff (S13) names, which carries no
 //! token at all.
 
@@ -53,16 +55,30 @@ async fn seed(state: &AppState) -> Result<[u8; 32], RepoError> {
 }
 
 #[derive(Serialize)]
-struct Issued {
-    token: String,
+pub struct Issued {
+    pub token: String,
     /// The device key (T1), unpadded base64url: kept beside the token, sent
     /// with it as the credential, and the key of a handoff's and a
     /// receipt's MAC. Never inside the token.
-    key: String,
-    expires_at: DateTime<Utc>,
+    pub key: String,
+    pub expires_at: DateTime<Utc>,
     /// The Pi's Ed25519 public key, unpadded base64url, for a device that
     /// wants to verify a token itself.
-    public_key: String,
+    pub public_key: String,
+}
+
+/// A token and its key for `user` on `device`: what `POST /api/auth/token`
+/// answers, and what the downloadable scouting page (C15) is cut with.
+pub async fn issue_to(state: &AppState, user: &User, device: &str) -> Result<Issued, RepoError> {
+    let seed = seed(state).await?;
+    let epoch = state.repo.token_epoch(user.id).await?;
+    let claims = Claims::new(user, device, epoch, Utc::now());
+    Ok(Issued {
+        token: token::sign(&seed, &claims),
+        key: URL_SAFE_NO_PAD.encode(token::device_key(&seed, &Holder::of(&claims))),
+        expires_at: claims.expires_at,
+        public_key: URL_SAFE_NO_PAD.encode(token::public_key(&seed)),
+    })
 }
 
 /// `POST /api/auth/token`: a token for the signed-in user on this device.
@@ -78,42 +94,45 @@ pub async fn issue(
         )
             .into_response();
     };
-    let seed = match seed(&state).await {
-        Ok(seed) => seed,
+    match issue_to(&state, &user, &device).await {
+        Ok(issued) => ([(header::CACHE_CONTROL, "no-store")], Json(issued)).into_response(),
         Err(e) => {
-            warn!("token key: {e}");
-            return (
+            warn!("issuing a token: {e}");
+            (
                 StatusCode::SERVICE_UNAVAILABLE,
                 Json(json!({ "error": "storage unavailable" })),
             )
-                .into_response();
+                .into_response()
         }
-    };
-    let epoch = match state.repo.token_epoch(user.id).await {
-        Ok(epoch) => epoch,
-        Err(e) => {
-            warn!("token epoch: {e}");
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({ "error": "storage unavailable" })),
-            )
-                .into_response();
-        }
-    };
-    let claims = Claims::new(&user, &device, epoch, Utc::now());
-    let issued = Issued {
-        token: token::sign(&seed, &claims),
-        key: URL_SAFE_NO_PAD.encode(token::device_key(&seed, &Holder::of(&claims))),
-        expires_at: claims.expires_at,
-        public_key: URL_SAFE_NO_PAD.encode(token::public_key(&seed)),
-    };
-    ([(header::CACHE_CONTROL, "no-store")], Json(issued)).into_response()
+    }
 }
 
 /// Who a sync request is from: the session's user, else a credential's.
 pub async fn sync_user(state: &AppState, headers: &HeaderMap) -> Option<User> {
+    sync_caller(state, headers).await.map(|caller| caller.user)
+}
+
+/// Who a sync request is from, and the tablet it is from.
+pub struct Caller {
+    pub user: User,
+    /// The device cookie's id, or, for a credential sent with none, the
+    /// tablet its token was issued to.
+    pub device: Option<String>,
+}
+
+/// [`sync_user`], with the tablet. A credential sent with no device cookie
+/// is taken as from the tablet its token names: that is the downloadable
+/// scouting page (C15), a file on the tablet whose posts carry no cookie of
+/// the Pi's. The cookie never was the secret -- anyone holding the token
+/// and key can send it too -- so a missing one costs nothing, and one that
+/// names another tablet is still refused.
+pub async fn sync_caller(state: &AppState, headers: &HeaderMap) -> Option<Caller> {
+    let cookie = device_uuid(headers);
     if let Some(user) = current_user(state, headers).await {
-        return Some(user);
+        return Some(Caller {
+            user,
+            device: cookie,
+        });
     }
     let bearer = headers
         .get(header::AUTHORIZATION)?
@@ -121,31 +140,37 @@ pub async fn sync_user(state: &AppState, headers: &HeaderMap) -> Option<User> {
         .ok()?
         .strip_prefix("Bearer ")?
         .trim();
-    let device = device_uuid(headers)?;
+    let shown = cookie.as_deref().unwrap_or("-");
     // A token alone, as kept before T1, is no credential.
     let Some((bearer, key)) = token::split_credential(bearer) else {
-        info!(%device, "refused a token sent without its key");
+        info!(device = %shown, "refused a token sent without its key");
         return None;
     };
     let claims = match verify(state, bearer).await {
         Ok(claims) => claims,
         Err(e) => {
-            info!(%device, "refused a token: {e}");
+            info!(device = %shown, "refused a token: {e}");
             return None;
         }
     };
-    if claims.device != device {
-        info!(%device, issued_to = %claims.device, "refused a token from another device");
+    if cookie
+        .as_ref()
+        .is_some_and(|device| claims.device != *device)
+    {
+        info!(device = %shown, issued_to = %claims.device, "refused a token from another device");
         return None;
     }
     match holder_key(state, &Holder::of(&claims)).await {
-        Ok((user, expected)) if token::same(&expected, &key) => Some(user),
+        Ok((user, expected)) if token::same(&expected, &key) => Some(Caller {
+            user,
+            device: Some(claims.device),
+        }),
         Ok(_) => {
-            info!(%device, "refused a token with another key");
+            info!(device = %shown, "refused a token with another key");
             None
         }
         Err(e) => {
-            info!(%device, "refused a token: {e}");
+            info!(device = %shown, "refused a token: {e}");
             None
         }
     }

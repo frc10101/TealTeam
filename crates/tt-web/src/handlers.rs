@@ -1070,16 +1070,21 @@ pub async fn receive_handoff(
     EventParam(requested): EventParam,
     Form(pairs): Form<Vec<(String, String)>>,
 ) -> Response {
-    let frames = pairs
-        .iter()
-        .find(|(name, _)| name == "frames")
-        .map(|(_, value)| value.as_str())
-        .unwrap_or_default();
+    let field = |wanted: &str| {
+        pairs
+            .iter()
+            .find(|(name, _)| name == wanted)
+            .map(|(_, value)| value.as_str())
+    };
     let query = requested
         .as_deref()
         .map(|key| format!("?event={key}"))
         .unwrap_or_default();
-    let outcome = handoff::receive(&state, &user, frames, &query).await;
+    // A scout's saved file (C15), or the codes off their screen (S13).
+    let outcome = match field("file") {
+        Some(file) => handoff::receive_file(&state, &user, file, &query).await,
+        None => handoff::receive(&state, &user, field("frames").unwrap_or_default(), &query).await,
+    };
     let (nav, _) = event_page(&state, Some(&user), requested.as_deref()).await;
     match outcome {
         Ok(result) => html(handoff::page(nav, Some(result), Vec::new())),
@@ -1098,6 +1103,18 @@ pub(crate) fn wants_html(headers: &HeaderMap) -> bool {
 }
 
 // ── Scouting (U4) ───────────────────────────────────────────────────────────
+
+/// `GET /submission/download`: the scouting page as one file, for this
+/// scout on this tablet, to open with no server (C15).
+pub async fn download_scout_file(
+    State(state): State<AppState>,
+    Auth(user): Auth,
+    EventParam(requested): EventParam,
+    headers: HeaderMap,
+) -> Response {
+    let (_, context) = event_page(&state, Some(&user), requested.as_deref()).await;
+    crate::scout_file::download(&state, &user, &context, &headers).await
+}
 
 pub async fn submission(
     State(state): State<AppState>,

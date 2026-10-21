@@ -239,6 +239,7 @@ pub fn router(state: AppState) -> Router {
         .route("/account", get(handlers::account))
         .route("/help", get(handlers::help))
         .route("/submission", get(handlers::submission))
+        .route("/submission/download", get(handlers::download_scout_file))
         .route("/teams", get(handlers::team))
         .route("/notes", get(handlers::notes))
         .route("/graph", get(handlers::graph))
@@ -302,7 +303,12 @@ pub fn router(state: AppState) -> Router {
         .route("/api/sync/pull", get(crate::sync::pull))
         .route("/api/sync/stream", get(crate::sync::stream))
         .route("/api/sync/snapshot", get(crate::snapshot::download))
-        .route("/api/sync/push", post(crate::push::push))
+        .route(
+            "/api/sync/push",
+            post(crate::push::push)
+                .options(crate::push::preflight)
+                .layer(axum::middleware::map_response(crate::push::open_to_files)),
+        )
         .route(
             "/api/sync/bundle",
             post(crate::bundle::push).layer(axum::extract::DefaultBodyLimit::max(
