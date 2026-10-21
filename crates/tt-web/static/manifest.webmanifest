@@ -2,7 +2,7 @@
   "id": "/",
   "name": "TealTeam Scouting",
   "short_name": "TealTeam",
-  "description": "FRC 10101's scouting app, served by the team's Pi at the event.",
+  "description": "The team's FTC scouting app, served by its Pi at the event.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

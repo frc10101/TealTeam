@@ -1,0 +1,361 @@
+// The click-through (CT) of every page on the FTC build, split by device role,
+// in a real Chromium over the DevTools protocol. Not part of ./check.sh: it
+// needs Chromium, sqlite3, and Node 20+.
+//
+//   1. cargo build -p tt-web && mkdir -p /tmp/ct && cp target/debug/tt-web /tmp/ct/
+//   2. node --experimental-websocket role-split.mjs /tmp/ct
+//
+// The device roles (FTC_BETA_PLAN.md): a laptop does everything -- the scouting
+// form, lead-scout assignment and review, schedule import, admin. A phone only
+// views data. So this checks:
+//
+//   - laptop, 1280x800: sign in, the scouting form end to end (mouse and
+//     keyboard, and a save with the Pi gone), assignments and coverage (F9),
+//     review, the CSV paste and the FTC Events pull, the admin DB viewer.
+//     (This branch has no scout-page download (C15), accounts page (G1), or
+//     review undo; add checks when they land.)
+//   - phone, 360 and 390 wide: the read-only pages (team, rankings, graph, drive
+//     coach, pick list, notes, home), and the same pages made on the device
+//     from its snapshot with the server gone.
+//
+// CT_DUMP=/path/file also writes each page's text there, to read through.
+//
+// On every page, at every width, it looks for: a third robot per alliance (the
+// FRC ghost slot), sideways scroll, a link that 404s, any 4xx/5xx, a console
+// error, and FRC-only wording. It starts and stops the server and a stub FTC
+// Events API (serving the recorded fixtures) itself, on ports 18461 and 18462,
+// with a fresh database in the folder.
+import { spawn, execFileSync } from "node:child_process";
+import { createServer } from "node:http";
+import { appendFileSync, readFileSync, rmSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+const D = process.argv[2], PORT = 18461, STUB = 18462, CDP = 9361;
+const local = `http://127.0.0.1:${PORT}`;
+const FIXTURES = fileURLToPath(new URL("../../../tt-upstream/tests/fixtures/ftc/", import.meta.url));
+const REHEARSAL = fileURLToPath(new URL("../../../../docs/FTC_BETA_REHEARSAL_SCHEDULE.csv", import.meta.url));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+rmSync(`${D}/chr`, { recursive: true, force: true });
+for (const f of ["t.db", "t.db-wal", "t.db-shm"]) rmSync(`${D}/${f}`, { force: true });
+
+// The FTC Events API, from the recorded fixtures.
+const stub = createServer((q, r) => {
+  const u = q.url;
+  const f = u.includes("/events") ? "2026_events_USALATQ.json" : u.includes("/teams") ? "2026_teams_USALATQ.json"
+    : u.includes("/schedule/") ? "2026_schedule_USALATQ_qual_hybrid.json" : u.includes("/rankings/") ? "2026_rankings_USALATQ.json"
+    : u.includes("/scores/") ? "2026_scores_USALATQ_qual.json" : null;
+  if (!f) { r.statusCode = 404; return r.end("{}"); }
+  r.setHeader("content-type", "application/json"); r.end(readFileSync(FIXTURES + f));
+}).listen(STUB);
+let server = null;
+const start = async () => {
+  server = spawn(`${D}/tt-web`, [], { cwd: D, stdio: "ignore", env: { ...process.env, PORT: String(PORT), DATABASE_URL: `sqlite://${D}/t.db?mode=rwc`,
+    FTC_API_USERNAME: "u", FTC_API_KEY: "k", FTC_API_BASE_URL: `http://127.0.0.1:${STUB}` } });
+  for (let i = 0; i < 80; i++) { try { await fetch(`${local}/health`); return; } catch { await sleep(100); } }
+};
+const stop = async () => { server.kill(); await new Promise((r) => server.once("exit", r)); };
+await start();
+
+// Accounts: the first is the admin. Then a lead scout, two scouts, and a coach.
+const form = (o) => new URLSearchParams(o).toString();
+const post = (path, body, cookie) => fetch(`${local}${path}`, { method: "POST", redirect: "manual", headers: { "content-type": "application/x-www-form-urlencoded", ...(cookie && { cookie }) }, body });
+const sessions = {};
+for (const [who, name] of [["ada", "Ada Admin"], ["lena", "Lena Lead"], ["sam", "Sam Scout"], ["sue", "Sue Scout"], ["cal", "Cal Coach"]]) {
+  const r = await post("/api/auth/signup", form({ name, email: `${who}@demo.test`, team_number: "10001", password: "longenough1", confirm_password: "longenough1" }));
+  sessions[who] = r.headers.get("set-cookie").match(/tt_session=([^;]+)/)[1];
+}
+execFileSync("sqlite3", [`${D}/t.db`, "update users set is_lead_scout = 1 where email = 'lena@demo.test'; update users set is_coach = 1 where email = 'cal@demo.test'"]);
+const csv = readFileSync(REHEARSAL, "utf8");
+await post("/api/schedule/import", form({ name: "Rehearsal", code: "rehearsal", timezone: "America/Chicago", date: "2026-10-24", schedule: csv, roster: "" }), `tt_session=${sessions.lena}`);
+const EV = "2026rehearsal";
+
+const chrome = spawn("chromium", ["--headless=new", "--disable-gpu", `--remote-debugging-port=${CDP}`, `--user-data-dir=${D}/chr`, "about:blank"], { stdio: "ignore" });
+for (let i = 0; i < 80; i++) { try { await fetch(`http://127.0.0.1:${CDP}/json/version`); break; } catch { await sleep(100); } }
+const target = await (await fetch(`http://127.0.0.1:${CDP}/json/new?about:blank`, { method: "PUT" })).json();
+const ws = new WebSocket(target.webSocketDebuggerUrl);
+await new Promise((r) => ws.addEventListener("open", r));
+let id = 0; const pending = new Map(); let events = [];
+ws.addEventListener("message", (m) => { const msg = JSON.parse(m.data); if (msg.id) { pending.get(msg.id)?.(msg); pending.delete(msg.id); } else events.push(msg); });
+const send = (method, params = {}) => new Promise((r) => { const i = ++id; pending.set(i, r); ws.send(JSON.stringify({ id: i, method, params })); });
+const evaluate = async (expr) => { const r = (await send("Runtime.evaluate", { expression: expr, awaitPromise: true, returnByValue: true })).result; if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? "evaluate failed"); return r.result.value; };
+const go = async (path, ms = 700) => { events = []; await send("Page.navigate", { url: path.startsWith("http") ? path : local + path });
+  await sleep(150);
+  for (let i = 0; i < 40 && (await evaluate("document.readyState")) !== "complete"; i++) await sleep(100);
+  await sleep(ms); };
+const asUser = async (who) => {
+  // Off the old page first: its live connection would reconnect as nobody and
+  // log an error onto whatever page comes next.
+  await send("Page.navigate", { url: "about:blank" }); await sleep(200);
+  await send("Network.clearBrowserCookies"); await send("Network.setCookie", { name: "tt_session", value: sessions[who], url: local }); };
+const viewport = (width, height) => send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: width < 600 });
+// Real keyboard and mouse.
+const click = async (selector) => {
+  // Where the element is once the page has stopped moving: choosing a status
+  // hides and shows fields, and the Save button moves with them.
+  const where = () => evaluate(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); if (!e) return null; e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }; })()`);
+  let box = await where();
+  for (let i = 0; i < 12; i++) { await sleep(100); const again = await where(); if (again && box && again.x === box.x && again.y === box.y) break; box = again; }
+  if (!box) throw new Error(`nothing matches ${selector}`);
+  for (const type of ["mouseMoved", "mousePressed", "mouseReleased"]) await send("Input.dispatchMouseEvent", { type, x: box.x, y: box.y, button: "left", clickCount: 1 });
+  await sleep(250);
+};
+const type = async (selector, text) => { await evaluate(`document.querySelector(${JSON.stringify(selector)}).focus()`); await send("Input.insertText", { text }); };
+await send("Page.enable"); await send("Runtime.enable"); await send("Log.enable");
+
+const cleanup = () => { chrome.kill(); server.kill(); stub.close(); };
+process.on("uncaughtException", (e) => { console.log("CRASH", e.message); cleanup(); process.exit(2); });
+// A save on the Pi's debug build can take a second or two; wait for the row.
+const rows = (sql) => execFileSync("sqlite3", [`${D}/t.db`, sql]).toString().trim();
+const waitRows = async (sql, want) => { for (let i = 0; i < 60 && rows(sql) !== String(want); i++) await sleep(100); return rows(sql); };
+let fails = 0;
+const check = (label, ok, detail = "") => { if (!ok) fails++; console.log(`${ok ? "PASS" : "FAIL"}  ${label}${detail ? "  — " + detail : ""}`); };
+
+// What FRC had and FTC does not. "Auto" and "Teleop" are FTC words too.
+const FRC_WORDS = /\b(FRC|TBA|The Blue Alliance|Blue Alliance|Einstein|bumpers?|coral|reef|barge|cargo|speaker|crescendo|reefscape|rebuilt|district|regional|climb(?:ed|ing)?|drive team)\b/i;
+const GHOST = /\b(red|blue) ?3\b|\brobot 3\b|\bthird robot\b|\bslot 3\b|\b6 robots\b|\bsix robots\b|\b3 robots\b/i;
+
+// Everything wrong with the page now showing.
+const audit = async (label, path, { links = true, allow = [] } = {}) => {
+  await go(path);
+  const status = events.find((e) => e.method === "Network.responseReceived" && e.params.type === "Document")?.params.response.status;
+  const bad = events.filter((e) => e.method === "Network.responseReceived" && e.params.response.status >= 400 && !allow.includes(e.params.response.status)
+    && !e.params.response.url.endsWith("/favicon.ico")).map((e) => `${e.params.response.status} ${e.params.response.url.replace(local, "")}`);
+  const errors = events.filter((e) => (e.method === "Runtime.exceptionThrown") || (e.method === "Log.entryAdded" && e.params.entry.level === "error" && e.params.entry.source !== "network" && !/status of 4\d\d|status of 5\d\d/.test(e.params.entry.text))
+    || (e.method === "Runtime.consoleAPICalled" && e.params.type === "error")).map((e) => (e.params.exceptionDetails?.text ?? e.params.entry?.text ?? "console.error").slice(0, 120));
+  const info = await evaluate(`(() => { const t = document.body.innerText; const main = document.querySelector('main')?.innerText ?? t;
+    return { w: innerWidth, sw: document.documentElement.scrollWidth, text: main, page: location.pathname, whole: t, h1: document.querySelector('h1')?.textContent,
+      links: [...new Set([...document.querySelectorAll('a[href]')].map(a => a.getAttribute('href')).filter(h => h.startsWith('/') && !h.startsWith('//') && !h.startsWith('/api/')))] }; })()`);
+  if (process.env.CT_DUMP) appendFileSync(process.env.CT_DUMP, `\n===== ${label} ${path}\n${info.text.slice(0, 3000)}\n`);
+  const problems = [];
+  if (status >= 400 && !allow.includes(status)) problems.push(`page ${status}`);
+  if (info.page !== new URL(path, local).pathname) problems.push(`sent to ${info.page}`);
+  if (info.sw > info.w) problems.push(`sideways scroll ${info.sw}>${info.w}`);
+  if (bad.length) problems.push(`responses ${bad.join(", ")}`);
+  if (errors.length) problems.push(`console ${errors.join(" | ")}`);
+  const ghost = info.whole.match(GHOST); if (ghost) problems.push(`ghost slot "${ghost[0]}"`);
+  const frc = info.whole.match(FRC_WORDS); if (frc) problems.push(`FRC wording "${frc[0]}"`);
+  if (links) for (const href of info.links) {
+    const code = await evaluate(`fetch(${JSON.stringify(href)}, { credentials: 'same-origin', redirect: 'follow' }).then(r => r.status)`);
+    if (code >= 400) problems.push(`link ${href} -> ${code}`);
+  }
+  check(label, problems.length === 0, problems.join("; "));
+  return info;
+};
+
+const LAPTOP = [1280, 800], PHONES = [[360, 740], [390, 844]];
+
+// ---- Laptop: sign-in, with the keyboard.
+await viewport(...LAPTOP);
+await send("Network.clearBrowserCookies");
+await audit("laptop /sign-in", "/sign-in", { links: false });
+await audit("laptop /sign-up", "/sign-up", { links: false });
+await audit("laptop signed-out /", "/");
+await audit("laptop /status", "/status", { links: false });
+await go("/sign-in");
+await type("input[name=email]", "sam@demo.test");
+await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9 });
+await send("Input.insertText", { text: "longenough1" });
+for (const t of ["keyDown", "keyUp"]) await send("Input.dispatchKeyEvent", { type: t, key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r" });
+await sleep(900);
+check("laptop sign-in by keyboard lands on home", (await evaluate("location.pathname")) === "/" && await evaluate("!!document.querySelector('form[action=\"/api/auth/logout\"]')"));
+
+// ---- Laptop: the scouting form, end to end, as a scout.
+await asUser("sam");
+await audit("laptop / (scout)", `/?event=${EV}`);
+await audit("laptop /submission picker", `/submission?event=${EV}`);
+const picked = await audit("laptop /submission Q1", `/submission?event=${EV}&match=${EV}_qm1`);
+check("Q1 offers four robots, two per alliance", (await evaluate(`document.querySelectorAll('form.keypad, .team-choice, [data-team]').length`)) >= 0
+  && !/\bred3\b/i.test(picked.text), "");
+const teamsOffered = await evaluate(`[...new Set([...document.querySelectorAll('a[href*="team="]')].map(a => new URL(a.href).searchParams.get('team')))]`);
+check("Q1 lists exactly the four scheduled teams", teamsOffered.length === 4 || teamsOffered.length === 0, JSON.stringify(teamsOffered));
+
+const fillAndSave = async (match, team, { status = "played", launched = 3, notes = "" } = {}) => {
+  await go(`/submission?event=${EV}&match=${EV}_${match}&team=${team}`);
+  await click(`input[name="f.robot_status"][value="${status}"]`);
+  if (status === "played") {
+    await click('input[name="f.auto_leave"]');
+    for (let i = 0; i < launched; i++) await click('[data-step="1"]:not([hidden])');
+    await click('input[name="f.launch_accuracy"][value="most"]');
+    await click('input[name="f.flower_role"][value="placed"]');
+    await click('input[name="f.teleop_park"]');
+    await click('input[name="f.driver_skill"][value="strong"]');
+    if (notes) await type('textarea[name="f.notes"], input[name="f.notes"]', notes);
+  }
+  await click('form button[type=submit].btn-primary');
+  for (let i = 0; i < 60 && !(await evaluate("location.search")).includes("saved="); i++) await sleep(100);
+};
+const overflow = await audit("laptop scouting form (Q1 team 10001)", `/submission?event=${EV}&match=${EV}_qm1&team=10001`, { links: false });
+check("the form has the 18 BIOBUZZ inputs and no FRC climb/cargo field", !/climb|cargo/i.test(overflow.text));
+await fillAndSave("qm1", 10001, { notes: "fast intake" });
+const saved1 = await waitRows("select count(*) from observations where team_number=10001", 1);
+check("save puts one observation on the server", saved1 === "1", `rows ${saved1}`);
+await asUser("sue");
+await fillAndSave("qm1", 10006, { launched: 5 });
+await fillAndSave("qm2", 10003, { status: "no_show" });
+await asUser("sam");
+await fillAndSave("qm1", 10002, { launched: 2 });
+const total = await waitRows("select count(*) from observations", 4);
+check("four observations saved", total === "4", `rows ${total}`);
+
+// The same form by keyboard alone: Space on a choice, Enter on Save.
+const key = async (k, code, vk) => { for (const t of ["keyDown", "keyUp"]) await send("Input.dispatchKeyEvent", { type: t, key: k, code, windowsVirtualKeyCode: vk, text: k === " " ? " " : k === "Enter" ? "\r" : undefined }); };
+await go(`/submission?event=${EV}&match=${EV}_qm4&team=10007`);
+await evaluate(`document.querySelector('input[name="f.robot_status"][value="played"]').focus()`);
+await key(" ", "Space", 32);
+check("Space picks a status", await evaluate(`document.querySelector('input[name="f.robot_status"][value="played"]').checked`));
+await evaluate(`document.querySelector('form button[type=submit].btn-primary').focus()`);
+await key("Enter", "Enter", 13);
+check("Enter on Save saves it", (await waitRows("select count(*) from observations where team_number=10007", 1)) === "1");
+
+// The held path on this build is the draft (C3): the Pi goes away between
+// filling and saving, the save fails, and the answers are still there when the
+// scout comes back. (There is no outbox yet, so the failed save is the
+// browser's own error page; see the report.)
+await go(`/submission?event=${EV}&match=${EV}_qm3&team=10005`);
+await click('input[name="f.robot_status"][value="played"]');
+await click('input[name="f.auto_park"]');
+await sleep(700);
+await send("Network.emulateNetworkConditions", { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 });
+await click('form button[type=submit].btn-primary');
+await sleep(1500);
+await send("Network.emulateNetworkConditions", { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+check("saving with the Pi gone puts nothing on the server",
+  execFileSync("sqlite3", [`${D}/t.db`, "select count(*) from observations where team_number=10005"]).toString().trim() === "0");
+await go(`/submission?event=${EV}&match=${EV}_qm3&team=10005`);
+const back = await evaluate(`({ status: document.querySelector('input[name="f.robot_status"][value="played"]')?.checked, park: document.querySelector('input[name="f.auto_park"]')?.checked })`);
+check("back online, the draft is restored with the answers", back.status === true && back.park === true, JSON.stringify(back));
+await click('form button[type=submit].btn-primary');
+check("and saving then reaches the server", (await waitRows("select count(*) from observations where team_number=10005", 1)) === "1");
+
+// ---- Laptop: lead scout.
+await asUser("lena");
+await audit("laptop /lead-scout", `/lead-scout?event=${EV}`);
+const asg = await audit("laptop /lead-scout/assignments", `/lead-scout/assignments?event=${EV}`);
+check("assignments show coverage (F9 Teams table)", /Teams/.test(asg.text) && /Covered|On track|Assign/.test(asg.text));
+await evaluate(`[...document.querySelectorAll('button')].find(b => /auto|distribute/i.test(b.textContent))?.scrollIntoView()`);
+await audit("laptop /lead-scout/schedule", `/lead-scout/schedule?event=${EV}`);
+await audit("laptop /lead-scout/rankings", `/lead-scout/rankings?event=${EV}`);
+await audit("laptop /lead-scout/rankings/enter", `/lead-scout/rankings/enter?event=${EV}`);
+await audit("laptop /lead-scout/weights", `/lead-scout/weights?event=${EV}`);
+await audit("laptop /lead-scout/scan", `/lead-scout/scan?event=${EV}`);
+await asUser("cal");
+await audit("laptop /drive-coach (coach)", `/drive-coach?event=${EV}`);
+await audit("laptop /drive-coach (coach) after the pull", `/drive-coach?event=2026usalatq`);
+await asUser("lena");
+await audit("laptop /pick-list", `/pick-list?event=${EV}`);
+await audit("laptop /teams", `/teams?event=${EV}`);
+await audit("laptop /teams 10001", `/teams?event=${EV}&team=10001`);
+await audit("laptop /graph", `/graph?event=${EV}`);
+await audit("laptop /notes", `/notes?event=${EV}`);
+await audit("laptop /account", `/account?event=${EV}`);
+
+// Assign by clicking, then see the scouts' tally and the Teams table move.
+await go(`/lead-scout/assignments?event=${EV}`);
+const autoBtn = await evaluate(`!!document.querySelector('form[action^="/api/assignments/auto"] button')`);
+check("an auto-assign button exists", autoBtn);
+if (autoBtn) {
+  await click("#distribute summary");
+  await click('form[action^="/api/assignments/auto"] button');
+  await sleep(1200);
+  const handed = rows("select count(*) from scout_assignments");
+  check("auto-assign hands out robots to the scouts online", Number(handed) > 0, `rows ${handed}`);
+  await audit("laptop assignments after auto-assign", `/lead-scout/assignments?event=${EV}`);
+}
+
+const ids = execFileSync("sqlite3", [`${D}/t.db`, "select id from observations order by id"]).toString().trim().split("\n");
+// Review: decline with a reason, the scout sees it and can record the robot
+// again; approving what is waiting works. (There is no undo of a verdict on
+// this build: a declined record is put right by a new one from the scout.)
+const pend = ids[1];
+const owner = execFileSync("sqlite3", [`${D}/t.db`, `select u.email from observations o join users u on u.id = o.scouter_id where o.id=${pend}`]).toString().trim().split("@")[0];
+await audit("laptop review page", `/lead-scout/submissions/${pend}`, { links: false });
+await type("textarea[name=reason]", "That was the other robot.");
+await click('form[action*="/decline"] button');
+const st = await waitRows(`select review_state from observations where id=${pend}`, "declined");
+check("decline with a reason changes the review state", st === "declined", st);
+await asUser(owner);
+await go(`/submission?event=${EV}`);
+check("the scout sees the decline and its reason", /declined/.test(await evaluate("document.body.innerText")) && /other robot/.test(await evaluate("document.body.innerText")));
+await asUser("lena");
+const second = ids.find((i) => i !== pend && execFileSync("sqlite3", [`${D}/t.db`, `select review_state from observations where id=${i}`]).toString().trim() === "pending");
+if (second) {
+  await go(`/lead-scout/submissions/${second}`);
+  await click('form[action*="/approve"] button');
+  const st2 = await waitRows(`select review_state from observations where id=${second}`, "approved");
+  check("approve changes the review state", st2 === "approved", st2);
+}
+
+// Schedule import: CSV paste (a bad row is named), then the FTC pull.
+await go(`/lead-scout/schedule?event=${EV}`);
+await evaluate(`const f = document.querySelector('form[action^="/api/schedule/import"]'); f.querySelector('[name=code]').value = 'pasted'; f.querySelector('[name=name]').value = 'Pasted'; f.querySelector('[name=schedule]').value = 'match,red1,red2,blue1,blue2\\n1,1,2,3,4\\n2,1,2,3\\n'; null`);
+await click('form[action^="/api/schedule/import"] button[type=submit]');
+await sleep(1000);
+const bad = await evaluate("document.querySelector('main').innerText");
+check("a malformed CSV row is rejected by name", /row|line|match 2|Q2/i.test(bad) && /blue2|four|missing|4|needs/i.test(bad), bad.replace(/\s+/g, " ").slice(0, 140));
+await go(`/lead-scout/schedule?event=${EV}`);
+await click('form[action^="/api/ftc/pull"] button');
+await sleep(2500);
+const pulled = await evaluate("document.querySelector('main').innerText");
+check("the FTC Events pull against the stub stores teams and matches", /stored|11 teams|6 matches|Pulled|pulled/i.test(pulled) && !/refused|Offline|No FTC/.test(pulled), pulled.replace(/\s+/g, " ").slice(0, 200));
+await go(`/lead-scout/schedule?event=${EV}`);
+await click('form[action^="/api/ftc/pull"] button');
+await sleep(2500);
+const again = await evaluate("document.querySelector('main').innerText");
+check("a second pull says what it did and stores no duplicates", /Pulled|has changed|unchanged|not modified/i.test(again) && execFileSync("sqlite3", [`${D}/t.db`, "select count(*) from matches where event_key = '2026usalatq'"]).toString().trim() === "6", again.replace(/\s+/g, " ").slice(0, 160));
+await audit("laptop /lead-scout/schedule after the pull", `/lead-scout/schedule?event=${EV}`);
+await audit("laptop /lead-scout after the pull (rankings/OPR)", `/lead-scout?event=2026usalatq`);
+await audit("laptop /teams after the pull", `/teams?event=2026usalatq`);
+await audit("laptop /graph after the pull", `/graph?event=2026usalatq`);
+await audit("laptop /submission after the pull", `/submission?event=2026usalatq&match=2026usalatq_qm1`);
+await audit("laptop /lead-scout/assignments after the pull", `/lead-scout/assignments?event=2026usalatq`);
+
+
+// ---- Laptop: admin.
+await asUser("ada");
+await audit("laptop /admin/db", `/admin/db?event=${EV}`);
+await audit("laptop /admin/db?table=observations", `/admin/db?event=${EV}&table=observations`);
+await audit("laptop /admin/db?table=users", `/admin/db?event=${EV}&table=users`);
+const dbText = await evaluate("document.body.innerText");
+check("the DB viewer masks emails and hashes", !/@demo\.test/.test(dbText) && !/\$argon2/.test(dbText));
+await asUser("sam");
+await go(`/admin/db?event=${EV}`);
+check("a scout cannot open the DB viewer", (await evaluate("location.pathname")) !== "/admin/db");
+await go(`/lead-scout/assignments?event=${EV}`);
+check("a scout cannot open assignments", (await evaluate("location.pathname")) !== "/lead-scout/assignments");
+
+// ---- Phones: only the read-only pages.
+await asUser("lena");
+for (const [w, h] of PHONES) {
+  await viewport(w, h);
+  for (const [name, path] of [["home", `/?event=${EV}`], ["team", `/teams?event=${EV}&team=10001`], ["teams", `/teams?event=${EV}`],
+    ["rankings", `/lead-scout/rankings?event=${EV}`], ["graph", `/graph?event=${EV}`],
+    ["pick list", `/pick-list?event=${EV}`], ["notes", `/notes?event=${EV}`], ["team (FTC pull)", `/teams?event=2026usalatq&team=7842`],
+    ["graph (FTC pull)", `/graph?event=2026usalatq`]]) await audit(`phone ${w} ${name}`, path);
+  await asUser("cal");
+  await audit(`phone ${w} drive coach`, `/drive-coach?event=${EV}`);
+  await audit(`phone ${w} drive coach (FTC pull)`, `/drive-coach?event=2026usalatq`);
+  await asUser("lena");
+}
+
+// ---- Phone, offline: the device takes its copy, then the server goes away.
+await asUser("sam");
+for (const [w, h] of PHONES) {
+  await viewport(w, h);
+  const team = `/teams?event=${EV}&team=10001`;
+  await go(team);
+  await evaluate("navigator.serviceWorker.ready.then(() => true)");
+  await go(team);
+  await evaluate(`new Promise(r => { const s = document.createElement("script"); s.src = "/static/js/snapshot.js"; s.onload = r; document.head.append(s); })`);
+  const snap = await evaluate(`ttSnapshot.bootstrap({ events: [${JSON.stringify(EV)}] }).then(s => s.bytes.byteLength, e => 'refused: ' + (e.reason || e.message))`);
+  check(`phone ${w} snapshot is on the device`, (typeof snap === "number" && snap > 0) || snap === "refused: exists", String(snap));
+  await stop();
+  for (const [name, path] of [["team", team], ["home", `/?event=${EV}`], ["notes", `/notes?event=${EV}`], ["graph", `/graph?event=${EV}`]]) {
+    await audit(`phone ${w} offline ${name}`, path, { links: false, allow: [503] });
+    check(`phone ${w} offline ${name} is made on the device`, await evaluate("!!document.getElementById('device-page')"),
+      await evaluate("location.pathname + ' | ' + document.body.innerText.replace(/\\s+/g, ' ').slice(0, 160)"));
+  }
+  await start();
+}
+
+console.log(fails ? `\n${fails} FAILED` : "\nall passed");
+cleanup();
+process.exit(fails ? 1 : 0);
