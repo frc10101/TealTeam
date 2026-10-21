@@ -3,7 +3,7 @@
 
 use askama::Template;
 
-use crate::{Chip, Nav};
+use crate::Nav;
 
 #[derive(Template)]
 #[template(path = "pages/compare.html")]
@@ -17,20 +17,29 @@ pub struct ComparePage {
     /// Said, not refused: a limit reached, a default chosen.
     pub notices: Vec<String>,
     /// The chosen teams, in column order.
-    pub teams: Vec<Chip>,
-    /// Every other team with something scouted.
-    pub more_teams: Vec<Chip>,
+    pub teams: Vec<i32>,
     pub max_teams: usize,
     /// Every match, or the last few.
     pub windows: Vec<Choice>,
     /// The team the others are measured against; the first is "nobody".
     pub references: Vec<Choice>,
+    /// What the Add search lists: everyone not already compared.
+    pub addable: Vec<AddOption>,
     pub columns: Vec<CompareColumn>,
     pub groups: Vec<CompareGroup>,
     /// The chosen teams' scout estimate, match by match, on Graph.
     pub graph_href: String,
     /// Where the numbers come from.
     pub source: String,
+}
+
+/// A team the Add search can add.
+#[derive(Debug, Clone)]
+pub struct AddOption {
+    pub number: i32,
+    pub name: String,
+    /// `"scout estimate 9.3 · #2 · 12 observations"`, or `"not scouted yet"`.
+    pub detail: String,
 }
 
 /// An option in a select.
@@ -54,6 +63,8 @@ pub struct CompareColumn {
     pub thin: bool,
     /// The team the others are measured against.
     pub reference: bool,
+    /// This comparison without this team.
+    pub remove_href: String,
 }
 
 #[derive(Debug, Clone)]

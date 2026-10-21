@@ -8,7 +8,10 @@
 
   The choices are a GET form, so a comparison is a URL to send to the drive
   coach. static/js/compare.js submits it the moment a choice changes; without
-  it the Show button does.
+  it the Show button does. Teams come and go two ways: + Add team opens a
+  search of the event's teams, each a submit button sending `add=`, and
+  Remove on each column is a link to the same comparison without that team.
+  Adding to a full comparison makes room (make_room).
 #}
 {% extends "layout.html" %}
 {% block content %}
@@ -26,21 +29,29 @@
       <form method="get" class="compare-form stack" id="compare-form">
         {% if !nav.event.selected.is_empty() %}<input type="hidden" name="event" value="{{ nav.event.selected }}">{% endif %}
         <input type="hidden" name="chosen" value="1">
-        <fieldset class="chips" data-kind="team" data-max="{{ max_teams }}">
-          <legend>Teams <span class="hint">up to {{ max_teams }}, best scout estimate first</span></legend>
-          <div class="chip-row">
-            {% for chip in teams %}{% call chip_input(chip) %}{% endcall %}{% endfor %}
-          </div>
-          {% if !more_teams.is_empty() %}
-            <details class="more-chips"{% if teams.is_empty() %} open{% endif %}>
-              <summary>More teams ({{ more_teams.len() }})</summary>
-              <div class="chip-row">
-                {% for chip in more_teams %}{% call chip_input(chip) %}{% endcall %}{% endfor %}
+        {% for team in teams %}<input type="hidden" name="team" value="{{ team }}">{% endfor %}
+        <div class="compare-options">
+          {% if !addable.is_empty() %}
+            <details class="cmp-add" id="compare-add"{% if teams.is_empty() %} open{% endif %}>
+              <summary class="btn btn-primary">+ Add team</summary>
+              <div class="cmp-add-panel">
+                <label class="form-label" for="compare-search">Search by number or name</label>
+                <input class="form-input" id="compare-search" type="search" autocomplete="off"
+                       placeholder="e.g. 1678 or Gearheads">
+                <ul class="cmp-add-list" id="compare-addable">
+                  {% for a in addable %}
+                    <li data-search="{{ a.number }} {{ a.name|lower }}">
+                      <button class="cmp-add-item" type="submit" name="add" value="{{ a.number }}">
+                        <strong>{{ a.number }}</strong>{% if !a.name.is_empty() %} <span>{{ a.name }}</span>{% endif %}
+                        <span class="muted">{{ a.detail }}</span>
+                      </button>
+                    </li>
+                  {% endfor %}
+                </ul>
+                <p class="hint" id="compare-none" hidden>No team at this event matches.</p>
               </div>
             </details>
           {% endif %}
-        </fieldset>
-        <div class="compare-options">
           <label class="form-label" for="compare-last">Matches
             <select class="form-select" id="compare-last" name="last">
               {% for w in windows %}<option value="{{ w.value }}"{% if w.selected %} selected{% endif %}>{{ w.label }}</option>{% endfor %}
@@ -53,6 +64,7 @@
           </label>
           <button type="submit" class="btn btn-secondary" data-compare-show>Show</button>
         </div>
+        <p class="hint">{{ teams.len() }} of {{ max_teams }} teams. Adding one to a full comparison takes the last one's place, never ours or the one measured against.</p>
       </form>
       {% for notice in notices %}<p class="hint" role="status">{{ notice }}</p>{% endfor %}
       <p class="hint" id="compare-status" role="status" aria-live="polite"></p>
@@ -75,7 +87,8 @@
             <th scope="col"><span class="visually-hidden">What</span></th>
             {% for c in columns %}
               <th scope="col" data-slot="{{ c.slot }}"{% if c.reference %} class="reference"{% endif %}>
-                <span class="swatch" aria-hidden="true"></span>
+                <span class="cmp-head"><span class="swatch" aria-hidden="true"></span>
+                <a class="cmp-remove" href="{{ c.remove_href }}" title="Take {{ c.number }} out" aria-label="Remove {{ c.number }} from the comparison">Remove</a></span>
                 <a href="{{ c.team_href }}">{{ c.number }}</a>
                 {% if !c.name.is_empty() %}<span class="cmp-name">{{ c.name }}</span>{% endif %}
                 <span class="cmp-matches muted">{{ c.matches }}{% if c.thin %} <span class="badge badge-gray">thin</span>{% endif %}{% if c.reference %} <span class="badge badge-teal">reference</span>{% endif %}</span>
@@ -114,12 +127,5 @@
 
 {% if unavailable.is_empty() %}<p class="muted graph-source">{{ source }}</p>{% endif %}
 {% endblock %}
-
-{% macro chip_input(chip) %}
-<label class="chip" data-slot="{{ chip.slot }}" title="{{ chip.title }}">
-  <input type="checkbox" name="team" value="{{ chip.value }}"{% if chip.on %} checked{% endif %}>
-  <span class="swatch" aria-hidden="true"></span><span>{{ chip.label }}</span>
-</label>
-{% endmacro %}
 
 {% block scripts %}{% if unavailable.is_empty() %}<script src="/static/js/compare.js" defer></script>{% endif %}{% endblock %}

@@ -78,22 +78,41 @@ check("robot status is a tally", (await evaluate(`[...document.querySelectorAll(
 check("OPR is in the official group", (await evaluate(`document.getElementById("compare-table").textContent.includes("Official, from the event")`)));
 check("no horizontal scroll at 1280px", await evaluate(`document.documentElement.scrollWidth <= 1280`), String(await evaluate(`document.documentElement.scrollWidth`)));
 
-const first = await evaluate(`document.querySelector('[data-kind="team"] .chip-row input:checked').value`);
-await evaluate(`document.querySelector('[data-kind="team"] input[value="${first}"]').click()`);
+const first = await evaluate(`document.querySelector('#compare-table thead th[data-slot="1"] a:not(.cmp-remove)').textContent`);
+await evaluate(`document.querySelector('#compare-table thead th[data-slot="1"] .cmp-remove').click()`);
 await sleep(1500);
-check("unticking a team reloads with three", (await evaluate(cells)) === 3, String(await evaluate(cells)));
+check("Remove takes a team out", (await evaluate(cells)) === 3, String(await evaluate(cells)));
 check("and the URL keeps the choice", !(await evaluate(`location.search`)).includes(`team=${first}`), await evaluate(`location.search`));
 
 const ref = await evaluate(`document.querySelector("#compare-ref option:nth-child(2)").value`);
 await evaluate(`(() => { const s = document.getElementById("compare-ref"); s.value = "${ref}"; s.dispatchEvent(new Event("change", { bubbles: true })); })()`);
 await sleep(1500);
-check("a reference team is marked", (await evaluate(`document.querySelector("#compare-table thead th.reference a").textContent`)) === ref);
+check("a reference team is marked", (await evaluate(`document.querySelector("#compare-table thead th.reference a:not(.cmp-remove)").textContent`)) === ref);
 check("the others say how far ahead or behind", (await evaluate(`document.querySelectorAll("#compare-table .cmp-delta.ahead, #compare-table .cmp-delta.behind").length`)) > 3);
 
 await evaluate(`(() => { const s = document.getElementById("compare-last"); s.value = "3"; s.dispatchEvent(new Event("change", { bubbles: true })); })()`);
 await sleep(1500);
 check("the last three matches only", (await evaluate(`[...document.querySelectorAll(".cmp-matches")].every(s => s.textContent.trim().startsWith("3 matches"))`)), await evaluate(`[...document.querySelectorAll(".cmp-matches")].map(s => s.textContent.trim()).join("|")`));
 await shoot("compare-1280.png", 1280);
+
+// Moving teams in and out: Remove, and + Add team's search.
+await go(`${local}/compare?event=2026demo&chosen=1&team=254&team=1678&team=971`);
+await evaluate(`document.querySelector('#compare-table thead th[data-slot="2"] .cmp-remove').click()`);
+await sleep(1500);
+check("Remove on the middle column takes that team out", (await evaluate(cells)) === 2 && !(await evaluate(`location.search`)).includes("team=1678"), await evaluate(`location.search`));
+await evaluate(`document.querySelector("#compare-add summary").click()`);
+await sleep(200);
+check("+ Add team opens a search, with the cursor in it", await evaluate(`document.activeElement.id === "compare-search"`));
+const type = async (text) => evaluate(`(() => { const i = document.getElementById("compare-search"); i.value = ${JSON.stringify(text)}; i.dispatchEvent(new Event("input")); return [...document.querySelectorAll("#compare-addable li:not([hidden])")].map(li => li.querySelector("strong").textContent).join(","); })()`);
+check("the search lists the teams not compared", (await type("")) === "1678,10101" || (await type("")) === "10101,1678", await type(""));
+check("it finds a team by its name", (await type("team 1678")) === "1678");
+check("it finds a team by part of its number", (await type("67")) === "1678");
+check("and says when nothing matches", (await type("99999")) === "" && !(await evaluate(`document.getElementById("compare-none").hidden`)));
+await type("1678");
+await evaluate(`document.getElementById("compare-search").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))`);
+await sleep(1500);
+check("Enter adds the match, as the last column", (await evaluate(`[...document.querySelectorAll("#compare-table thead th[data-slot] a:not(.cmp-remove)")].map(a => a.textContent).join(",")`)) === "254,971,1678");
+
 
 await go(`${local}/lead-scout/rankings?event=2026demo`);
 await evaluate(`[...document.querySelectorAll('input[form="rank-compare"]')].slice(0, 2).forEach(i => i.click())`);
@@ -104,7 +123,7 @@ check("ticking two on Rankings compares those two", (await evaluate(cells)) === 
 await go(`${local}/teams?event=2026demo&team=10101`);
 const link = await evaluate(`[...document.querySelectorAll("a")].find(a => a.textContent.includes("Compare with the best"))?.getAttribute("href") || ""`);
 await go(`${local}${link}`);
-check("the team page's link puts that team first, as the reference", (await evaluate(`document.querySelector("#compare-table thead th.reference a")?.textContent`)) === "10101", link);
+check("the team page's link puts that team first, as the reference", (await evaluate(`document.querySelector("#compare-table thead th.reference a:not(.cmp-remove)")?.textContent`)) === "10101", link);
 
 await send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
 await go(`${local}/compare?event=2026demo`);

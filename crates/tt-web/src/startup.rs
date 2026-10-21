@@ -4882,6 +4882,37 @@ mod flow_tests {
         .await;
         assert!(nobody.contains(r#"<option value="" selected>Nobody</option>"#));
 
+        // The × on a column is the same comparison without that team.
+        assert!(
+            ours.contains(
+                r#"href="/compare?event=2026now&#38;chosen=1&#38;team=10101" title="Take 254 out""#
+            ),
+            "{ours}"
+        );
+        let added = text(
+            get(
+                &state,
+                "/compare?event=2026now&chosen=1&team=254&add=10101",
+                Some(&sam),
+            )
+            .await,
+        )
+        .await;
+        assert!(
+            added.contains(r#"<option value="10101" selected>10101</option>"#),
+            "added, and ours"
+        );
+        let unknown = text(
+            get(
+                &state,
+                "/compare?event=2026now&chosen=1&team=254&add=4242",
+                Some(&sam),
+            )
+            .await,
+        )
+        .await;
+        assert!(unknown.contains("4242 is not a team at"), "{unknown}");
+
         let against = text(get(&state, "/compare?event=2026now&ref=254", Some(&sam)).await).await;
         assert!(against.contains(r#"<span class="badge badge-teal">reference</span>"#));
     }

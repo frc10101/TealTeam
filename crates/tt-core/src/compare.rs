@@ -82,6 +82,25 @@ impl Window {
     }
 }
 
+/// Put `add` among `teams`, which already hold at most `max`. When they are
+/// full, the last one not in `spare` (our team, the reference) makes room.
+/// Returns the team that made room, if one had to.
+pub fn make_room(teams: &mut Vec<i32>, add: i32, spare: &[i32], max: usize) -> Option<i32> {
+    if teams.contains(&add) || max == 0 {
+        return None;
+    }
+    let mut dropped = None;
+    if teams.len() >= max
+        && let Some(at) = teams.iter().rposition(|t| !spare.contains(t))
+    {
+        dropped = Some(teams.remove(at));
+    }
+    if teams.len() < max {
+        teams.push(add);
+    }
+    dropped
+}
+
 /// How spread out a set of values is.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Spread {
@@ -433,6 +452,20 @@ mod tests {
         let one = spread(&[3.0]).unwrap();
         assert_eq!((one.median, one.q1, one.q3, one.sd), (3.0, 3.0, 3.0, None));
         assert_eq!(spread(&[]), None);
+    }
+
+    #[test]
+    fn a_team_added_to_a_full_comparison_takes_the_place_of_the_last_one_not_spared() {
+        let mut teams = vec![1, 2, 3];
+        assert_eq!(make_room(&mut teams, 4, &[], 4), None);
+        assert_eq!(teams, [1, 2, 3, 4]);
+        assert_eq!(make_room(&mut teams, 5, &[4], 4), Some(3), "4 is ours");
+        assert_eq!(teams, [1, 2, 4, 5]);
+        assert_eq!(make_room(&mut teams, 2, &[], 4), None, "already there");
+        assert_eq!(teams, [1, 2, 4, 5]);
+        let mut all_spared = vec![1, 2];
+        assert_eq!(make_room(&mut all_spared, 3, &[1, 2], 2), None);
+        assert_eq!(all_spared, [1, 2], "nothing may go, so nothing comes in");
     }
 
     #[test]

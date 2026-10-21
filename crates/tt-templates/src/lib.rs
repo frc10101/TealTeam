@@ -23,7 +23,7 @@ mod coach;
 pub use coach::{AllianceView, CoachCard, CoachTeam, DriveCoachPage};
 mod compare;
 pub use compare::{
-    BoxPlot, Choice, CompareCell, CompareColumn, CompareGroup, ComparePage, CompareRow,
+    AddOption, BoxPlot, Choice, CompareCell, CompareColumn, CompareGroup, ComparePage, CompareRow,
 };
 mod graph;
 pub use graph::{Chip, GraphPage, TableRow, TeamTable};

@@ -24,6 +24,14 @@ students already know it. Two of its tabs map onto scouting data:
 A column per team (up to 6, colour-coded as on Graph) and a row per thing
 scouts record, in the order of the form.
 
+- **Moving teams in and out (user, 2026-10-21):**
+  - **Remove** on each team's column takes it out.
+  - **+ Add team** opens a search of the event's teams, by number or name,
+    best scout estimate first, each with its estimate, place and observation
+    count; tap one, or press Enter for the top match.
+  - The limit is 6 teams, which fit a Chromebook screen. Adding a 7th takes
+    the last column's place, never our own team or the one measured against,
+    and the page says which team made room.
 - **Every number comes with its spread.** "8.0" alone hides whether a team
   scored 8, 8, 8 or 0, 8, 16. Each cell shows the per-match average, then the
   median, range, ± one standard deviation and how many matches it rests on.

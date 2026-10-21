@@ -503,9 +503,27 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
 .data-table.compare thead th:first-child { min-width: 0; }
 .data-table.compare thead th > * { display: block; }
 .data-table.compare thead th .swatch { display: inline-block; width: 0.75rem; height: 0.75rem; border-radius: 2px; background: var(--series); margin-bottom: 0.25rem; }
-.data-table.compare thead th a { font-size: 1rem; font-weight: 700; }
+.data-table.compare thead th a:not(.cmp-remove) { font-size: 1rem; font-weight: 700; }
 .data-table.compare thead th.reference { box-shadow: inset 0 -3px 0 var(--teal-500); }
 .cmp-name { color: var(--gray-100); overflow-wrap: anywhere; }
+.cmp-head { display: flex !important; align-items: center; justify-content: space-between; }
+.cmp-remove { display: inline-flex; align-items: center; min-height: 2rem; padding: 0 0.625rem;
+  font-size: 0.8125rem; font-weight: 500; text-decoration: none; color: var(--gray-300);
+  border: 1px solid var(--gray-700); border-radius: var(--radius); }
+.cmp-remove:hover, .cmp-remove:focus-visible { background: var(--gray-800); color: #fca5a5; border-color: #fca5a5; }
+@media (pointer: coarse) { .cmp-remove { min-height: var(--tap); } }
+.cmp-add { flex-basis: 100%; }
+.cmp-add > summary { display: inline-flex; list-style: none; cursor: pointer; }
+.cmp-add > summary::-webkit-details-marker { display: none; }
+.cmp-add-panel { margin-top: 0.75rem; display: grid; gap: 0.5rem; max-width: 36rem; }
+.cmp-add-list { list-style: none; margin: 0; padding: 0; max-height: 18rem; overflow-y: auto;
+  border: 1px solid var(--gray-700); border-radius: var(--radius); }
+.cmp-add-list li + li { border-top: 1px solid var(--gray-800); }
+.cmp-add-item { display: flex; flex-wrap: wrap; gap: 0.25rem 0.5rem; align-items: baseline; width: 100%;
+  min-height: var(--tap); padding: 0.5rem 0.75rem; background: none; border: 0; color: var(--gray-100);
+  text-align: left; font: inherit; cursor: pointer; }
+.cmp-add-item:hover, .cmp-add-item:focus-visible { background: var(--gray-800); }
+.cmp-add-item .muted { flex-basis: 100%; font-size: 0.8125rem; }
 .data-table.compare tbody th[scope="row"] { font-weight: 500; min-width: 9rem; }
 .cmp-hint { display: block; font-size: 0.75rem; font-weight: 400; }
 .cmp-group th { background: var(--gray-800); font-size: 0.8125rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--gray-300); }

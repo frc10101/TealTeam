@@ -16,8 +16,8 @@ use tt_core::season::{Payload, SeasonSchema};
 use tt_core::upstream;
 use tt_repo::LocalRepo;
 use tt_templates::{
-    BoxPlot, Chip, Choice, CompareCell, CompareColumn, CompareGroup, ComparePage, CompareRow, Nav,
-    team_href,
+    AddOption, BoxPlot, Choice, CompareCell, CompareColumn, CompareGroup, ComparePage, CompareRow,
+    Nav, team_href,
 };
 
 use crate::events::EventContext;
@@ -63,7 +63,6 @@ pub async fn page<R: LocalRepo>(
         errors: Vec::new(),
         notices: Vec::new(),
         teams: Vec::new(),
-        more_teams: Vec::new(),
         max_teams: MAX_TEAMS,
         windows: Window::OFFERED
             .iter()
@@ -74,6 +73,7 @@ pub async fn page<R: LocalRepo>(
             })
             .collect(),
         references: Vec::new(),
+        addable: Vec::new(),
         columns: Vec::new(),
         groups: Vec::new(),
         graph_href: String::new(),
@@ -190,6 +190,12 @@ pub async fn page<R: LocalRepo>(
             ));
         }
         teams
+    } else if !all("add").is_empty() {
+        // Adding to the defaults: start from them.
+        best.iter()
+            .map(|s| s.team_number)
+            .take(DEFAULT_TEAMS)
+            .collect()
     } else {
         // `ref` alone, from a team page: that team against the best here.
         let first = asked_ref.filter(|r| offered.contains(r));
@@ -214,33 +220,54 @@ pub async fn page<R: LocalRepo>(
         top
     };
     // `ref=` (Nobody) is a choice too; only no `ref` at all means ours.
-    let reference = if all("ref").is_empty() {
-        viewer_team
-    } else {
-        asked_ref
-    }
-    .filter(|r| teams.contains(r));
+    let explicit_ref = !all("ref").is_empty();
+    let wanted_ref = if explicit_ref { asked_ref } else { viewer_team };
 
-    let chip = |team: i32| {
-        let name = name_of(team);
-        let slot = teams.iter().position(|t| *t == team).map_or(0, |i| i + 1);
-        Chip {
-            value: team.to_string(),
-            label: team.to_string(),
-            title: if name.is_empty() {
-                format!("Team {team}")
-            } else {
-                format!("{team} · {name}")
-            },
-            on: slot > 0,
-            slot,
+    // `add`: a team picked in the Add search. A full
+    // comparison makes room by dropping its last team, never ours or the
+    // reference, and says so.
+    let mut teams = teams;
+    for raw in all("add").into_iter().filter(|a| !a.is_empty()) {
+        let Some(add) = raw.parse::<i32>().ok().filter(|t| offered.contains(t)) else {
+            page.errors.push(format!(
+                "{raw} is not a team at {}, so it was not added.",
+                selected.name
+            ));
+            continue;
+        };
+        let spare: Vec<i32> = [wanted_ref, viewer_team].into_iter().flatten().collect();
+        match compare::make_room(&mut teams, add, &spare, MAX_TEAMS) {
+            Some(out) => page.notices.push(format!(
+                "{MAX_TEAMS} teams fit side by side, so {out} made room for {add}."
+            )),
+            None if !teams.contains(&add) => page.errors.push(format!(
+                "{MAX_TEAMS} teams fit side by side, and none could make room for {add}. Take one out first."
+            )),
+            None => {}
         }
-    };
-    page.teams = teams.iter().map(|t| chip(*t)).collect();
-    page.more_teams = offered
+    }
+    let reference = wanted_ref.filter(|r| teams.contains(r));
+
+    page.teams = teams.clone();
+    // The Add search: everyone not compared yet, best scout estimate first,
+    // each with what would make a lead pick it.
+    page.addable = offered
         .iter()
         .filter(|t| !teams.contains(t))
-        .map(|t| chip(*t))
+        .map(|t| AddOption {
+            number: *t,
+            name: name_of(*t),
+            detail: match best.iter().position(|s| s.team_number == *t) {
+                Some(i) => format!(
+                    "scout estimate {} · #{} · {} observation{}",
+                    number(best[i].average),
+                    i + 1,
+                    best[i].n,
+                    if best[i].n == 1 { "" } else { "s" }
+                ),
+                None => "not scouted yet".into(),
+            },
+        })
         .collect();
     page.references = std::iter::once(Choice {
         value: String::new(),
@@ -296,6 +323,22 @@ pub async fn page<R: LocalRepo>(
             matches: format!("{n} match{}", if *n == 1 { "" } else { "es" }),
             thin: *n < THIN,
             reference: ref_index == Some(i),
+            remove_href: {
+                let rest: Vec<i32> = teams.iter().copied().filter(|o| o != t).collect();
+                let mut href = compare_href(&selected.key, &rest);
+                if window != Window::All {
+                    href.push_str(&format!("&last={}", window.as_str()));
+                }
+                // An explicit choice of reference stays, unless it is the one
+                // leaving.
+                if explicit_ref && asked_ref != Some(*t) {
+                    href.push_str(&format!(
+                        "&ref={}",
+                        asked_ref.map(|r| r.to_string()).unwrap_or_default()
+                    ));
+                }
+                href
+            },
         })
         .collect();
     page.groups = table
