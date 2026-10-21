@@ -1,0 +1,16 @@
+# name,email,role,team
+# One person a line. role is scout, lead, coach or admin. team is a team
+# number, or blank for PREP_TEAM_NUMBER. No commas inside a field. Lines
+# starting with # and the header line are skipped. Copy this file, edit the
+# copy, and point PREP_ROSTER at it. Emails are the sign-in names: lower case.
+name,email,role,team
+Alex Admin,alex.admin@example.com,admin,10101
+Lee Lead,lee.lead@example.com,lead,10101
+Casey Coach,casey.coach@example.com,coach,10101
+Sam Scout,sam.scout@example.com,scout,10101
+Riley Scout,riley.scout@example.com,scout,10101
+Jordan Scout,jordan.scout@example.com,scout,10101
+Taylor Scout,taylor.scout@example.com,scout,10101
+Morgan Scout,morgan.scout@example.com,scout,10101
+Quinn Scout,quinn.scout@example.com,scout,10101
+Drew Scout,drew.scout@example.com,scout,10101
