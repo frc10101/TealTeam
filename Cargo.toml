@@ -1,6 +1,11 @@
 [workspace]
 resolver = "2"
 members = ["crates/*"]
+# A bare `cargo run` (and `cargo run -- dev`) picks the server: the workspace has
+# two binaries, tt-web and tt-load, and cargo will not choose between them. CI
+# and check.sh pass --workspace or -p, so build, test and clippy still cover
+# every crate.
+default-members = ["crates/tt-web"]
 
 # Dependencies are declared once here and inherited by member crates with
 # `workspace = true`, so a version bump happens in exactly one place.

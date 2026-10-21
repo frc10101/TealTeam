@@ -37,3 +37,6 @@ crates/tt-web/static/client/
 
 # Sign-in sheets from deploy/event/prep-event.sh: temporary passwords
 signin-sheet-*.txt
+
+# The dev environment's throwaway database (`cargo run -- dev`)
+/dev-data/

@@ -131,8 +131,8 @@ impl Upstream {
         self
     }
 
-    /// No upstream at all.
-    #[cfg(test)]
+    /// No upstream at all: the dev environment (`crate::dev`) makes no
+    /// network requests, and tests start from it.
     pub fn disabled() -> Self {
         Self::new(None, None, EventFilters::all(), Uplink::new())
     }

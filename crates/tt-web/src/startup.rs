@@ -402,7 +402,7 @@ async fn health_json(State(state): State<AppState>) -> impl IntoResponse {
     )
 }
 
-fn init_tracing() {
+pub(crate) fn init_tracing() {
     use tracing_subscriber::EnvFilter;
     // sqlx logs every statement at INFO, which buries everything else.
     let filter = EnvFilter::try_from_default_env()

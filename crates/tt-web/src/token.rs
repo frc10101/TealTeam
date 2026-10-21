@@ -41,7 +41,7 @@ use crate::startup::AppState;
 #[derive(Default)]
 pub struct Keys(OnceCell<[u8; 32]>);
 
-async fn seed(state: &AppState) -> Result<[u8; 32], RepoError> {
+pub(crate) async fn seed(state: &AppState) -> Result<[u8; 32], RepoError> {
     state
         .tokens
         .0

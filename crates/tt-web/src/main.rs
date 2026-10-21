@@ -15,6 +15,7 @@ mod auth;
 mod backups;
 mod bundle;
 mod config;
+mod dev;
 mod errors;
 mod events;
 mod handlers;
@@ -54,6 +55,10 @@ commands:
   check-backup [file]
               restore file (default: the newest timed backup) into a fresh
               database and say what is in it. The restore test.
+  dev [--fresh] [--check] [--port N]
+              a throwaway server on fake data in ./dev-data: every role, two
+              teams, a schedule, and the access rules checked first. --fresh
+              wipes the data, --check only seeds and checks. docs/DEV_ENVIRONMENT.md
   help        show this message
 
 Configuration comes from the environment and .env files; see .env.example.";
@@ -69,6 +74,7 @@ enum Command {
     BulkLoad,
     Backup(Option<PathBuf>),
     CheckBackup(Option<PathBuf>),
+    Dev(dev::Options),
     Help,
 }
 
@@ -79,6 +85,7 @@ impl Command {
             Some("bulk-load") => Self::BulkLoad,
             Some("backup") => Self::Backup(args.next().map(PathBuf::from)),
             Some("check-backup") => Self::CheckBackup(args.next().map(PathBuf::from)),
+            Some("dev") => return dev::Options::parse(args).map(Self::Dev),
             Some("help" | "-h" | "--help") => Self::Help,
             Some(other) => return Err(format!("unknown command {other:?}")),
         };
@@ -96,6 +103,7 @@ async fn main() -> ExitCode {
         Ok(Command::BulkLoad) => startup::bulk_load().await,
         Ok(Command::Backup(to)) => startup::backup(to).await,
         Ok(Command::CheckBackup(file)) => startup::check_backup(file).await,
+        Ok(Command::Dev(options)) => dev::run(options).await,
         Ok(Command::Help) => {
             println!("{USAGE}");
             return ExitCode::SUCCESS;
@@ -152,6 +160,16 @@ mod tests {
                 .unwrap_err()
                 .contains("x")
         );
+    }
+
+    #[test]
+    fn dev_takes_its_own_flags() {
+        assert_eq!(parse(&["dev"]), Ok(Command::Dev(Default::default())));
+        assert!(matches!(
+            parse(&["dev", "--check", "--fresh"]),
+            Ok(Command::Dev(o)) if o.check && o.fresh
+        ));
+        assert!(parse(&["dev", "--serve"]).unwrap_err().contains("--serve"));
     }
 
     #[test]

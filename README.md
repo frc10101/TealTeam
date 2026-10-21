@@ -17,6 +17,8 @@ cp .env.example .env
 cargo run -p tt-web
 ```
 
+To click around with fake data instead (every role, two teams, a schedule, the access rules checked first): `cargo run -- dev`. See [docs/DEV_ENVIRONMENT.md](docs/DEV_ENVIRONMENT.md).
+
 The server listens on `http://127.0.0.1:8080` by default. Check it with:
 
 ```sh
