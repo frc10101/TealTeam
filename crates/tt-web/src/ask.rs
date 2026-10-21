@@ -407,7 +407,7 @@ fn about(sheet: &Sheet, at: &str) -> String {
     about
 }
 
-async fn build_sheet(
+pub(crate) async fn build_sheet(
     state: &AppState,
     user: &User,
     event: &tt_core::records::Event,

@@ -1,6 +1,10 @@
 [workspace]
 resolver = "2"
 members = ["crates/*"]
+# A bare `cargo run` (and `cargo dev`, .cargo/config.toml) picks the server; the
+# workspace also holds tt-load, a second binary. check.sh and CI always say
+# --workspace or -p, so this changes nothing they build or test.
+default-members = ["crates/tt-web"]
 
 # Dependencies are declared once here and inherited by member crates with
 # `workspace = true`, so a version bump happens in exactly one place.

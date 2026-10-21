@@ -20,6 +20,8 @@ Thumbs.db
 *.sqlite
 *.sqlite3
 /.data/
+# `cargo run -- dev`: the throwaway database full of fake data (docs/DEV_ENVIRONMENT.md)
+/dev-data/
 
 # Logs
 *.log

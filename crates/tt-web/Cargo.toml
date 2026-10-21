@@ -31,9 +31,10 @@ tower-http = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 thiserror = { workspace = true }
+# `tt-web dev` drives the router in-process with `oneshot` (F13); the tests do too.
+tower = { version = "0.5", features = ["util"] }
 
 [dev-dependencies]
 form_urlencoded = { workspace = true }
 # The device's side of a push, run against the real router (C7).
 tt-client = { workspace = true }
-tower = { version = "0.5", features = ["util"] }

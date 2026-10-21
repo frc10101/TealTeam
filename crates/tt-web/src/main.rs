@@ -16,6 +16,7 @@ mod auth;
 mod backups;
 mod bundle;
 mod config;
+mod dev;
 mod errors;
 mod events;
 mod ftc;
@@ -57,6 +58,12 @@ commands:
   check-backup [file]
               restore file (default: the newest timed backup) into a fresh
               database and say what is in it. The restore test.
+  dev [--fresh] [--check] [--port N]
+              a local server on a throwaway database of fake data in
+              ./dev-data, with the access checks run on it. --fresh wipes the
+              data first; --check seeds, checks, reports and exits (0 or 1).
+              Never reads DATABASE_URL or .env; refuses TEALTEAM_ENV=prod.
+              docs/DEV_ENVIRONMENT.md
   help        show this message
 
 Configuration comes from the environment and .env files; see .env.example.";
@@ -72,6 +79,7 @@ enum Command {
     BulkLoad,
     Backup(Option<PathBuf>),
     CheckBackup(Option<PathBuf>),
+    Dev(dev::Options),
     Help,
 }
 
@@ -82,6 +90,7 @@ impl Command {
             Some("bulk-load") => Self::BulkLoad,
             Some("backup") => Self::Backup(args.next().map(PathBuf::from)),
             Some("check-backup") => Self::CheckBackup(args.next().map(PathBuf::from)),
+            Some("dev") => Self::Dev(dev::Options::parse(args.by_ref())?),
             Some("help" | "-h" | "--help") => Self::Help,
             Some(other) => return Err(format!("unknown command {other:?}")),
         };
@@ -99,6 +108,7 @@ async fn main() -> ExitCode {
         Ok(Command::BulkLoad) => startup::bulk_load().await,
         Ok(Command::Backup(to)) => startup::backup(to).await,
         Ok(Command::CheckBackup(file)) => startup::check_backup(file).await,
+        Ok(Command::Dev(options)) => dev::run(options).await,
         Ok(Command::Help) => {
             println!("{USAGE}");
             return ExitCode::SUCCESS;
@@ -155,6 +165,22 @@ mod tests {
                 .unwrap_err()
                 .contains("x")
         );
+    }
+
+    #[test]
+    fn dev_takes_its_own_flags() {
+        assert_eq!(parse(&["dev"]), Ok(Command::Dev(Default::default())));
+        assert_eq!(
+            parse(&["dev", "--check", "--fresh"]),
+            Ok(Command::Dev(dev::Options {
+                fresh: true,
+                check: true,
+                port: None
+            }))
+        );
+        assert!(parse(&["dev", "--serve"]).unwrap_err().contains("--serve"));
+        // Not the serve command's argument.
+        assert!(parse(&["serve", "--check"]).is_err());
     }
 
     #[test]
