@@ -11,7 +11,7 @@ The Pi provides a wired Ethernet event LAN. No Wi-Fi, hotspot, mesh, cellular te
                                                                          Pi has no event uplink
 ```
 
-- **Clients are wired.** Lenovo Chromebooks connect to the switch and Pi through Ethernet. Phones remain off the event LAN unless they are physically connected with Ethernet.
+- **Clients are wired.** Lenovo Chromebooks connect to the switch and Pi through Ethernet, and they do all the work: scouting, lead scouting and admin. Phones are only for viewing data and offline sync, and remain off the event LAN unless they are physically connected with Ethernet.
 - **There is no wireless client network.** Do not use Wi-Fi, hotspots, mesh, 802.11, or any radio-based data transfer.
 - **No event uplink.** The Pi serves the local snapshot. Synchronize upstream off-site, using an approved internet connection.
 
