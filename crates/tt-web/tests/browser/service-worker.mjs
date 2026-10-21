@@ -64,7 +64,8 @@ await go(`${local}/teams`);
 const offline = await evaluate(`({ url: location.pathname, shell: !!document.getElementById('offline-shell'),
   heading: document.querySelector('h1').textContent, bg: getComputedStyle(document.body).backgroundColor })`);
 check("reload with no server shows the offline page", offline.shell && offline.url === "/teams", JSON.stringify(offline));
-check("its stylesheet came from the cache", offline.bg === "rgb(3, 7, 18)", offline.bg);
+// The page colour of either theme: the cached stylesheet, not the browser's white.
+check("its stylesheet came from the cache", ["rgb(11, 11, 13)", "rgb(255, 252, 245)"].includes(offline.bg), offline.bg);
 await sleep(1500);
 const chip = await evaluate(`[...document.querySelectorAll('[data-link]')].filter(e => !e.hidden).map(e => e.textContent.trim())[0]`);
 check("the chip says offline", /^Offline/.test(chip), chip);

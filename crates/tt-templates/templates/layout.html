@@ -18,11 +18,14 @@
     <link rel="stylesheet" href="/static/css/site.css">
     {# Installable (C2): the manifest names the app and its icons. Chrome and
        Edge read it; iOS reads the apple-touch-icon for the Home Screen. The
-       icons are placeholders. #}
+       icons are the team logo. #}
     <link rel="manifest" href="/static/manifest.webmanifest">
-    <link rel="icon" href="/static/icons/icon.svg" type="image/svg+xml">
+    <link rel="icon" href="/static/icons/icon-192.png" type="image/png">
     <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
-    <meta name="theme-color" content="#111827">
+    <meta name="theme-color" content="#17171a" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    {# Before anything is drawn, so a page never flashes the other theme. #}
+    <script src="/static/js/theme.js"></script>
     <meta name="apple-mobile-web-app-title" content="TealTeam">
     {# S11: what built this page. static/js/link.js compares these with
        /health's, and a difference means a new version is running. #}
@@ -37,7 +40,7 @@
 
     <header class="nav">
       <div class="nav-inner">
-        <a class="brand" href="/{{ nav.event.query() }}">TealTeam</a>
+        <a class="brand" href="/{{ nav.event.query() }}"><img src="/static/img/logo.png" alt="Critical Hit 10101" width="36" height="32">TealTeam</a>
 
         {# The connection chip (I11): whether THIS device can reach the server,
            observed, never switched on. The server's own internet is a
@@ -107,11 +110,13 @@
           <a href="/help{{ nav.event.query() }}">Help</a>
           {% if nav.signed_in %}
             <a href="/account{{ nav.event.query() }}">{{ nav.name }}</a>
+            <button type="button" class="btn btn-secondary" data-theme-cycle>Theme: Auto</button>
             <form method="post" action="/api/auth/logout" class="inline">
               <button type="submit" class="btn btn-secondary">Sign out</button>
             </form>
-          {% else if !nav.offline_shell && !nav.from_device %}
-            <a href="/sign-in" class="btn btn-secondary">Sign in</a>
+          {% else %}
+            <button type="button" class="btn btn-secondary" data-theme-cycle>Theme: Auto</button>
+            {% if !nav.offline_shell && !nav.from_device %}<a href="/sign-in" class="btn btn-secondary">Sign in</a>{% endif %}
           {% endif %}
         </div>
       </div>
