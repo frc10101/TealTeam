@@ -59,10 +59,9 @@
   </section>
 {% else if let Some(picker) = picker %}
   <section class="card" id="match-picker">
+    {# The match is said once, by its own small picker beside the title. #}
     <div class="card-header">
-      <h1>Scout {{ picker.label }}{% if picker.played %} <span class="badge badge-gray">played</span>{% endif %}</h1>
-    </div>
-    <div class="card-body">
+      <h1>Scout{% if picker.played %} <span class="badge badge-gray">played</span>{% endif %}</h1>
       {# A GET form with no action reloads this page for the chosen match. #}
       <form method="get" class="match-select">
         <input type="hidden" name="event" value="{{ picker.event_key }}">
@@ -80,6 +79,8 @@
           <a class="btn btn-secondary" href="{{ next.href }}" aria-label="Next match, {{ next.label }}">›</a>
         {% endif %}
       </form>
+    </div>
+    <div class="card-body">
 
       <p class="form-label">Which robot are you watching?</p>
       <div class="robots">
@@ -105,9 +106,9 @@
       {% if let Some(keypad) = keypad %}
         {# The escape hatch (L3): for a robot that is not in this match, or when
            the number is quicker than the schedule. Opens that team's next match. #}
-        <form method="get" class="keypad">
+        <form method="get" class="keypad keypad-small">
           <input type="hidden" name="event" value="{{ keypad.event_key }}">
-          <label class="form-label" for="keypad-team">Or type a team number</label>
+          <label class="form-label" for="keypad-team">Not in this match? Team number</label>
           <div class="inline-field">
             <input class="form-input" id="keypad-team" name="team" inputmode="numeric" pattern="[0-9]*"
                    autocomplete="off" list="keypad-roster" placeholder="e.g. 1678">

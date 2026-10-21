@@ -17,7 +17,9 @@
       {% endif %}
       {% if !team.website.is_empty() %}<p><a href="{{ team.website }}" rel="noopener noreferrer">{{ team.website }}</a></p>{% endif %}
     {% endif %}
-    {# A GET form with no action: the team shown is in the URL, bookmarkable. #}
+    {# A GET form with no action: the team shown is in the URL, bookmarkable.
+       Only before a team is chosen: after, the header's team box does it. #}
+    {% if team.is_none() %}
     <form method="get" class="keypad">
       {% if !nav.event.selected.is_empty() %}<input type="hidden" name="event" value="{{ nav.event.selected }}">{% endif %}
       <label class="form-label" for="team-number">Team number</label>
@@ -30,6 +32,7 @@
         {% for entry in roster %}<option value="{{ entry.number }}">{{ entry.name }}</option>{% endfor %}
       </datalist>
     </form>
+    {% endif %}
   </div>
 </section>
 

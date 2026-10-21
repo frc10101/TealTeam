@@ -27,15 +27,15 @@
 
 <section class="card">
   <div class="card-header">
-    <h1>Match schedule{% if !event_name.is_empty() %} · {{ event_name }}{% endif %}</h1>
+    <h1>Match schedule</h1>
   </div>
   <div class="card-body stack">
     {% if let Some(stored) = stored %}
       <p class="muted">Stored now: {{ stored.teams }} teams · {{ stored.matches }} matches.</p>
     {% endif %}
     {% if ftc_configured %}
-      <form class="stack" method="post" action="{{ ftc_href }}">
-        <button class="btn" type="submit">Pull from FTC Events</button>
+      <form class="stack start" method="post" action="{{ ftc_href }}">
+        <button class="btn btn-secondary" type="submit">Pull from FTC Events</button>
         <p class="hint">
           Fetches the event, its teams, the qualification schedule, and the
           rankings, and replaces the schedule the way an import does: matches

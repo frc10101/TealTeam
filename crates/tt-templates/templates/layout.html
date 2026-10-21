@@ -40,6 +40,7 @@
 
     <header class="nav">
       <div class="nav-inner">
+        <div class="nav-brand">
         <a class="brand" href="/{{ nav.event.query() }}">TealTeam</a>
 
         {# The connection chip (I11): whether THIS device can reach the server,
@@ -57,20 +58,7 @@
             {% endif %}
           {% endfor %}
         </span>
-
-        {% if !nav.event.options.is_empty() %}
-          {# A GET form with no action submits to the current page, so switching
-             reloads whatever page you are on, for the new event. #}
-          <form method="get" class="event-switcher">
-            <label class="visually-hidden" for="event-switcher">Event</label>
-            <select id="event-switcher" name="event" class="form-select" data-autosubmit>
-              {% for option in nav.event.options %}
-                <option value="{{ option.key }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>
-              {% endfor %}
-            </select>
-            <noscript><button type="submit" class="btn btn-secondary">Go</button></noscript>
-          </form>
-        {% endif %}
+        </div>
 
         {# The sections. On a phone they are a tab bar along the bottom of the
            screen, where a thumb reaches (U16); wider, they sit in the header.
@@ -87,9 +75,24 @@
             {% if nav.can_lead %}<a href="/lead-scout{{ nav.event.query() }}">Lead Scout</a>{% endif %}
             {% if nav.can_coach %}<a href="/drive-coach{{ nav.event.query() }}">Drive Coach</a>{% endif %}
             {% if nav.can_pick %}<a href="/pick-list{{ nav.event.query() }}">Pick List</a>{% endif %}
-            {% if nav.can_admin %}<a href="/admin/users{{ nav.event.query() }}">Accounts</a>{% endif %}
-            {% if nav.can_admin %}<a href="/admin/db{{ nav.event.query() }}">Database</a>{% endif %}
           </nav>
+        {% endif %}
+
+        {# The tools: small single controls, so the header stays one row on a
+           laptop and two short ones on a phone, and the page below leads. #}
+        <div class="nav-tools">
+        {% if !nav.event.options.is_empty() %}
+          {# A GET form with no action submits to the current page, so switching
+             reloads whatever page you are on, for the new event. #}
+          <form method="get" class="event-switcher">
+            <label class="visually-hidden" for="event-switcher">Event</label>
+            <select id="event-switcher" name="event" class="form-select" data-autosubmit>
+              {% for option in nav.event.options %}
+                <option value="{{ option.key }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>
+              {% endfor %}
+            </select>
+            <noscript><button type="submit" class="btn btn-secondary">Go</button></noscript>
+          </form>
         {% endif %}
 
         {# The team box (RS 7 Navigation): a number goes straight to that
@@ -100,21 +103,34 @@
             <label class="visually-hidden" for="team-jump">Team number</label>
             <input id="team-jump" class="form-input" type="text" name="team" inputmode="numeric"
                    pattern="[0-9]*" maxlength="5" placeholder="Team #" autocomplete="off">
-            <button type="submit" class="btn btn-secondary">Go</button>
+            {# Enter goes; the button is for screen readers and no-JS alike. #}
+            <button type="submit" class="visually-hidden">Go</button>
           </form>
         {% endif %}
+        </div>
 
         {# Help sits with the account, not in the tab bar: it is public, so it
-           shows signed out too, and the bar has no room on a phone. #}
+           shows signed out too, and the bar has no room on a phone. Signed in,
+           the account is one small menu under the person's name. #}
         <div class="nav-account">
-          <a href="/help{{ nav.event.query() }}">Help</a>
           {% if nav.signed_in %}
-            <a href="/account{{ nav.event.query() }}">{{ nav.name }}</a>
-            <form method="post" action="/api/auth/logout" class="inline">
-              <button type="submit" class="btn btn-secondary">Sign out</button>
-            </form>
-          {% else if !nav.offline_shell && !nav.from_device %}
-            <a href="/sign-in" class="btn btn-secondary">Sign in</a>
+            <details class="account-menu">
+              <summary>{{ nav.name }}</summary>
+              <div class="account-panel">
+                <a href="/account{{ nav.event.query() }}">Account</a>
+                {# Admin pages are setup work, not event work: in the menu, so
+                   the sections stay one row on a laptop and fit a phone's bar. #}
+                {% if nav.can_admin %}<a href="/admin/users{{ nav.event.query() }}">Accounts</a>{% endif %}
+                {% if nav.can_admin %}<a href="/admin/db{{ nav.event.query() }}">Database</a>{% endif %}
+                <a href="/help{{ nav.event.query() }}">Help</a>
+                <form method="post" action="/api/auth/logout">
+                  <button type="submit" class="btn btn-secondary">Sign out</button>
+                </form>
+              </div>
+            </details>
+          {% else %}
+            <a href="/help{{ nav.event.query() }}">Help</a>
+            {% if !nav.offline_shell && !nav.from_device %}<a href="/sign-in" class="btn btn-secondary">Sign in</a>{% endif %}
           {% endif %}
         </div>
       </div>

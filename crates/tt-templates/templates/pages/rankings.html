@@ -9,11 +9,28 @@
 {% for error in errors %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endfor %}
 
 <section class="card">
-  <div class="card-header"><h1>Rankings{% if !event_name.is_empty() %} · {{ event_name }}{% endif %}</h1></div>
+  <div class="card-header">
+    <h1>Rankings</h1>
+    {% if unavailable.is_empty() %}
+      <div class="header-links">
+        <a class="btn btn-secondary" href="/lead-scout/weights{{ nav.event.query() }}">Point values</a>
+        <a class="btn btn-secondary" href="/lead-scout/rankings/enter{{ nav.event.query() }}">Type rankings in</a>
+      </div>
+    {% endif %}
+  </div>
   <div class="card-body">
     {% if !unavailable.is_empty() %}
       <p>{{ unavailable }}</p>
     {% else %}
+      {# What changes from minute to minute, in one line; how the score is
+         worked out is a tap away, so the table leads the page. #}
+      <p class="hint">
+        {% if pending > 0 %}{{ pending }} waiting for review, not counted yet. {% endif %}
+        Rank: {{ crate::RANK_SOURCE }}{% if ranks_updated.is_empty() %}, none synced yet{% else %}, {{ ranks_updated }}{% if ranks_stale %} <span class="badge badge-amber">stale</span>{% endif %}{% endif %}.
+        {% if weights_changed > 0 %}{{ weights_changed }} point {% if weights_changed == 1 %}value{% else %}values{% endif %} changed.{% endif %}
+      </p>
+      <details class="explain">
+        <summary>How the score is worked out</summary>
       <p class="hint">
         Score is a scout estimate: what scouts saw one robot do, at the point
         values below. Most FTC points come from what the alliance does
@@ -31,8 +48,8 @@
         Rank comes from {{ crate::RANK_SOURCE }}{% if ranks_updated.is_empty() %}, and none has been synced yet{% else %}, last updated {{ ranks_updated }}{% if ranks_stale %} <span class="badge badge-amber">stale</span>{% endif %}{% endif %}. When nothing can reach it,
         <a href="/lead-scout/rankings/enter{{ nav.event.query() }}">type the rankings in</a>.
       </p>
+      </details>
     {% endif %}
-    <p><a class="back" href="/lead-scout{{ nav.event.query() }}">Back to Lead Scout</a></p>
   </div>
 </section>
 

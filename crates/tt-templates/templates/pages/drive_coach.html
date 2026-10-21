@@ -8,12 +8,13 @@
 
 {% macro alliance(side, heading) %}
   <div class="coach-side {{ side.color }}">
-    <p class="coach-side-head">{{ heading }} · {{ side.color }} · OPR {{ side.opr_total }}{% if side.opr_partial %}<span class="muted"> (not all synced)</span>{% endif %}</p>
+    {# OPR only once there is one: a row of dashes is noise between matches. #}
+    <p class="coach-side-head">{{ heading }} · {{ side.color }}{% if side.opr_total != "—" %} · OPR {{ side.opr_total }}{% if side.opr_partial %}<span class="muted"> (not all synced)</span>{% endif %}{% endif %}</p>
     <ul>
       {% for t in side.teams %}
         <li{% if t.us %} class="us"{% endif %}>
           <a href="{{ t.href }}"><strong>{{ t.number }}</strong></a>
-          <span class="muted">OPR {{ t.opr }} · DPR {{ t.dpr }}</span>
+          {% if t.opr != "—" || t.dpr != "—" %}<span class="muted">OPR {{ t.opr }} · DPR {{ t.dpr }}</span>{% endif %}
         </li>
       {% endfor %}
     </ul>
@@ -39,7 +40,7 @@
 
 <section class="card">
   <div class="card-header">
-    <h1>Drive Coach{% if !team.is_empty() %} · {{ team }}{% endif %}{% if !event_name.is_empty() %} at {{ event_name }}{% endif %}</h1>
+    <h1>Drive Coach{% if !team.is_empty() %} · {{ team }}{% endif %}</h1>
     <a class="btn btn-secondary" href="/ask{{ nav.event.query() }}">Ask</a>
   </div>
   {% if !unavailable.is_empty() %}

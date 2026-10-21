@@ -2491,7 +2491,10 @@ mod flow_tests {
         let (state, cookies) = scouting().await;
         let body = text(get(&state, "/submission", Some(&cookies)).await).await;
 
-        assert!(body.contains("Scout Q2"), "{body}");
+        assert!(
+            body.contains(r#"<option value="2026now_qm2" selected>"#),
+            "opens on Q2, said once by the match picker: {body}"
+        );
         assert!(body.contains(r#"<option value="2026now_qm1">Q1 · played</option>"#));
         assert!(
             body.contains(r#"href="/submission?event=2026now&#38;match=2026now_qm2&#38;team=254""#),
@@ -2875,7 +2878,10 @@ mod flow_tests {
         assert_eq!(response.status(), StatusCode::OK);
         let body = text(response).await;
 
-        assert!(body.contains("Assignments · This Weekend"), "{body}");
+        assert!(
+            body.contains("<h1>Assignments</h1>"),
+            "the event is in the header, not repeated"
+        );
         assert!(body.contains("<strong>2 of 4</strong> robots in upcoming matches"));
         // FTC: two a side, so the header and every row stop at 2.
         assert!(body.contains(r#"class="blue">Blue 2</th>"#), "{body}");
@@ -5093,10 +5099,7 @@ mod flow_tests {
             .expect("stats");
 
         let body = text(get(&state, "/drive-coach", Some(&admin)).await).await;
-        assert!(
-            body.contains("Drive Coach · 10101 at This Weekend"),
-            "{body}"
-        );
+        assert!(body.contains("<h1>Drive Coach · 10101</h1>"), "{body}");
         let next = body
             .find("<h2 class=\"subhead\">Next</h2>")
             .expect("a next match");
@@ -6325,10 +6328,7 @@ mod flow_tests {
             .await
             .unwrap();
         let coach = text(get(&state, "/drive-coach?event=2026usalatq", Some(&admin)).await).await;
-        assert!(
-            coach.contains("Drive Coach · 7842 at Athens Qualifier"),
-            "{coach}"
-        );
+        assert!(coach.contains("<h1>Drive Coach · 7842</h1>"), "{coach}");
         assert!(coach.contains("With · red · OPR 30.0"), "{coach}");
         assert!(coach.contains("Against · blue · OPR 70.0"), "{coach}");
         assert!(coach.contains("OPR 10.0 · DPR"), "{coach}");

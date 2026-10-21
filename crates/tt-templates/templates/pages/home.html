@@ -4,9 +4,9 @@
   <div class="card-header"><h1>TealTeam Scouting</h1></div>
   <div class="card-body">
     {% if nav.signed_in %}
-      <p>Signed in as <strong>{{ nav.name }}</strong>{% if !team_display.is_empty() %} · team {{ team_display }}{% endif %}.</p>
-      <p class="muted">Season: {{ season_name }} ({{ season_year }})</p>
-      <p><a class="btn btn-primary" href="/submission{{ nav.event.query() }}">Start scouting</a></p>
+      {# Who is signed in is in the header; scouting is what this page is for. #}
+      <p><a class="btn btn-primary btn-lg" href="/submission{{ nav.event.query() }}">Start scouting</a></p>
+      <p class="muted">{% if !team_display.is_empty() %}Team {{ team_display }} · {% endif %}{{ season_name }} ({{ season_year }})</p>
     {% else if nav.from_device %}
       {# C6: made on the device, which cannot know who is holding it, only
          whose copy it holds. #}

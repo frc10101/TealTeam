@@ -32,7 +32,7 @@
 // with a fresh database in the folder.
 import { spawn, execFileSync } from "node:child_process";
 import { createServer } from "node:http";
-import { appendFileSync, readFileSync, rmSync } from "node:fs";
+import { appendFileSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 const D = process.argv[2], PORT = 18461, STUB = 18462, CDP = 9361;
 const local = `http://127.0.0.1:${PORT}`;
@@ -149,10 +149,17 @@ const audit = async (label, path, { links = true, allow = [] } = {}) => {
     if (code >= 400) problems.push(`link ${href} -> ${code}`);
   }
   check(label, problems.length === 0, problems.join("; "));
+  // CT_SHOTS=<dir>: what each page shows before any scrolling, to review
+  // what leads the screen at each device's size.
+  if (process.env.CT_SHOTS) {
+    const shot = await send("Page.captureScreenshot", { format: "png" });
+    writeFileSync(`${process.env.CT_SHOTS}/${label.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "")}.png`, Buffer.from(shot.result.data, "base64"));
+  }
   return info;
 };
 
-const LAPTOP = [1280, 800], PHONES = [[360, 740], [390, 844]];
+// CT_LAPTOP=1366x768 for the team's Chromebooks' own screen.
+const LAPTOP = (process.env.CT_LAPTOP || "1280x800").split("x").map(Number), PHONES = [[360, 740], [390, 844]];
 
 // ---- Laptop: sign-in, with the keyboard.
 await viewport(...LAPTOP);

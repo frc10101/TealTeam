@@ -1,19 +1,20 @@
 {% extends "layout.html" %}
 {% block content %}
+{# The lead's own work is the review queue below; the other lead pages are
+   a row of small links beside the title, not a wall of big buttons. #}
 <section class="card">
-  <div class="card-header"><h1>Lead Scout</h1></div>
-  <div class="card-body">
-    <p class="actions">
-      <a class="btn btn-primary" href="/lead-scout/assignments{{ nav.event.query() }}">Assignments</a>
-      <a class="btn btn-primary" href="/lead-scout/rankings{{ nav.event.query() }}">Rankings</a>
-      <a class="btn btn-primary" href="/pick-list{{ nav.event.query() }}">Pick list</a>
-      <a class="btn btn-secondary" href="/ask{{ nav.event.query() }}">Ask</a>
+  <div class="card-header">
+    <h1>Lead Scout</h1>
+    <nav class="header-links" aria-label="Lead scout pages">
+      <a class="btn btn-secondary" href="/lead-scout/assignments{{ nav.event.query() }}">Assignments</a>
+      <a class="btn btn-secondary" href="/lead-scout/rankings{{ nav.event.query() }}">Rankings</a>
+      <a class="btn btn-secondary" href="/pick-list{{ nav.event.query() }}">Pick list</a>
+      <a class="btn btn-secondary" href="/compare{{ nav.event.query() }}">Compare</a>
       <a class="btn btn-secondary" href="/lead-scout/schedule{{ nav.event.query() }}">Match schedule</a>
       <a class="btn btn-secondary" href="/lead-scout/weights{{ nav.event.query() }}">Point values</a>
-      <a class="btn btn-secondary" href="/lead-scout/scan{{ nav.event.query() }}">Scan a tablet's forms</a>
-    </p>
-    <p class="hint">Who scouts which robot, how teams compare, who to pick, and what each answer is worth.</p>
-    <p class="muted">Season: {{ season_name }}</p>
+      <a class="btn btn-secondary" href="/lead-scout/scan{{ nav.event.query() }}">Scan a tablet</a>
+      <a class="btn btn-secondary" href="/ask{{ nav.event.query() }}">Ask</a>
+    </nav>
   </div>
 </section>
 
