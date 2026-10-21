@@ -259,6 +259,7 @@ a.back { display: inline-flex; align-items: center; min-height: var(--tap); }
 .detail { display: grid; grid-template-columns: auto 1fr; gap: 0.5rem 1rem; margin: 0; }
 .detail dt { color: var(--gray-500); font-size: 0.875rem; }
 .detail dd { margin: 0; }
+.detail dd.alone { grid-column: 1 / -1; }
 
 /* ── Live regions (U8) ──────────────────────────────────────────────────── */
 

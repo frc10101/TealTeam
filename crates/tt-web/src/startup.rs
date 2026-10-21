@@ -3922,6 +3922,34 @@ mod flow_tests {
         assert_eq!(missing.status(), StatusCode::NOT_FOUND);
     }
 
+    #[tokio::test]
+    async fn a_blank_note_on_the_review_page_is_a_dash_not_the_fields_label() {
+        let (state, _, kim) = two_pending().await;
+        // Observation 2 was saved with no notes; observation 1 with some.
+        let blank = text(
+            get(
+                &state,
+                "/lead-scout/submissions/2?event=2026now",
+                Some(&kim),
+            )
+            .await,
+        )
+        .await;
+        assert!(!blank.contains("Anything the numbers miss"), "{blank}");
+        assert!(blank.contains(r#"<dd class="alone">—</dd>"#));
+        let written = text(
+            get(
+                &state,
+                "/lead-scout/submissions/1?event=2026now",
+                Some(&kim),
+            )
+            .await,
+        )
+        .await;
+        // Written (even if held back from another team), it keeps its label.
+        assert!(written.contains("<dt>Anything the numbers miss</dt>"));
+    }
+
     // ── Notes privacy (U13) ─────────────────────────────────────────────────
 
     #[tokio::test]

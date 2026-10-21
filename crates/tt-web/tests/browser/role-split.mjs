@@ -10,13 +10,18 @@
 // views data. So this checks:
 //
 //   - laptop, 1280x800: sign in, the scouting form end to end (mouse and
-//     keyboard, and a save with the Pi gone), assignments and coverage (F9),
-//     review, the CSV paste and the FTC Events pull, the admin DB viewer.
-//     (This branch has no scout-page download (C15), accounts page (G1), or
-//     review undo; add checks when they land.)
+//     keyboard, and a save with the Pi gone, which is held on the device (C13)
+//     and arrives once when the Pi answers), the downloadable scouting page
+//     (C15), /help (G5), assignments and coverage (F9), review and its undo
+//     (G3), the CSV paste and the FTC Events pull, the admin DB viewer and the
+//     accounts page (G1).
 //   - phone, 360 and 390 wide: the read-only pages (team, rankings, graph, drive
 //     coach, pick list, notes, home), and the same pages made on the device
 //     from its snapshot with the server gone.
+//
+// The laptop pages are opened as http://scout.lan, which Chromium maps to
+// 127.0.0.1: plain http, no service worker, as on the event LAN. The phone
+// section uses 127.0.0.1, where the service worker is allowed.
 //
 // CT_DUMP=/path/file also writes each page's text there, to read through.
 //
@@ -31,6 +36,12 @@ import { appendFileSync, readFileSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 const D = process.argv[2], PORT = 18461, STUB = 18462, CDP = 9361;
 const local = `http://127.0.0.1:${PORT}`;
+// The browser opens the laptop pages as http://scout.lan, mapped to 127.0.0.1 by
+// Chromium's resolver: not a secure context, so no service worker, as on the event
+// LAN. (127.0.0.1 itself is secure and would install one, whose cache fill and
+// streams starve the form's own save of connections.) The phone section sets this
+// back to local, where the device-made pages need the service worker.
+let site = `http://scout.lan:${PORT}`;
 const FIXTURES = fileURLToPath(new URL("../../../tt-upstream/tests/fixtures/ftc/", import.meta.url));
 const REHEARSAL = fileURLToPath(new URL("../../../../docs/FTC_BETA_REHEARSAL_SCHEDULE.csv", import.meta.url));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -68,7 +79,7 @@ const csv = readFileSync(REHEARSAL, "utf8");
 await post("/api/schedule/import", form({ name: "Rehearsal", code: "rehearsal", timezone: "America/Chicago", date: "2026-10-24", schedule: csv, roster: "" }), `tt_session=${sessions.lena}`);
 const EV = "2026rehearsal";
 
-const chrome = spawn("chromium", ["--headless=new", "--disable-gpu", `--remote-debugging-port=${CDP}`, `--user-data-dir=${D}/chr`, "about:blank"], { stdio: "ignore" });
+const chrome = spawn("chromium", ["--headless=new", "--disable-gpu", `--remote-debugging-port=${CDP}`, `--user-data-dir=${D}/chr`, "--host-resolver-rules=MAP scout.lan 127.0.0.1", "about:blank"], { stdio: "ignore" });
 for (let i = 0; i < 80; i++) { try { await fetch(`http://127.0.0.1:${CDP}/json/version`); break; } catch { await sleep(100); } }
 const target = await (await fetch(`http://127.0.0.1:${CDP}/json/new?about:blank`, { method: "PUT" })).json();
 const ws = new WebSocket(target.webSocketDebuggerUrl);
@@ -77,7 +88,7 @@ let id = 0; const pending = new Map(); let events = [];
 ws.addEventListener("message", (m) => { const msg = JSON.parse(m.data); if (msg.id) { pending.get(msg.id)?.(msg); pending.delete(msg.id); } else events.push(msg); });
 const send = (method, params = {}) => new Promise((r) => { const i = ++id; pending.set(i, r); ws.send(JSON.stringify({ id: i, method, params })); });
 const evaluate = async (expr) => { const r = (await send("Runtime.evaluate", { expression: expr, awaitPromise: true, returnByValue: true })).result; if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? "evaluate failed"); return r.result.value; };
-const go = async (path, ms = 700) => { events = []; await send("Page.navigate", { url: path.startsWith("http") ? path : local + path });
+const go = async (path, ms = 700) => { events = []; await send("Page.navigate", { url: path.startsWith("http") ? path : site + path });
   await sleep(150);
   for (let i = 0; i < 40 && (await evaluate("document.readyState")) !== "complete"; i++) await sleep(100);
   await sleep(ms); };
@@ -85,7 +96,7 @@ const asUser = async (who) => {
   // Off the old page first: its live connection would reconnect as nobody and
   // log an error onto whatever page comes next.
   await send("Page.navigate", { url: "about:blank" }); await sleep(200);
-  await send("Network.clearBrowserCookies"); await send("Network.setCookie", { name: "tt_session", value: sessions[who], url: local }); };
+  await send("Network.clearBrowserCookies"); await send("Network.setCookie", { name: "tt_session", value: sessions[who], url: site }); };
 const viewport = (width, height) => send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: width < 600 });
 // Real keyboard and mouse.
 const click = async (selector) => {
@@ -99,7 +110,7 @@ const click = async (selector) => {
   await sleep(250);
 };
 const type = async (selector, text) => { await evaluate(`document.querySelector(${JSON.stringify(selector)}).focus()`); await send("Input.insertText", { text }); };
-await send("Page.enable"); await send("Runtime.enable"); await send("Log.enable");
+await send("Page.enable"); await send("Runtime.enable"); await send("Log.enable"); await send("Network.enable");
 
 const cleanup = () => { chrome.kill(); server.kill(); stub.close(); };
 process.on("uncaughtException", (e) => { console.log("CRASH", e.message); cleanup(); process.exit(2); });
@@ -107,7 +118,7 @@ process.on("uncaughtException", (e) => { console.log("CRASH", e.message); cleanu
 const rows = (sql) => execFileSync("sqlite3", [`${D}/t.db`, sql]).toString().trim();
 const waitRows = async (sql, want) => { for (let i = 0; i < 60 && rows(sql) !== String(want); i++) await sleep(100); return rows(sql); };
 let fails = 0;
-const check = (label, ok, detail = "") => { if (!ok) fails++; console.log(`${ok ? "PASS" : "FAIL"}  ${label}${detail ? "  — " + detail : ""}`); };
+const check = (label, ok, detail = "") => { if (!ok) fails++; console.log(`${ok ? "PASS" : "FAIL"}  ${label}${detail ? "  — " + String(detail).replace(/\s+/g, " ").slice(0, 300) : ""}`); };
 
 // What FRC had and FTC does not. "Auto" and "Teleop" are FTC words too.
 const FRC_WORDS = /\b(FRC|TBA|The Blue Alliance|Blue Alliance|Einstein|bumpers?|coral|reef|barge|cargo|speaker|crescendo|reefscape|rebuilt|district|regional|climb(?:ed|ing)?|drive team)\b/i;
@@ -118,7 +129,7 @@ const audit = async (label, path, { links = true, allow = [] } = {}) => {
   await go(path);
   const status = events.find((e) => e.method === "Network.responseReceived" && e.params.type === "Document")?.params.response.status;
   const bad = events.filter((e) => e.method === "Network.responseReceived" && e.params.response.status >= 400 && !allow.includes(e.params.response.status)
-    && !e.params.response.url.endsWith("/favicon.ico")).map((e) => `${e.params.response.status} ${e.params.response.url.replace(local, "")}`);
+    && !e.params.response.url.endsWith("/favicon.ico")).map((e) => `${e.params.response.status} ${e.params.response.url.replace(site, "")}`);
   const errors = events.filter((e) => (e.method === "Runtime.exceptionThrown") || (e.method === "Log.entryAdded" && e.params.entry.level === "error" && e.params.entry.source !== "network" && !/status of 4\d\d|status of 5\d\d/.test(e.params.entry.text))
     || (e.method === "Runtime.consoleAPICalled" && e.params.type === "error")).map((e) => (e.params.exceptionDetails?.text ?? e.params.entry?.text ?? "console.error").slice(0, 120));
   const info = await evaluate(`(() => { const t = document.body.innerText; const main = document.querySelector('main')?.innerText ?? t;
@@ -127,7 +138,7 @@ const audit = async (label, path, { links = true, allow = [] } = {}) => {
   if (process.env.CT_DUMP) appendFileSync(process.env.CT_DUMP, `\n===== ${label} ${path}\n${info.text.slice(0, 3000)}\n`);
   const problems = [];
   if (status >= 400 && !allow.includes(status)) problems.push(`page ${status}`);
-  if (info.page !== new URL(path, local).pathname) problems.push(`sent to ${info.page}`);
+  if (info.page !== new URL(path, site).pathname) problems.push(`sent to ${info.page}`);
   if (info.sw > info.w) problems.push(`sideways scroll ${info.sw}>${info.w}`);
   if (bad.length) problems.push(`responses ${bad.join(", ")}`);
   if (errors.length) problems.push(`console ${errors.join(" | ")}`);
@@ -168,18 +179,20 @@ check("Q1 offers four robots, two per alliance", (await evaluate(`document.query
 const teamsOffered = await evaluate(`[...new Set([...document.querySelectorAll('a[href*="team="]')].map(a => new URL(a.href).searchParams.get('team')))]`);
 check("Q1 lists exactly the four scheduled teams", teamsOffered.length === 4 || teamsOffered.length === 0, JSON.stringify(teamsOffered));
 
+// What a played robot needs answered, by mouse.
+const fillPlayed = async (launched = 3, notes = "") => {
+  await click('input[name="f.auto_leave"]');
+  for (let i = 0; i < launched; i++) await click('[data-step="1"]:not([hidden])');
+  await click('input[name="f.launch_accuracy"][value="most"]');
+  await click('input[name="f.flower_role"][value="placed"]');
+  await click('input[name="f.teleop_park"]');
+  await click('input[name="f.driver_skill"][value="strong"]');
+  if (notes) await type('textarea[name="f.notes"], input[name="f.notes"]', notes);
+};
 const fillAndSave = async (match, team, { status = "played", launched = 3, notes = "" } = {}) => {
   await go(`/submission?event=${EV}&match=${EV}_${match}&team=${team}`);
   await click(`input[name="f.robot_status"][value="${status}"]`);
-  if (status === "played") {
-    await click('input[name="f.auto_leave"]');
-    for (let i = 0; i < launched; i++) await click('[data-step="1"]:not([hidden])');
-    await click('input[name="f.launch_accuracy"][value="most"]');
-    await click('input[name="f.flower_role"][value="placed"]');
-    await click('input[name="f.teleop_park"]');
-    await click('input[name="f.driver_skill"][value="strong"]');
-    if (notes) await type('textarea[name="f.notes"], input[name="f.notes"]', notes);
-  }
+  if (status === "played") await fillPlayed(launched, notes);
   await click('form button[type=submit].btn-primary');
   for (let i = 0; i < 60 && !(await evaluate("location.search")).includes("saved="); i++) await sleep(100);
 };
@@ -202,29 +215,46 @@ await go(`/submission?event=${EV}&match=${EV}_qm4&team=10007`);
 await evaluate(`document.querySelector('input[name="f.robot_status"][value="played"]').focus()`);
 await key(" ", "Space", 32);
 check("Space picks a status", await evaluate(`document.querySelector('input[name="f.robot_status"][value="played"]').checked`));
+await fillPlayed(2);
 await evaluate(`document.querySelector('form button[type=submit].btn-primary').focus()`);
 await key("Enter", "Enter", 13);
 check("Enter on Save saves it", (await waitRows("select count(*) from observations where team_number=10007", 1)) === "1");
 
-// The held path on this build is the draft (C3): the Pi goes away between
-// filling and saving, the save fails, and the answers are still there when the
-// scout comes back. (There is no outbox yet, so the failed save is the
-// browser's own error page; see the report.)
+// ---- Laptop: /help (G5) and the downloadable scouting page (C15).
+await audit("laptop /help", `/help?event=${EV}`);
+check("help explains the FTC pages and names no FRC thing", /scout/i.test(await evaluate("document.querySelector('main').innerText")));
+await go(`/submission?event=${EV}&match=${EV}_qm1`);
+const dl = await evaluate(`fetch('/submission/download?event=${EV}', { credentials: 'same-origin', headers: { accept: 'text/html' } })
+  .then(async r => ({ status: r.status, type: r.headers.get('content-type'), disp: r.headers.get('content-disposition'), body: await r.text() }))`);
+check("the download is an HTML file for saving", dl.status === 200 && /text\/html/.test(dl.type) && /attachment; filename=.*\.html/.test(dl.disp) && /^\s*<!doctype html/i.test(dl.body), `${dl.status} ${dl.type} ${dl.disp}`);
+const dlText = dl.body.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ");
+check("  it holds the FTC form: the 18 BIOBUZZ inputs, no FRC field", new Set(dl.body.match(/name="f\.[a-z_]+"/g)).size === 18 && !/f\.(climb|cargo)/i.test(dl.body), String(new Set(dl.body.match(/name="f\.[a-z_]+"/g)).size));
+check("  and the match's two-robot alliances, no third robot", ["10001", "10006", "10002", "10008"].every((t) => dl.body.includes(t)) && !GHOST.test(dlText) && !GHOST.test(dl.body.replace(/<script[\s\S]*?<\/script>/gi, " ")), (dlText.match(GHOST) ?? [""])[0]);
+check("  with no FRC wording in what it shows", !FRC_WORDS.test(dlText), (dlText.match(FRC_WORDS) ?? [""])[0]);
+check("  and it loads nothing from outside", !/<script src|<link |@import/.test(dl.body));
+
+// The Pi goes away between filling and saving (C13): the save is held on the
+// device, says so, and goes by itself when the Pi answers -- once.
 await go(`/submission?event=${EV}&match=${EV}_qm3&team=10005`);
 await click('input[name="f.robot_status"][value="played"]');
-await click('input[name="f.auto_park"]');
-await sleep(700);
-await send("Network.emulateNetworkConditions", { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 });
+await fillPlayed(1, "held while the Pi was down");
+const heldId = await evaluate(`document.querySelector('[name=record_id]').value`);
+await stop();
 await click('form button[type=submit].btn-primary');
+const outboxShown = async (re, ms) => { for (let t = 0; t < ms; t += 250) { if (re.test(await evaluate(`(() => { const b = document.getElementById('outbox'); return b && !b.hidden ? b.innerText : ''; })()`))) return true; await sleep(250); } return false; };
+check("saving with the Pi gone says: held on this device, not saved", await outboxShown(/Held on this tablet, not saved[\s\S]*Q3 . 10005/, 15000),
+  await evaluate(`document.getElementById('outbox')?.innerText ?? 'no outbox card'`));
+check("  the page stayed on the form, nothing is on the server", !(await evaluate("location.search")).includes("saved=")
+  && rows("select count(*) from observations where team_number=10005") === "0");
+const kept = await evaluate(`Object.keys(localStorage).filter(k => k.startsWith('tt-outbox:')).map(k => JSON.parse(localStorage.getItem(k))).flatMap(o => o.observations)`);
+check("  and the device's outbox holds it under the form's record id", kept.length === 1 && kept[0].client_record_id === heldId && kept[0].team_number === 10005, JSON.stringify(kept).slice(0, 160));
+await start();
+check("back online, the held form reaches the server", (await waitRows("select count(*) from observations where team_number=10005", 1)) === "1");
+check("  and the page says it was saved", await outboxShown(/Saved to the server[\s\S]*Q3 . 10005/, 15000));
 await sleep(1500);
-await send("Network.emulateNetworkConditions", { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
-check("saving with the Pi gone puts nothing on the server",
-  execFileSync("sqlite3", [`${D}/t.db`, "select count(*) from observations where team_number=10005"]).toString().trim() === "0");
-await go(`/submission?event=${EV}&match=${EV}_qm3&team=10005`);
-const back = await evaluate(`({ status: document.querySelector('input[name="f.robot_status"][value="played"]')?.checked, park: document.querySelector('input[name="f.auto_park"]')?.checked })`);
-check("back online, the draft is restored with the answers", back.status === true && back.park === true, JSON.stringify(back));
-await click('form button[type=submit].btn-primary');
-check("and saving then reaches the server", (await waitRows("select count(*) from observations where team_number=10005", 1)) === "1");
+check("  exactly once, and nothing is held any more", rows("select count(*) from observations where team_number=10005") === "1"
+  && rows(`select count(*) from observations where client_record_id = '${heldId}'`) === "1"
+  && !/Held on this tablet/.test(await evaluate(`document.getElementById('outbox')?.innerText ?? ''`)));
 
 // ---- Laptop: lead scout.
 await asUser("lena");
@@ -284,6 +314,30 @@ if (second) {
   check("approve changes the review state", st2 === "approved", st2);
 }
 
+// Undo (G3): a verdict is not final. The declined record goes back to
+// waiting, the scout stops seeing the decline, and the page says so.
+await audit("laptop review page, declined", `/lead-scout/submissions/${pend}`, { links: false });
+check("a declined record offers to be put back to waiting", await evaluate(`!!document.querySelector('form[action*="/reopen"] button')`));
+await click('form[action*="/reopen"] button');
+const back1 = await waitRows(`select review_state from observations where id=${pend}`, "pending");
+const backText = await evaluate("document.body.innerText");
+check("undoing a decline puts it back to waiting, and says so", back1 === "pending" && /Put back to waiting/.test(backText) && !!(await evaluate(`document.querySelector('form[action*="/approve"] button')`)), back1);
+await asUser(owner);
+await go(`/submission?event=${EV}`);
+check("the scout no longer sees the decline", !/declined/i.test(await evaluate("document.querySelector('main').innerText")));
+await asUser("lena");
+if (second) {
+  await go(`/lead-scout/submissions/${second}`);
+  await audit("laptop review page, approved", `/lead-scout/submissions/${second}`, { links: false });
+  await click('form[action*="/reopen"] button');
+  const back2 = await waitRows(`select review_state from observations where id=${second}`, "pending");
+  check("undoing an approval puts it back to waiting", back2 === "pending", back2);
+}
+// A blank note shows a dash, not the field's own label (the no-show has none).
+await go(`/lead-scout/submissions/${rows("select id from observations where team_number = 10003")}`);
+const blankNote = await evaluate(`[...document.querySelectorAll('.answers dd.alone')].map(d => d.textContent.trim())`);
+check("a blank note on the review page is just a dash", !/Anything the numbers miss/.test(await evaluate("document.querySelector('main').innerText")) && blankNote.includes("—"), JSON.stringify(blankNote));
+
 // Schedule import: CSV paste (a bad row is named), then the FTC pull.
 await go(`/lead-scout/schedule?event=${EV}`);
 await evaluate(`const f = document.querySelector('form[action^="/api/schedule/import"]'); f.querySelector('[name=code]').value = 'pasted'; f.querySelector('[name=name]').value = 'Pasted'; f.querySelector('[name=schedule]').value = 'match,red1,red2,blue1,blue2\\n1,1,2,3,4\\n2,1,2,3\\n'; null`);
@@ -316,13 +370,25 @@ await audit("laptop /admin/db?table=observations", `/admin/db?event=${EV}&table=
 await audit("laptop /admin/db?table=users", `/admin/db?event=${EV}&table=users`);
 const dbText = await evaluate("document.body.innerText");
 check("the DB viewer masks emails and hashes", !/@demo\.test/.test(dbText) && !/\$argon2/.test(dbText));
+const users = await audit("laptop /admin/users (G1)", `/admin/users?event=${EV}`);
+check("the accounts page lists all five accounts", ["Ada Admin", "Lena Lead", "Sam Scout", "Sue Scout", "Cal Coach"].every((n) => users.whole.includes(n)), users.text.replace(/\s+/g, " ").slice(0, 120));
+// Change a role by clicking: make Sue a lead scout.
+const sueCard = `#account-${rows("select id from users where email = 'sue@demo.test'")}`;
+check("each account has its own card with a roles form", await evaluate(`!!document.querySelector(${JSON.stringify(sueCard + " input[name=is_lead_scout]")})`), sueCard);
+await click(`${sueCard} input[name=is_lead_scout] + span`);
+await click(`${sueCard} form button.btn-primary`);
+check("saving roles changes the account", (await waitRows("select is_lead_scout from users where email = 'sue@demo.test'", 1)) === "1");
+await audit("laptop /admin/users after a change", `/admin/users?event=${EV}`);
 await asUser("sam");
 await go(`/admin/db?event=${EV}`);
 check("a scout cannot open the DB viewer", (await evaluate("location.pathname")) !== "/admin/db");
+await go(`/admin/users?event=${EV}`);
+check("a scout cannot open the accounts page", (await evaluate("location.pathname")) !== "/admin/users");
 await go(`/lead-scout/assignments?event=${EV}`);
 check("a scout cannot open assignments", (await evaluate("location.pathname")) !== "/lead-scout/assignments");
 
 // ---- Phones: only the read-only pages.
+site = local;
 await asUser("lena");
 for (const [w, h] of PHONES) {
   await viewport(w, h);

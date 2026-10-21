@@ -32,11 +32,16 @@
     <div class="card-body">
       <dl class="detail answers">
         {% for answer in group.answers %}
+          {% if answer.is_text && !answer.hidden && answer.value == "—" %}
+            {# A note nobody wrote: just the dash, not the field's own label. #}
+            <dd class="alone">{{ answer.value }}</dd>
+          {% else %}
           <dt>{{ answer.label }}</dt>
           {% if answer.hidden %}
             <dd class="muted">{{ hidden_notes }}</dd>
           {% else %}
             <dd{% if answer.is_text %} class="text-answer"{% endif %}>{{ answer.value }}</dd>
+          {% endif %}
           {% endif %}
         {% endfor %}
       </dl>
