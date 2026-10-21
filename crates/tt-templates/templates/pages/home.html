@@ -37,19 +37,15 @@
 
 {% if let Some(summary) = event.summary %}
   <section class="card" id="event-summary">
-    <div class="card-header"><h2>{{ summary.name }}</h2></div>
+    {# The event's name and dates are in the header's event picker. #}
+    <div class="card-header">
+      <h2>Teams here</h2>
+      <p class="muted header-meta">{% if !summary.location.is_empty() %}{{ summary.location }} · {% endif %}{{ summary.team_count }} team{% if summary.team_count != 1 %}s{% endif %} · {{ summary.match_count }} match{% if summary.match_count != 1 %}es{% endif %}{% if summary.match_count > 0 %}, {{ summary.played_count }} played{% endif %}</p>
+    </div>
     <div class="card-body">
-      {% if !summary.dates.is_empty() || !summary.location.is_empty() %}
-        <p class="muted">{{ summary.dates }}{% if !summary.dates.is_empty() && !summary.location.is_empty() %} · {% endif %}{{ summary.location }}</p>
-      {% endif %}
       {% if summary.team_missing %}
         <p class="alert alert-warning" role="status">Your team is not listed for this event yet.</p>
       {% endif %}
-      <dl class="detail">
-        <dt>Teams</dt><dd>{{ summary.team_count }}</dd>
-        <dt>Matches</dt>
-        <dd>{{ summary.match_count }}{% if summary.match_count > 0 %} ({{ summary.played_count }} played){% endif %}</dd>
-      </dl>
       {% if summary.roster.is_empty() %}
         <p class="muted">No roster yet.</p>
       {% else %}

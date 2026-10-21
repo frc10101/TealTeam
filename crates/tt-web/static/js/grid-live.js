@@ -67,6 +67,7 @@
           swapCell(document.getElementById(id), doc.getElementById(id));
         });
         swapRegion("coverage", doc);
+        swapRegion("coverage-detail", doc);
       })
       .catch(function () {
         // live.js's polling still runs underneath.
@@ -145,6 +146,7 @@
         }
         swapRegion("grid-notice", doc);
         swapRegion("coverage", doc);
+        swapRegion("coverage-detail", doc);
         // The editor: the same match again, the next one, or closed.
         var editor = document.getElementById("edit");
         var next = doc.getElementById("edit");

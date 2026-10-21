@@ -1888,8 +1888,7 @@ mod flow_tests {
 
         let body = text(get(&state, "/", Some(&cookie)).await).await;
 
-        assert!(body.contains("<h2>This Weekend</h2>"), "{body}");
-        assert!(body.contains("<dt>Teams</dt><dd>2</dd>"));
+        assert!(body.contains("2 teams · 0 matches"), "{body}");
         assert!(body.contains(r#"<li class="you"><strong>10101</strong>"#));
         assert!(!body.contains("Your team is not listed"));
         assert!(body.contains(r#"<option value="2026now" selected>"#));
@@ -1904,7 +1903,7 @@ mod flow_tests {
 
         let body = text(get(&state, "/?event=2026past", Some(&cookie)).await).await;
 
-        assert!(body.contains("<h2>Last Month</h2>"));
+        assert!(body.contains(r#"<li class="you"><strong>10101</strong>"#));
         assert!(body.contains(r#"<option value="2026past" selected>"#));
         for link in ["/submission", "/lead-scout", "/drive-coach"] {
             assert!(
@@ -1928,7 +1927,7 @@ mod flow_tests {
         let body = text(get(&state, "/", Some(&cookie)).await).await;
 
         assert!(
-            body.contains("<h2>This Weekend</h2>"),
+            body.contains(r#"id="event-summary""#) && body.contains("<strong>254</strong>"),
             "still offered the event"
         );
         assert!(body.contains("Your team is not listed for this event yet."));
@@ -1945,7 +1944,7 @@ mod flow_tests {
 
         assert!(body.contains("There is no event “2026nope” on this server"));
         assert!(
-            body.contains("<h2>This Weekend</h2>"),
+            body.contains(r#"id="event-summary""#) && body.contains("0 teams · 0 matches"),
             "the default instead"
         );
     }
@@ -3751,7 +3750,7 @@ mod flow_tests {
         let (state, admin) = after_q1().await;
         let body = text(get(&state, "/lead-scout/assignments", Some(&admin)).await).await;
 
-        assert!(body.contains("<strong>1 of 4</strong> robots in played matches were recorded."));
+        assert!(body.contains("<strong>1 of 4</strong> in played matches were recorded."));
         assert!(body.contains("Played matches (1) · 3 not scouted"));
 
         let q1 = &body[body.find(r#"id="2026now_qm1""#).expect("Q1 row")..];
@@ -3805,7 +3804,7 @@ mod flow_tests {
             .await,
         )
         .await;
-        let coverage = &body[body.find(r#"id="coverage""#).expect("coverage")..];
+        let coverage = &body[body.find(r#"id="coverage-detail""#).expect("coverage")..];
         let table = &coverage[coverage.find(r#"id="team-coverage""#).expect("teams")..];
         let table = &table[..table.find("</table>").unwrap()];
         let row = |team: i32| {
@@ -3856,7 +3855,15 @@ mod flow_tests {
         )
         .await;
         let regions: Vec<String> = live_regions(&body).into_iter().map(|r| r.0).collect();
-        assert_eq!(regions, ["coverage", "upcoming-grid", "played-grid"]);
+        assert_eq!(
+            regions,
+            [
+                "coverage",
+                "upcoming-grid",
+                "played-grid",
+                "coverage-detail"
+            ]
+        );
         assert!(
             live_regions(&body)
                 .iter()
@@ -4286,7 +4293,7 @@ mod flow_tests {
         let row = ranking_row(&body, 254);
         assert!(
             row.contains(&format!(
-                "<td class=\"num\" data-label=\"Score (scout estimate)\">{average:.1}</td>"
+                "<td class=\"num score\" data-label=\"Score (scout estimate)\">{average:.1}</td>"
             )),
             "{row}"
         );
@@ -4295,7 +4302,9 @@ mod flow_tests {
         // 10101's only observation is pending: listed, unscored, and counted
         // as waiting.
         let row = ranking_row(&body, 10101);
-        assert!(row.contains("<td class=\"num\" data-label=\"Score (scout estimate)\">—</td>"));
+        assert!(
+            row.contains("<td class=\"num score\" data-label=\"Score (scout estimate)\">—</td>")
+        );
         assert!(body.contains("1 more is waiting for review and not counted yet."));
     }
 

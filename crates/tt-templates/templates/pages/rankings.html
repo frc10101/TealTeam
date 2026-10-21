@@ -12,7 +12,8 @@
   <div class="card-header">
     <h1>Rankings</h1>
     {% if unavailable.is_empty() %}
-      <div class="header-links">
+      {# Setting up, done on a laptop; a phone only reads (device roles). #}
+      <div class="header-links laptop-only">
         <a class="btn btn-secondary" href="/lead-scout/weights{{ nav.event.query() }}">Point values</a>
         <a class="btn btn-secondary" href="/lead-scout/rankings/enter{{ nav.event.query() }}">Type rankings in</a>
       </div>
@@ -59,8 +60,8 @@
     <form class="card-header" method="get" action="/compare" id="rank-compare">
       {% if !nav.event.selected.is_empty() %}<input type="hidden" name="event" value="{{ nav.event.selected }}">{% endif %}
       <input type="hidden" name="chosen" value="1">
-      <span class="hint">Tick up to 6 teams to see them side by side.</span>
-      <button class="btn btn-secondary" type="submit">Compare ticked</button>
+      <span class="hint">Tick up to 6 teams to see side by side.</span>
+      <button class="btn btn-secondary btn-sm" type="submit">Compare ticked</button>
     </form>
     <div class="card-body table-scroll">
       <table class="data-table rankings cards" role="table">
@@ -82,8 +83,8 @@
               <td class="num" data-label="Rank">{{ row.rank }}</td>
               <th scope="row">{{ row.team }}</th>
               <td class="name">{{ row.name }}</td>
-              <td class="num" data-label="{{ crate::SCORE_LABEL }}">{% if row.score.is_empty() %}—{% else %}{{ row.score }}{% endif %}</td>
-              <td class="num{% if row.thin %} thin{% endif %}" data-label="n">{{ row.n }}{% if row.thin && row.n > 0 %} <span class="badge badge-gray">thin</span>{% endif %}</td>
+              <td class="num score" data-label="{{ crate::SCORE_LABEL }}">{% if row.score.is_empty() %}—{% else %}{{ row.score }}{% endif %}</td>
+              <td class="num count{% if row.thin %} thin{% endif %}" data-label="n">{{ row.n }}{% if row.thin && row.n > 0 %} <span class="badge badge-gray">thin</span>{% endif %}</td>
               <td class="compare-tick" data-label="Compare"><input type="checkbox" name="team" value="{{ row.team }}" form="rank-compare" aria-label="Compare {{ row.team }}"></td>
             </tr>
           {% endfor %}

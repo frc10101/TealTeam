@@ -700,6 +700,7 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
    other cell names itself from its data-label, since the column headers are
    hidden. role="table" on the table keeps it a table to screen readers. */
 @media (max-width: 39.99rem) {
+  .laptop-only { display: none !important; }
   .data-table.cards, .data-table.cards tbody, .data-table.cards tr,
   .data-table.cards th, .data-table.cards td { display: block; }
   .data-table.cards thead {
@@ -727,15 +728,19 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
   .rankings.cards thead a { padding: 0 0.75rem; border-radius: 999px; background: var(--gray-800); justify-content: center; }
   .rankings.cards thead a.current { background: var(--teal-700); color: #fff; text-decoration: none; }
   .rankings.cards tbody tr {
-    display: grid; grid-template-columns: 2.75rem auto auto 1fr; gap: 0.125rem 0.75rem;
-    grid-template-areas: "rank team name name" "rank score count .";
+    display: grid; grid-template-columns: 2.75rem auto minmax(0, 1fr) auto; gap: 0.125rem 0.75rem;
+    grid-template-areas: "rank team name tick" "rank score count tick";
   }
   .rankings.cards td[data-label="Rank"] { grid-area: rank; display: flex; flex-direction: column; font-size: 1.25rem; line-height: 1.2; }
   .rankings.cards td[data-label="Rank"]::before { font-size: 0.75rem; }
   .rankings.cards tbody th[scope="row"] { grid-area: team; }
-  .rankings.cards td.name { grid-area: name; min-width: 0; overflow-wrap: anywhere; }
-  .rankings.cards td[data-label="Score"] { grid-area: score; }
-  .rankings.cards td[data-label="n"] { grid-area: count; }
+  .rankings.cards td.name { grid-area: name; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; align-self: center; }
+  .rankings.cards td.score { grid-area: score; }
+  .rankings.cards td.score::before { content: "Score "; }
+  .rankings.cards td.count { grid-area: count; }
+  .rankings.cards td.compare-tick { grid-area: tick; align-self: center; width: auto; }
+  .rankings.cards td.compare-tick::before { content: none; }
+  .rankings.cards td.compare-tick input { width: 1.5rem; height: 1.5rem; }
 }
 
 .slot-station { font-size: 0.75rem; color: var(--gray-300); }

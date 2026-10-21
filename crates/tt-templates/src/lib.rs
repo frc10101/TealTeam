@@ -2562,7 +2562,7 @@ mod tests {
 
         let html = assignments_page(Some(grid), "");
         assert!(html.contains(r#"class="slot red missed""#));
-        assert!(html.contains("1 of 3</strong> robots in played matches"));
+        assert!(html.contains("1 of 3</strong> in played matches"));
         assert!(html.contains("Played matches (1) · 2 not scouted"));
     }
 

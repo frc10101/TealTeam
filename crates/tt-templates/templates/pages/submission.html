@@ -200,13 +200,13 @@
 {# C15: this page as one file, for a tablet that will be out of the
    server's reach. #}
 {% if unavailable.is_empty() %}
-  <section class="card" id="scout-file">
-    <div class="card-header"><h2>Scouting away from the server?</h2></div>
+  <details class="card" id="scout-file">
+    <summary class="card-header"><h2>Scouting away from the server?</h2></summary>
     <div class="card-body stack">
       <p class="hint">Save your scouting page as one file on this tablet. It opens with no server, keeps what you save, and sends it once the server is in reach, or hands it to a lead scout by code or as a file. It works for 72 hours.</p>
       <p><a class="btn btn-secondary" href="/submission/download{{ nav.event.query() }}" download>Download your scouting page</a></p>
     </div>
-  </section>
+  </details>
 {% endif %}
 {% if !agenda.is_empty() %}<div id="agenda-keep" data-agenda="{{ agenda }}" hidden></div>{% endif %}
 {% include "handoff.html" %}

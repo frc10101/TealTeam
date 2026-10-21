@@ -62,80 +62,26 @@
 <section class="card">
   <div class="card-header">
     <h1>Assignments</h1>
+    <div class="header-links">
+      <a class="btn btn-secondary" href="/lead-scout{{ nav.event.query() }}">Lead Scout</a>
+    </div>
   </div>
   <div class="card-body">
     {% if !unavailable.is_empty() %}
       <p>{{ unavailable }}</p>
     {% else if let Some(grid) = grid %}
-      {# Live (L6): submissions land while the lead watches, so coverage and
-         both grids re-read themselves from this page every 30 seconds. #}
+      {# Live (L6): submissions land while the lead watches, so the counts,
+         rotation, the grids and the coverage tables below re-read themselves
+         from this page every 30 seconds. The tables are under the grids:
+         assigning is what this page is for. #}
       <div class="stack" id="coverage" data-live="{{ live_href }}" data-live-every="30">
-        {% if grid.assignable == 0 %}
-          <p>Every match at this event has been played.</p>
-        {% else %}
-          <p><strong>{{ grid.assigned }} of {{ grid.assignable }}</strong> robots in upcoming matches have a scout.</p>
-        {% endif %}
-        {% if grid.played_robots > 0 %}
-          <p><strong>{{ grid.played_recorded }} of {{ grid.played_robots }}</strong> robots in played matches were recorded.</p>
-        {% endif %}
-        {% if coverage.is_empty() %}
-          <p class="muted">Nobody has been assigned anything yet.</p>
-        {% else %}
-          <div class="table-scroll">
-            <table class="data-table coverage cards" role="table">
-              <caption class="visually-hidden">How each scout and tablet is doing</caption>
-              <thead>
-                <tr><th scope="col">Assigned to</th><th scope="col">Recorded</th><th scope="col">Missed</th><th scope="col">To come</th></tr>
-              </thead>
-              <tbody>
-                {% for t in coverage %}
-                  <tr>
-                    <th scope="row">{{ t.name }}{% if t.by_device %} <span class="slot-kind">tablet</span>{% endif %}{% if t.online %} <span class="badge badge-teal">online</span>{% endif %}</th>
-                    <td data-label="Recorded">{{ t.recorded }}</td>
-                    {% if t.missed > 0 %}<td class="missed" data-label="Missed">{{ t.missed }}</td>{% else %}<td data-label="Missed">0</td>{% endif %}
-                    <td data-label="To come">{{ t.to_come }}</td>
-                  </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        {% endif %}
-        {# Team coverage (F9): every team wants two observations before
-           alliance selection. Teams to assign come first, each with its next
-           open match, then those that cannot get there, then the rest. Inside
-           #coverage, so it refreshes with it. #}
-        {% if !teams.is_empty() %}
-          <div class="stack" id="team-coverage">
-            <h2>Teams</h2>
-            <p class="hint">Each team wants {{ tt_core::assignments::OBSERVATIONS_WANTED }} observations, approved or waiting for review. Declined ones do not count.</p>
-            <div class="table-scroll">
-              <table class="data-table team-coverage cards" role="table">
-                <caption class="visually-hidden">How often each team has been scouted</caption>
-                <thead>
-                  <tr><th scope="col">Team</th><th scope="col">Approved</th><th scope="col">Waiting</th><th scope="col">Assigned</th><th scope="col">Quals left</th><th scope="col">Status</th></tr>
-                </thead>
-                <tbody>
-                  {% for t in teams %}
-                    <tr>
-                      <th scope="row"><a href="{{ t.team_href }}">{{ t.team }}</a>{% if !t.team_name.is_empty() %} <span class="muted">{{ t.team_name }}</span>{% endif %}</th>
-                      <td data-label="Approved">{{ t.approved }}</td>
-                      <td data-label="Waiting">{{ t.waiting }}</td>
-                      <td data-label="Assigned">{{ t.assigned }}</td>
-                      <td data-label="Quals left">{{ t.remaining }}</td>
-                      <td data-label="Status"><span class="badge {{ t.badge }}">{{ t.status }}</span>{% if !t.assign_href.is_empty() %} <a href="{{ t.assign_href }}">Assign {{ t.assign_label }}</a>{% endif %}</td>
-                    </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        {% endif %}
+        <p>{% if grid.assignable == 0 %}Every match at this event has been played.{% else %}<strong>{{ grid.assigned }} of {{ grid.assignable }}</strong> robots in upcoming matches have a scout.{% endif %}{% if grid.played_robots > 0 %} <strong>{{ grid.played_recorded }} of {{ grid.played_robots }}</strong> in played matches were recorded.{% endif %} <span class="muted">Tap a match to choose who watches each robot.</span></p>
         {# Rotation (L13): who has been on too long, or has far more of the
            event than somebody free. Each button posts the one robot to the
            match save, which grid-live.js does in place. #}
         {% if !rotation.is_empty() %}
           <div class="stack" id="rotation">
-            <h2>Rotation</h2>
+            <h3 class="subhead">Rotation</h3>
             <ul class="rotation">
               {% for r in rotation %}
                 <li>
@@ -156,9 +102,7 @@
           </div>
         {% endif %}
       </div>
-      <p class="hint">Tap a match to choose who watches each of its robots.</p>
     {% endif %}
-    <p><a class="back" href="/lead-scout{{ nav.event.query() }}">Back to Lead Scout</a></p>
   </div>
 </section>
 
@@ -271,6 +215,68 @@
       </div>
     </details>
   {% endif %}
+{% endif %}
+
+{% if grid.is_some() %}
+  <section class="card">
+    <div class="card-header"><h2>Coverage</h2></div>
+    <div class="card-body">
+      <div class="stack" id="coverage-detail" data-live="{{ live_href }}" data-live-every="30">
+        {% if coverage.is_empty() %}
+          <p class="muted">Nobody has been assigned anything yet.</p>
+        {% else %}
+          <div class="table-scroll">
+            <table class="data-table coverage cards" role="table">
+              <caption class="visually-hidden">How each scout and tablet is doing</caption>
+              <thead>
+                <tr><th scope="col">Assigned to</th><th scope="col">Recorded</th><th scope="col">Missed</th><th scope="col">To come</th></tr>
+              </thead>
+              <tbody>
+                {% for t in coverage %}
+                  <tr>
+                    <th scope="row">{{ t.name }}{% if t.by_device %} <span class="slot-kind">tablet</span>{% endif %}{% if t.online %} <span class="badge badge-teal">online</span>{% endif %}</th>
+                    <td data-label="Recorded">{{ t.recorded }}</td>
+                    {% if t.missed > 0 %}<td class="missed" data-label="Missed">{{ t.missed }}</td>{% else %}<td data-label="Missed">0</td>{% endif %}
+                    <td data-label="To come">{{ t.to_come }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+        {# Team coverage (F9): every team wants two observations before
+           alliance selection. Teams to assign come first, each with its next
+           open match, then those that cannot get there, then the rest. Inside
+           #coverage, so it refreshes with it. #}
+        {% if !teams.is_empty() %}
+          <div class="stack" id="team-coverage">
+            <h3 class="subhead">Teams</h3>
+            <p class="hint">Each team wants {{ tt_core::assignments::OBSERVATIONS_WANTED }} observations, approved or waiting for review. Declined ones do not count.</p>
+            <div class="table-scroll">
+              <table class="data-table team-coverage cards" role="table">
+                <caption class="visually-hidden">How often each team has been scouted</caption>
+                <thead>
+                  <tr><th scope="col">Team</th><th scope="col">Approved</th><th scope="col">Waiting</th><th scope="col">Assigned</th><th scope="col">Quals left</th><th scope="col">Status</th></tr>
+                </thead>
+                <tbody>
+                  {% for t in teams %}
+                    <tr>
+                      <th scope="row"><a href="{{ t.team_href }}">{{ t.team }}</a>{% if !t.team_name.is_empty() %} <span class="muted">{{ t.team_name }}</span>{% endif %}</th>
+                      <td data-label="Approved">{{ t.approved }}</td>
+                      <td data-label="Waiting">{{ t.waiting }}</td>
+                      <td data-label="Assigned">{{ t.assigned }}</td>
+                      <td data-label="Quals left">{{ t.remaining }}</td>
+                      <td data-label="Status"><span class="badge {{ t.badge }}">{{ t.status }}</span>{% if !t.assign_href.is_empty() %} <a href="{{ t.assign_href }}">Assign {{ t.assign_label }}</a>{% endif %}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </section>
 {% endif %}
 
 {% if !devices.is_empty() %}
