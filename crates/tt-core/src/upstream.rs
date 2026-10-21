@@ -32,6 +32,37 @@ use serde::{Deserialize, Deserializer};
 /// with (S7), and a tablet's worker does not fetch on its own. The FRC-only
 /// pages built on that data answer "not available on this build".
 pub const UPSTREAM_ENABLED: bool = false;
+
+/// Where Rank comes from on this build, for the pages that say so. On the FTC
+/// build, the FTC Events pull (F7), or the lead scout typing it in.
+pub const RANK_SOURCE: &str = if UPSTREAM_ENABLED {
+    "The Blue Alliance"
+} else {
+    "FTC Events"
+};
+
+/// How OPR, DPR, and CCWM got here, after "OPR and DPR as": TBA's in FRC,
+/// worked out from FTC Events' results on the FTC build (F10,
+/// [`crate::opr`]).
+pub const OPR_SOURCE: &str = if UPSTREAM_ENABLED {
+    "synced from The Blue Alliance"
+} else {
+    "worked out from FTC Events results"
+};
+
+/// Who the OPRs are from, in a chart's metric names.
+pub const OPR_SHORT: &str = if UPSTREAM_ENABLED {
+    "TBA"
+} else {
+    "FTC results"
+};
+
+/// Who a team's event statistics are from, after "From".
+pub const STATS_SOURCE: &str = if UPSTREAM_ENABLED {
+    "FIRST and The Blue Alliance"
+} else {
+    "FTC Events, with OPR, DPR, and CCWM worked out from its results"
+};
 use std::collections::HashMap;
 
 use crate::matches::{ALLIANCE_SIZE, Alliance, CompLevel};

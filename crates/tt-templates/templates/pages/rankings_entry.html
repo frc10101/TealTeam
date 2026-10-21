@@ -25,14 +25,14 @@
       <p>{{ unavailable }}</p>
     {% else %}
       <p>
-        For when nothing can reach The Blue Alliance. Copy the rankings off the
+        For when nothing can reach {{ crate::RANK_SOURCE }}. Copy the rankings off the
         audience display, <strong>one team per line, best first</strong>. The
         line is the rank.
       </p>
       <p class="hint">
         After the team number you can add the ranking score and the record, in
         either order: <code>254 3.42 11-1-0</code>. Teams you leave out lose
-        their rank. The next sync from TBA replaces all of it.
+        their rank. The next sync from {{ crate::RANK_SOURCE }} replaces all of it.
       </p>
       {% if !as_of.is_empty() %}
         <p class="muted">The ranking below is from {{ as_of }}.</p>

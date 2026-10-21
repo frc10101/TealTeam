@@ -87,13 +87,14 @@ pub fn metrics(schema: &SeasonSchema) -> Vec<Metric> {
         });
     }
     for (key, label, source) in [
-        ("opr", "OPR (TBA, per event)", Source::Opr),
-        ("dpr", "DPR (TBA, per event)", Source::Dpr),
-        ("ccwm", "CCWM (TBA, per event)", Source::Ccwm),
+        ("opr", "OPR", Source::Opr),
+        ("dpr", "DPR", Source::Dpr),
+        ("ccwm", "CCWM", Source::Ccwm),
     ] {
+        let label = format!("{label} ({}, per event)", crate::upstream::OPR_SHORT);
         all.push(Metric {
             key: key.into(),
-            label: label.into(),
+            label,
             source,
         });
     }

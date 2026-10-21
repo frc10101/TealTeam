@@ -7,6 +7,9 @@
 //! shows what the pull did or why it could not. There is no background poll:
 //! a schedule pasted by hand is never replaced unless someone asks.
 //!
+//! The same pull also answers the lead-scout page's "Sync now" on this build
+//! (F10), and works out OPR, DPR, and CCWM from the played matches.
+//!
 //! What a pull stores is `tt_upstream::ftc::pull`; this adds the schedule
 //! tidy the CSV import does (`schedule::tidy`), so a re-pull and a re-import
 //! behave the same. The CSV paste stays, and stays the fallback.
@@ -139,6 +142,17 @@ pub async fn pull(state: &AppState) -> Outcome {
             "Kept {} in the log for after the event.",
             plural(pulled.score_sheets as u64, "score sheet", "score sheets")
         ));
+    }
+    match pulled.rated {
+        Some(ftc::Rated { teams, played }) if teams > 0 => report.push(format!(
+            "Worked out OPR, DPR, and CCWM for {} from {}.",
+            plural(teams as u64, "team", "teams"),
+            plural(played as u64, "played match", "played matches"),
+        )),
+        Some(ftc::Rated { played, .. }) if played > 0 => report.push(format!(
+            "OPR, DPR, and CCWM stay empty until enough matches are played: {played} so far."
+        )),
+        _ => {}
     }
     report.extend(pulled.problems);
     info!(event = %pulled.event_key, "FTC pull: {}", report.join(" "));

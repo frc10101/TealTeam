@@ -10,8 +10,9 @@
 //!   sync;
 //! - the schedule as the TBA `/event/{key}/matches` body F3 writes, applied
 //!   by [`project`](crate::project), so the two paths store the same rows;
-//! - the rankings into `team_event_stats`, OPR columns left empty;
-//! - the score sheets in the log only.
+//! - the rankings into `team_event_stats`, with the OPRs worked out from
+//!   the played matches and score sheets (F10, `tt_core::ftc::ratings`);
+//! - the score sheets in the log, read only for the phase OPRs.
 //!
 //! Then it appends each new body to the upstream log as `api = 'ftc'`.
 //!
@@ -31,7 +32,7 @@ use std::time::Duration;
 
 use chrono::{DateTime, NaiveDate, Utc};
 use tracing::{debug, info, warn};
-use tt_core::ftc::{self, Events, HybridSchedule, Rankings, Teams};
+use tt_core::ftc::{self, Events, HybridSchedule, Rankings, ScoreSheets, Teams, Worked};
 use tt_core::records::{Event, TeamEventStats};
 use tt_core::schedule::Surrogate;
 use tt_core::{timezone, upstream};
@@ -260,11 +261,22 @@ pub struct Pulled {
     pub surrogates: Vec<Surrogate>,
     pub rankings: usize,
     pub score_sheets: usize,
+    /// The OPRs, when this pull worked them out again (F10).
+    pub rated: Option<Rated>,
     /// The schedule's match keys and the event's roster, when the schedule or
     /// the roster changed: for `SqliteRepo::tidy_schedule`, as after an
     /// import.
     pub tidy: Option<(Vec<String>, Vec<i32>)>,
     pub problems: Vec<String>,
+}
+
+/// What working out the OPRs came to.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Rated {
+    /// Teams given an OPR: none while too few matches have been played.
+    pub teams: usize,
+    /// Played matches they were worked out from.
+    pub played: usize,
 }
 
 /// One request: the newest body for it, and whether this pull brought a new
@@ -494,12 +506,25 @@ pub async fn pull<R: Repo + Sync>(repo: &R, client: &FtcClient) -> Result<Pulled
     }
     pulled.surrogates = mapped.surrogates;
 
-    // The rankings.
+    // The rankings, and the OPRs worked out from the played matches (F10).
     let ranked = parse::<Rankings>(&rankings, &rankings_path)?.rankings;
-    if rankings.changed && !ranked.is_empty() {
-        pulled.rankings = store_rankings(repo, &key, &ranked, &mut pulled.problems).await?;
-    } else {
-        pulled.rankings = ranked.len();
+    let scores_changed = scores.as_ref().is_some_and(|s| s.changed);
+    pulled.rankings = ranked.len();
+    if rankings.changed || schedule.changed || scores_changed || teams_changed {
+        let sheets = match &scores {
+            Some(logged) => parse::<ScoreSheets>(logged, &scores_path).unwrap_or_default(),
+            None => ScoreSheets::default(),
+        };
+        let worked = ftc::ratings(&parsed, &sheets);
+        let fresh = (rankings.changed && !ranked.is_empty()).then_some(ranked.as_slice());
+        let stored = store_stats(repo, &key, fresh, &worked, &mut pulled.problems).await?;
+        if fresh.is_some() {
+            pulled.rankings = stored.ranked;
+        }
+        pulled.rated = Some(Rated {
+            teams: stored.rated,
+            played: worked.played,
+        });
     }
 
     // Stored: now the bodies may go in the log.
@@ -571,54 +596,73 @@ async fn ensure_team<R: Repo + Sync>(repo: &R, event_key: &str, number: i32) -> 
         .map_err(|e| repo_error(event_key, e))
 }
 
-/// Rank, record, and average for every team at the event; OPRs empty.
-async fn store_rankings<R: Repo + Sync>(
+/// What [`store_stats`] stored.
+struct Stored {
+    ranked: usize,
+    rated: usize,
+}
+
+/// Every team at the event: its rank, record, and average when `ranked` is
+/// a fresh ranking, kept as they were otherwise (typed in, or the last
+/// pull's), and the OPRs `worked` out, empty where they could not be (F10).
+/// As FRC's `sync::store_stats` stores TBA's.
+async fn store_stats<R: Repo + Sync>(
     repo: &R,
     event_key: &str,
-    ranked: &[ftc::Ranking],
+    ranked: Option<&[ftc::Ranking]>,
+    worked: &Worked,
     problems: &mut Vec<String>,
-) -> Result<usize> {
+) -> Result<Stored> {
     let now = Utc::now();
     let roster = repo
         .event_teams(event_key)
         .await
         .map_err(|e| repo_error(event_key, e))?;
-    let mut stored = 0;
+    let before = repo
+        .event_stats(event_key)
+        .await
+        .map_err(|e| repo_error(event_key, e))?;
+    let mut stored = Stored {
+        ranked: 0,
+        rated: 0,
+    };
     for team in &roster {
-        let ranking = ranked.iter().find(|r| r.team_number == team.number);
-        let stats = TeamEventStats {
-            team_number: team.number,
-            event_key: event_key.to_string(),
-            opr: None,
-            dpr: None,
-            ccwm: None,
-            auto_opr: None,
-            teleop_opr: None,
-            endgame_opr: None,
-            rank: ranking.map(|r| r.rank).filter(|r| *r > 0),
-            matches_played: ranking.and_then(|r| r.matches_played),
-            qual_average: ranking.and_then(|r| r.qual_average),
-            avg_match_points: None,
-            wins: ranking.and_then(|r| r.wins),
-            losses: ranking.and_then(|r| r.losses),
-            ties: ranking.and_then(|r| r.ties),
-            dq_count: ranking.and_then(|r| r.dq),
-            qual_points: None,
-            elim_points: None,
-            award_points: None,
-            alliance_points: None,
-            total_points: None,
-            synced_at: Some(now),
-        };
+        let key = upstream::team_key(team.number);
+        let mut stats = before
+            .iter()
+            .find(|s| s.team_number == team.number)
+            .cloned()
+            .unwrap_or_else(|| TeamEventStats {
+                team_number: team.number,
+                event_key: event_key.to_string(),
+                ..TeamEventStats::default()
+            });
+        if let Some(ranked) = ranked {
+            let ranking = ranked.iter().find(|r| r.team_number == team.number);
+            stats.rank = ranking.map(|r| r.rank).filter(|r| *r > 0);
+            stats.matches_played = ranking.and_then(|r| r.matches_played);
+            stats.qual_average = ranking.and_then(|r| r.qual_average);
+            stats.wins = ranking.and_then(|r| r.wins);
+            stats.losses = ranking.and_then(|r| r.losses);
+            stats.ties = ranking.and_then(|r| r.ties);
+            stats.dq_count = ranking.and_then(|r| r.dq);
+            stored.ranked += usize::from(ranking.is_some());
+        }
+        stats.opr = worked.oprs.oprs.get(&key).copied();
+        stats.dpr = worked.oprs.dprs.get(&key).copied();
+        stats.ccwm = worked.oprs.ccwms.get(&key).copied();
+        (stats.auto_opr, stats.teleop_opr, stats.endgame_opr) = worked.components.phases(&key);
+        stats.synced_at = Some(now);
         match repo.upsert_team_stats(&stats, now).await {
-            Ok(()) => stored += usize::from(ranking.is_some()),
+            Ok(()) => stored.rated += usize::from(stats.opr.is_some()),
             Err(e) => {
-                warn!("storing FTC rankings for {}: {e}", team.number);
-                problems.push(format!("storing the ranking for team {}: {e}", team.number));
+                warn!("storing FTC stats for {}: {e}", team.number);
+                problems.push(format!("storing the stats for team {}: {e}", team.number));
             }
         }
     }
     let unknown = ranked
+        .unwrap_or_default()
         .iter()
         .filter(|r| !roster.iter().any(|t| t.number == r.team_number))
         .count();

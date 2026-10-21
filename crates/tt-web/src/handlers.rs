@@ -68,8 +68,6 @@ fn html(page: impl Page) -> Response {
 pub(crate) async fn nav_for(state: &AppState, user: Option<&tt_core::user::User>) -> Nav {
     let mut nav = Nav::for_user(user, state.repo.health().await.is_ready());
     nav.version = crate::shell::page_version(state);
-    // The drive coach panel is OPR and DPR: not on a build without upstream (F4).
-    nav.can_coach &= state.upstream.enabled;
     // The chip's "N need review" (C10b): for a lead, every refused entry
     // waiting; for a scout, their own, which a lead has not got to yet.
     if let Some(user) = user.filter(|_| nav.storage_ready) {
@@ -577,7 +575,13 @@ pub async fn manual_sync(
     headers: HeaderMap,
 ) -> Response {
     tracing::info!(user = %user.email, "manual sync requested");
-    let outcome = upstream::sync_now(&state.repo, &state.upstream).await;
+    // On the FTC build, the FTC Events pull, as the schedule page's button
+    // (F10). The route is not reached without one or the other.
+    let outcome = if !state.upstream.enabled && state.upstream.ftc.is_some() {
+        ManualSync::from(crate::ftc::pull(&state).await)
+    } else {
+        upstream::sync_now(&state.repo, &state.upstream).await
+    };
 
     if wants_html(&headers) {
         lead_scout_page(

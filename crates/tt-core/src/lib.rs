@@ -19,6 +19,7 @@ pub mod graph;
 pub mod link;
 pub mod matches;
 pub mod notes;
+pub mod opr;
 pub mod outbox;
 pub mod picklist;
 pub mod profile;

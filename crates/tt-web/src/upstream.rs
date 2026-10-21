@@ -250,34 +250,57 @@ async fn boot_sync(repo: &SqliteRepo, upstream: &Upstream) {
 /// What an FRC-only route answers on a build with upstream switched off.
 pub const NOT_ON_THIS_BUILD: &str = "not available on this build";
 
-/// Layer over the routes that exist only for FIRST and TBA data: the manual
-/// sync, the TBA key a lead scout's tablet fetches with (S7), the drive coach
-/// panel's OPR and DPR, and typing in TBA's rankings. With upstream switched
-/// off, a browser gets a page saying so, with the nav on it; a script or a
-/// tablet's worker gets a JSON 404, which tells a courier to forget any key.
+/// Layer over the routes that exist only for FIRST and TBA: the TBA key a
+/// lead scout's tablet fetches with (S7). With upstream switched off, a
+/// browser gets a page saying so, with the nav on it; a script or a tablet's
+/// worker gets a JSON 404, which tells a courier to forget any key. The drive
+/// coach panel and typing the rankings in are back on the FTC build, fed by
+/// the FTC Events pull (F10), and "Sync now" is [`sync_available`].
 pub async fn frc_only(
     axum::extract::State(state): axum::extract::State<AppState>,
     request: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> axum::response::Response {
+    if state.upstream.enabled {
+        return next.run(request).await;
+    }
+    not_on_this_build(&state, request).await
+}
+
+/// Layer over "Sync now": FIRST and TBA's sync in FRC, and on the FTC build
+/// the FTC Events pull when its key is set (F10). With neither, as
+/// [`frc_only`].
+pub async fn sync_available(
+    axum::extract::State(state): axum::extract::State<AppState>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    if state.upstream.enabled || state.upstream.ftc.is_some() {
+        return next.run(request).await;
+    }
+    not_on_this_build(&state, request).await
+}
+
+async fn not_on_this_build(
+    state: &AppState,
+    request: axum::extract::Request,
+) -> axum::response::Response {
     use axum::http::{StatusCode, header};
     use axum::response::IntoResponse;
     use tt_templates::{ErrorPage, Page};
 
-    if state.upstream.enabled {
-        return next.run(request).await;
-    }
     let refused = (
         StatusCode::NOT_FOUND,
         [(header::CACHE_CONTROL, "no-store")],
         axum::Json(serde_json::json!({ "error": NOT_ON_THIS_BUILD })),
     );
-    if !crate::handlers::wants_html(request.headers()) {
+    let (parts, _) = request.into_parts();
+    if !crate::handlers::wants_html(&parts.headers) {
         return refused.into_response();
     }
-    let user = crate::auth::current_user(&state, request.headers()).await;
-    let nav = crate::handlers::nav_for(&state, user.as_ref()).await;
-    let page = ErrorPage::not_on_this_build(request.uri().path().to_owned(), nav);
+    let user = crate::auth::current_user(state, &parts.headers).await;
+    let nav = crate::handlers::nav_for(state, user.as_ref()).await;
+    let page = ErrorPage::not_on_this_build(parts.uri.path().to_owned(), nav);
     match page.render_html() {
         Ok(html) => (StatusCode::NOT_FOUND, axum::response::Html(html)).into_response(),
         Err(e) => {
@@ -301,11 +324,18 @@ pub struct ManualSync {
     pub problems: Vec<String>,
     /// The background loop was woken, so matches and statistics follow.
     pub tba_pass_started: bool,
+    /// What an FTC Events pull said it did, in place of the FIRST headline
+    /// (F10).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub said: Option<String>,
 }
 
 impl ManualSync {
     /// One sentence for a person, above the list of problems.
     pub fn headline(&self) -> String {
+        if let Some(said) = &self.said {
+            return said.clone();
+        }
         let landed = self.events > 0 || self.teams > 0;
         let mut text = match (landed, self.ok) {
             (true, true) => format!(
@@ -343,6 +373,7 @@ pub async fn sync_now(repo: &SqliteRepo, upstream: &Upstream) -> ManualSync {
             event_teams: 0,
             problems: report.problems,
             tba_pass_started: false,
+            said: None,
         };
     }
 
@@ -389,6 +420,33 @@ pub async fn sync_now(repo: &SqliteRepo, upstream: &Upstream) -> ManualSync {
         event_teams: report.event_teams,
         problems: report.problems,
         tba_pass_started,
+        said: None,
+    }
+}
+
+impl From<crate::ftc::Outcome> for ManualSync {
+    /// "Sync now" on a build whose only upstream is the FTC Events pull
+    /// (F10): its first line as the headline, the rest listed under it.
+    fn from(outcome: crate::ftc::Outcome) -> Self {
+        let ok = outcome.errors.is_empty();
+        let mut lines = if ok { outcome.report } else { outcome.errors };
+        let said = if lines.is_empty() {
+            "Pulled from FTC Events.".to_string()
+        } else {
+            lines.remove(0)
+        };
+        if ok && !outcome.surrogates.is_empty() {
+            lines.push(format!("Surrogates: {}.", outcome.surrogates.join(", ")));
+        }
+        ManualSync {
+            ok,
+            events: usize::from(outcome.event_key.is_some()),
+            teams: 0,
+            event_teams: 0,
+            problems: lines,
+            tba_pass_started: false,
+            said: Some(said),
+        }
     }
 }
 
@@ -441,7 +499,8 @@ pub fn panel(
         result_problems: outcome.map(|o| o.problems.clone()).unwrap_or_default(),
         last_bundle: String::new(),
         tether: upstream.tether().describe(),
-        switched_off: !upstream.enabled,
+        switched_off: !upstream.enabled && upstream.ftc.is_none(),
+        ftc: !upstream.enabled && upstream.ftc.is_some(),
     }
 }
 
@@ -784,6 +843,7 @@ mod tests {
             event_teams: 0,
             problems: Vec::new(),
             tba_pass_started: false,
+            said: None,
         };
         assert_eq!(
             outcome(2, false).headline(),

@@ -42,7 +42,7 @@
       {% if here.stats.is_empty() %}
         <p class="muted">No statistics synced for this team here yet.</p>
       {% else %}
-        <p class="hint">From FIRST and The Blue Alliance, synced {{ here.synced }}{% if here.stale %} <span class="badge badge-amber">stale</span>{% endif %}. Only what they have published is listed.</p>
+        <p class="hint">From {{ crate::STATS_SOURCE }}, synced {{ here.synced }}{% if here.stale %} <span class="badge badge-amber">stale</span>{% endif %}. Only what they have published is listed.</p>
         <dl class="detail stats">
           {% for line in here.stats %}<dt>{{ line.label }}</dt><dd>{{ line.value }}</dd>{% endfor %}
         </dl>

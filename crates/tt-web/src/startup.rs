@@ -232,17 +232,21 @@ pub fn router(state: AppState) -> Router {
     use crate::handlers;
     use axum::routing::post;
 
-    // Only for FIRST and TBA data. With upstream switched off for this build
-    // (F4), each answers "not available on this build" (`upstream::frc_only`).
+    // Only for FIRST and TBA. With upstream switched off for this build (F4),
+    // it answers "not available on this build" (`upstream::frc_only`).
     let frc_only = Router::new()
-        .route("/drive-coach", get(handlers::drive_coach))
-        .route("/lead-scout/rankings/enter", get(handlers::rankings_entry))
-        .route("/api/rankings/manual", post(handlers::save_rankings))
-        .route("/api/frc/sync", post(handlers::manual_sync))
         .route("/api/upstream/key", get(crate::bundle::key))
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
             upstream::frc_only,
+        ));
+    // FIRST and TBA's sync, or on the FTC build the FTC Events pull when its
+    // key is set (F10); otherwise as above (`upstream::sync_available`).
+    let sync = Router::new()
+        .route("/api/frc/sync", post(handlers::manual_sync))
+        .route_layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            upstream::sync_available,
         ));
 
     Router::new()
@@ -260,6 +264,8 @@ pub fn router(state: AppState) -> Router {
         .route("/lead-scout/submissions/{id}", get(handlers::review_page))
         .route("/lead-scout/refused/{id}", get(handlers::refused_page))
         .route("/lead-scout/rankings", get(handlers::rankings))
+        .route("/lead-scout/rankings/enter", get(handlers::rankings_entry))
+        .route("/drive-coach", get(handlers::drive_coach))
         .route("/lead-scout/weights", get(handlers::weights))
         .route("/lead-scout/schedule", get(handlers::schedule_page))
         .route("/lead-scout/scan", get(handlers::scan_page))
@@ -294,6 +300,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/devices/{id}/rename", post(handlers::rename_device))
         .route("/api/weights", post(handlers::save_weights))
+        .route("/api/rankings/manual", post(handlers::save_rankings))
         .route("/api/schedule/import", post(handlers::import_schedule))
         .route("/api/ftc/pull", post(handlers::pull_ftc))
         .route("/api/pick-list", post(handlers::change_pick_list))
@@ -332,6 +339,7 @@ pub fn router(state: AppState) -> Router {
         // Compiled in (P5): the binary is the whole deploy.
         .route("/static/{*path}", get(crate::assets::serve))
         .merge(frc_only)
+        .merge(sync)
         // Every error a browser would otherwise get as a blank or plain-text
         // screen becomes a page with the nav on it (U10).
         .layer(axum::middleware::from_fn_with_state(
@@ -1493,13 +1501,9 @@ mod flow_tests {
                 .body(Body::empty())
                 .unwrap()
         };
-        // A browser gets a page saying so, with the nav to go on from.
-        for (method, uri) in [
-            ("GET", "/drive-coach?event=2026now"),
-            ("GET", "/lead-scout/rankings/enter?event=2026now"),
-            ("POST", "/api/frc/sync?event=2026now"),
-            ("POST", "/api/rankings/manual?event=2026now"),
-        ] {
+        // With no FTC Events key either, "Sync now" has nothing to pull: a
+        // browser gets a page saying so, with the nav to go on from.
+        for (method, uri) in [("POST", "/api/frc/sync?event=2026now")] {
             let response = router(state.clone())
                 .oneshot(send(method, uri, "text/html"))
                 .await
@@ -1519,18 +1523,32 @@ mod flow_tests {
         assert!(!key.contains("\"tba\""), "{key}");
         assert!(key.contains("not available on this build"), "{key}");
 
-        // Navigation no longer leads there, and no page says FIRST or TBA.
+        // The drive coach panel and typing the rankings in are back (F10),
+        // as FRC's are before any data: navigation leads there, and no page
+        // offers a sync it cannot do or says FIRST or TBA.
         for uri in [
             "/?event=2026now",
             "/lead-scout?event=2026now",
             "/lead-scout/rankings?event=2026now",
+            "/lead-scout/rankings/enter?event=2026now",
+            "/drive-coach?event=2026now",
         ] {
-            let body = text(get(&state, uri, Some(&admin)).await).await;
-            for gone in ["/drive-coach", "/lead-scout/rankings/enter", "Sync now"] {
-                assert!(!body.contains(gone), "{uri} shows {gone}");
-            }
+            let response = get(&state, uri, Some(&admin)).await;
+            assert_eq!(response.status(), StatusCode::OK, "{uri}");
+            let body = text(response).await;
+            assert!(!body.contains("Sync now"), "{uri} offers a sync");
             assert!(!body.contains("Blue Alliance"), "{uri}");
+            assert!(!body.contains("Not available on this build"), "{uri}");
         }
+        let rankings =
+            text(get(&state, "/lead-scout/rankings?event=2026now", Some(&admin)).await).await;
+        assert!(rankings.contains("Rank comes from FTC Events, and none has been synced yet."));
+        assert!(rankings.contains(r#"href="/lead-scout/rankings/enter?event=2026now""#));
+        let home = text(get(&state, "/?event=2026now", Some(&admin)).await).await;
+        assert!(
+            home.contains(r#"href="/drive-coach?event=2026now""#),
+            "{home}"
+        );
 
         assert_eq!(calls.load(Ordering::SeqCst), 0, "nothing reached upstream");
     }
@@ -3903,7 +3921,10 @@ mod flow_tests {
             body.contains("; the latest was recorded just now."),
             "{body}"
         );
-        assert!(body.contains("Rank comes from The Blue Alliance, and none has been synced yet."));
+        assert!(body.contains(&format!(
+            "Rank comes from {}, and none has been synced yet.",
+            tt_core::upstream::RANK_SOURCE
+        )));
 
         // Half an hour old, while the event is running: flagged (I12).
         let then = chrono::Utc::now() - chrono::TimeDelta::minutes(30);
@@ -4358,10 +4379,11 @@ mod flow_tests {
             !body.contains(r#"value="opr""#),
             "nothing synced from TBA, so no TBA chip"
         );
-        assert!(body.contains(
+        assert!(body.contains(&format!(
             "Scouting: 2 approved observations at this event. 1 more is waiting for review. \
-             Nothing from The Blue Alliance has been synced yet."
-        ));
+             No OPR, DPR, or CCWM {} yet.",
+            tt_core::upstream::OPR_SOURCE
+        )));
         assert!(body.contains(r#"<script src="/static/js/graph.js" defer></script>"#));
         assert!(
             body.contains(
@@ -4424,19 +4446,23 @@ mod flow_tests {
                     &metric=f.launched&metric=opr";
         let body = text(get(&state, page, Some(&sam)).await).await;
         assert!(!body.contains("Showing the team"), "the URL chose");
-        assert!(
-            body.contains(r#"<label class="chip" data-slot="2" title="OPR (TBA, per event)">"#)
-        );
-        assert!(body.contains(
-            r#"<th scope="col" class="num">Teleop launches</th><th scope="col" class="num">OPR (TBA, per event)</th>"#
-        ));
+        let opr = format!("OPR ({}, per event)", tt_core::upstream::OPR_SHORT);
+        assert!(body.contains(&format!(
+            r#"<label class="chip" data-slot="2" title="{opr}">"#
+        )));
+        assert!(body.contains(&format!(
+            r#"<th scope="col" class="num">Teleop launches</th><th scope="col" class="num">{opr}</th>"#
+        )));
         assert!(body.contains(
             r#"<tr><th scope="row">Q1</th><td class="num">1</td><td class="num">41.26</td></tr>"#
         ));
         assert!(body.contains(
             r#"<tr><th scope="row">Q2</th><td class="num">9</td><td class="num">41.26</td></tr>"#
         ));
-        assert!(body.contains("OPR, DPR, and CCWM: The Blue Alliance, synced just now."));
+        assert!(body.contains(&format!(
+            "OPR, DPR, and CCWM: {}, just now.",
+            tt_core::upstream::OPR_SOURCE
+        )));
 
         let four = "/graph?event=2026now&chosen=1&team=254&metric=points\
                     &metric=f.auto_launched&metric=f.launched&metric=f.fouls_observed";
@@ -4591,7 +4617,10 @@ mod flow_tests {
             "254's synced strength"
         );
         assert!(body.contains(r#"href="/teams?event=2026now&#38;team=254""#));
-        assert!(body.contains("OPR and DPR as synced from The Blue Alliance just now."));
+        assert!(body.contains(&format!(
+            "OPR and DPR as {} just now.",
+            tt_core::upstream::OPR_SOURCE
+        )));
         assert_live_regions_resolve(&state, &body, &admin).await;
 
         // Half an hour old, mid-event: flagged (U14, I12).
@@ -4602,9 +4631,10 @@ mod flow_tests {
             .await
             .expect("stats");
         let body = text(get(&state, "/drive-coach", Some(&admin)).await).await;
-        assert!(body.contains(
-            r#"synced from The Blue Alliance 30 minutes ago <span class="badge badge-amber">stale</span>."#
-        ));
+        assert!(body.contains(&format!(
+            r#"{} 30 minutes ago <span class="badge badge-amber">stale</span>."#,
+            tt_core::upstream::OPR_SOURCE
+        )));
     }
 
     #[tokio::test]
@@ -5692,5 +5722,181 @@ mod flow_tests {
             .await
             .unwrap();
         assert_eq!(observations, 1, "the observation survives");
+    }
+
+    // ── FRC's pages fed by FTC Events (F10) ─────────────────────────────────
+
+    #[tokio::test]
+    async fn sync_now_pulls_from_ftc_events_and_the_coach_sees_oprs_worked_out_from_the_results() {
+        use crate::upstream::test_support::{FTC_SCHEDULE, ftc_stub};
+        use std::sync::atomic::Ordering;
+
+        // Every qualification played, each alliance scoring exactly what its
+        // robots are worth; Q2's red was also given 7 foul points.
+        let worth = |team: i64| match team {
+            7842 => 10,
+            18664 => 20,
+            19459 => 30,
+            21830 => 40,
+            24148 => 15,
+            24378 => 25,
+            25114 => 35,
+            27305 => 45,
+            30403 => 12,
+            31017 => 22,
+            35722 => 32,
+            other => panic!("{other} is not in the fixture"),
+        };
+        let mut schedule: serde_json::Value = serde_json::from_str(FTC_SCHEDULE).unwrap();
+        for m in schedule["schedule"].as_array_mut().unwrap() {
+            let sum = |color: &str| -> i64 {
+                m["teams"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter(|t| t["station"].as_str().unwrap().starts_with(color))
+                    .map(|t| worth(t["teamNumber"].as_i64().unwrap()))
+                    .sum()
+            };
+            let (red, blue) = (sum("Red"), sum("Blue"));
+            let foul = if m["matchNumber"] == 2 { 7 } else { 0 };
+            m["scoreRedFinal"] = (red + foul).into();
+            m["scoreRedFoul"] = foul.into();
+            m["scoreBlueFinal"] = blue.into();
+            m["scoreBlueFoul"] = 0.into();
+        }
+
+        // As this build boots with a key: FIRST and TBA off, FTC Events on.
+        let stub = ftc_stub().await;
+        stub.set_schedule(schedule.to_string());
+        let mut state = migrated_state().await;
+        state.upstream = Arc::new(Upstream::off().with_ftc(Some(stub.client())));
+        let admin = signed_up(&state).await;
+
+        let page = text(get(&state, "/lead-scout", Some(&admin)).await).await;
+        assert!(page.contains("FTC Events data"), "{page}");
+        assert!(page.contains("Sync now"));
+        assert!(!page.contains("Blue Alliance"));
+        assert_eq!(stub.calls.load(Ordering::SeqCst), 0, "nothing until asked");
+
+        let body = text(sync_request(&state, BROWSER_ACCEPT, Some(&admin)).await).await;
+        assert!(
+            body.contains(
+                "Pulled 11 teams, 6 matches (6 played), and 11 rankings for Athens Qualifier \
+                 from FTC Events."
+            ),
+            "{body}"
+        );
+        assert!(
+            body.contains("Worked out OPR, DPR, and CCWM for 11 teams from 6 played matches."),
+            "{body}"
+        );
+
+        let stats = state.repo.event_stats("2026usalatq").await.unwrap();
+        assert_eq!(stats.len(), 11);
+        for s in &stats {
+            let opr = s.opr.expect("an OPR for everyone");
+            let want = worth(i64::from(s.team_number)) as f64;
+            assert!(
+                (opr - want).abs() < 1e-6,
+                "{}: {opr}, not {want}",
+                s.team_number
+            );
+            let (dpr, ccwm) = (s.dpr.expect("a DPR"), s.ccwm.expect("a CCWM"));
+            assert!((ccwm - (opr - dpr)).abs() < 1e-6);
+        }
+        let first = stats.iter().find(|s| s.team_number == 7842).unwrap();
+        assert_eq!(
+            (first.rank, first.wins),
+            (Some(1), Some(1)),
+            "FTC's ranking"
+        );
+
+        // The rankings page says where Rank came from.
+        let rankings = text(
+            get(
+                &state,
+                "/lead-scout/rankings?event=2026usalatq",
+                Some(&admin),
+            )
+            .await,
+        )
+        .await;
+        assert!(
+            rankings.contains("Rank comes from FTC Events, last updated just now."),
+            "{rankings}"
+        );
+
+        // The drive coach for 7842: Q1 with 18664, against 19459 and 21830.
+        sqlx::query("UPDATE users SET team_number = 7842")
+            .execute(state.repo.pool())
+            .await
+            .unwrap();
+        let coach = text(get(&state, "/drive-coach?event=2026usalatq", Some(&admin)).await).await;
+        assert!(
+            coach.contains("Drive Coach · 7842 at Athens Qualifier"),
+            "{coach}"
+        );
+        assert!(coach.contains("With · red · OPR 30.0"), "{coach}");
+        assert!(coach.contains("Against · blue · OPR 70.0"), "{coach}");
+        assert!(coach.contains("OPR 10.0 · DPR"), "{coach}");
+        assert!(
+            coach.contains("OPR and DPR as worked out from FTC Events results just now."),
+            "{coach}"
+        );
+
+        // A re-pull with nothing new leaves them as they are.
+        let body = text(sync_request(&state, BROWSER_ACCEPT, Some(&admin)).await).await;
+        assert!(
+            body.contains("Nothing has changed at FTC Events since the last pull"),
+            "{body}"
+        );
+        assert!(!body.contains("Worked out OPR"));
+        assert_eq!(state.repo.event_stats("2026usalatq").await.unwrap(), stats);
+    }
+
+    #[tokio::test]
+    async fn with_one_match_played_the_oprs_stay_empty_and_typed_ranks_are_kept() {
+        use crate::upstream::test_support::ftc_stub;
+
+        let stub = ftc_stub().await;
+        let mut state = migrated_state().await;
+        state.upstream = Arc::new(Upstream::off().with_ftc(Some(stub.client())));
+        let admin = signed_up(&state).await;
+
+        let body = text(post(&state, "/api/ftc/pull", "", Some(&admin)).await).await;
+        assert!(
+            body.contains(
+                "OPR, DPR, and CCWM stay empty until enough matches are played: 1 so far."
+            ),
+            "{body}"
+        );
+        let stats = state.repo.event_stats("2026usalatq").await.unwrap();
+        assert!(stats.iter().all(|s| s.opr.is_none() && s.dpr.is_none()));
+
+        // Typed in off the audience display, then a new schedule: the typed
+        // ranks stay, since FTC's rankings did not change.
+        let response = post(
+            &state,
+            "/api/rankings/manual?event=2026usalatq",
+            "standings=21830%0A7842",
+            Some(&admin),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        let mut schedule: serde_json::Value =
+            serde_json::from_str(crate::upstream::test_support::FTC_SCHEDULE).unwrap();
+        schedule["schedule"][1]["scoreRedFinal"] = 20.into();
+        schedule["schedule"][1]["scoreBlueFinal"] = 30.into();
+        stub.set_schedule(schedule.to_string());
+        let body = text(post(&state, "/api/ftc/pull", "", Some(&admin)).await).await;
+        assert!(body.contains("2 so far."), "{body}");
+        let typed = state
+            .repo
+            .team_stats("2026usalatq", 21830)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(typed.rank, Some(1), "{typed:?}");
     }
 }

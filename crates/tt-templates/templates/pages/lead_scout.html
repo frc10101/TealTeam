@@ -78,7 +78,7 @@
 
 {% if !upstream.switched_off %}
 <section class="card" id="upstream">
-  <div class="card-header"><h2>FIRST and TBA data</h2></div>
+  <div class="card-header"><h2>{% if upstream.ftc %}FTC Events data{% else %}FIRST and TBA data{% endif %}</h2></div>
   <div class="card-body stack">
     {# Outside the live region: the outcome of the press that led here stays
        put while the status below moves on. #}
@@ -111,18 +111,32 @@
         <dt>Stored</dt>
         <dd>{{ stored.event_name }}: {{ stored.teams }} teams · {{ stored.matches }} matches{% if stored.matches > 0 %}, {{ stored.played }} played{% endif %}</dd>
       {% endif %}
-      <dt>Events and rosters</dt>
-      <dd>{% if upstream.first_configured %}FIRST Events API{% else %}<span class="badge badge-gray">not configured</span>{% endif %}</dd>
-      <dt>Matches and stats</dt>
-      <dd>{% if upstream.tba_configured %}The Blue Alliance, every 2 minutes during an event{% else %}<span class="badge badge-gray">not configured</span>{% endif %}</dd>
+      {% if upstream.ftc %}
+        <dt>Event, roster, matches and rankings</dt>
+        <dd>FTC Events API, when a lead scout asks</dd>
+        <dt>OPR, DPR, and CCWM</dt>
+        <dd>Worked out here from the played matches</dd>
+      {% else %}
+        <dt>Events and rosters</dt>
+        <dd>{% if upstream.first_configured %}FIRST Events API{% else %}<span class="badge badge-gray">not configured</span>{% endif %}</dd>
+        <dt>Matches and stats</dt>
+        <dd>{% if upstream.tba_configured %}The Blue Alliance, every 2 minutes during an event{% else %}<span class="badge badge-gray">not configured</span>{% endif %}</dd>
+      {% endif %}
     </dl>
 
     <form method="post" action="/api/frc/sync{{ nav.event.query() }}">
       <button class="btn btn-primary" type="submit">Sync now</button>
     </form>
     <p class="hint">
+      {% if upstream.ftc %}
+      Pulls the event, its teams, the qualification schedule and results, and
+      the rankings from FTC Events now, as the schedule page's button does,
+      then works out OPR, DPR, and CCWM. Works only while the server has
+      internet. With none at all,
+      {% else %}
       Pulls the event list and rosters now, then matches and statistics. Works
       only while the server has internet. With none at all,
+      {% endif %}
       <a href="/lead-scout/rankings/enter{{ nav.event.query() }}">type the rankings in</a>
       off the audience display.
     </p>

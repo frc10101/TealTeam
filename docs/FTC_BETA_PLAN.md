@@ -160,7 +160,7 @@ table. That table goes in the PR description.
 
 **FTC beta (F4):** the switch is `tt_core::upstream::UPSTREAM_ENABLED = false`. In `docs/EVENT_DAY_RUNBOOK.md`, step 7's "check the rankings age" and the "Rankings stale (amber)" row assume TBA data and do not apply; step 5's no-tether rule is moot, because the Pi no longer watches for a tether.
 
-F1 done: 85569bd. F1b done: 37318c8. F7 done: f6a1f5c.
+F1 done: 85569bd. F1b done: 37318c8. F7 done: f6a1f5c. F10 done: FTC Events pull feeds rankings, OPR/DPR/CCWM (`tt-core/src/opr.rs`), graph, team, drive coach and lead scout pages.
 
 Estimate: F1 is the largest step and the riskiest. Do it first, and on its own commit.
 

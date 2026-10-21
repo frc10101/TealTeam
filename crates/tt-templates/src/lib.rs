@@ -36,6 +36,7 @@ use tt_core::form::{FormErrors, RawAnswers, input_name, is_on};
 use tt_core::link::Link;
 use tt_core::records::{Event, MatchRecord, Team};
 use tt_core::season::{FieldKind, SeasonSchema};
+pub use tt_core::upstream::{OPR_SOURCE, RANK_SOURCE, STATS_SOURCE};
 use tt_core::user::User;
 
 /// A template failed to render.
@@ -501,9 +502,6 @@ pub struct LeadScoutPage {
 pub struct RankingsPage {
     pub title: String,
     pub nav: Nav,
-    /// Say where Rank comes from and link typing it in. False on a build
-    /// with upstream switched off (F4), which has neither.
-    pub tba_ranks: bool,
     pub event_name: String,
     /// Why there is no table, when there is not.
     pub unavailable: String,
@@ -871,8 +869,12 @@ pub struct UpstreamPanel {
     /// "plugged in (usb0)" or "not plugged in" (S6). Empty when the server
     /// is not watching for a tethered phone.
     pub tether: String,
-    /// Upstream is switched off for this build (F4): the card is not shown.
+    /// Upstream is switched off for this build (F4) and there is no FTC
+    /// Events key either: the card is not shown.
     pub switched_off: bool,
+    /// The card is for the FTC Events pull (F7) instead of FIRST and TBA:
+    /// FIRST and TBA are off for this build and an FTC key is set (F10).
+    pub ftc: bool,
 }
 
 // ── Assignments (L1) ────────────────────────────────────────────────────────

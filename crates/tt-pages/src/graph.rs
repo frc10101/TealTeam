@@ -23,6 +23,7 @@ use tt_core::graph::{self, DEFAULT_TEAMS, MAX_METRICS, MAX_TEAMS, Metric, POINTS
 use tt_core::ranking::{self, Scored};
 use tt_core::records::{Event, TeamEventStats};
 use tt_core::season::SeasonSchema;
+use tt_core::upstream;
 use tt_repo::{LocalRepo, StoredObservation};
 use tt_templates::{Chip, GraphPage, Nav, TableRow, TeamTable};
 
@@ -426,11 +427,12 @@ fn source(
         .max();
     said.push_str(&match (any_stats, synced) {
         (true, Some(at)) => format!(
-            " OPR, DPR, and CCWM: The Blue Alliance, synced {}.",
+            " OPR, DPR, and CCWM: {}, {}.",
+            upstream::OPR_SOURCE,
             describe_age(now - at)
         ),
-        (true, None) => " OPR, DPR, and CCWM: The Blue Alliance.".to_string(),
-        (false, _) => " Nothing from The Blue Alliance has been synced yet.".to_string(),
+        (true, None) => format!(" OPR, DPR, and CCWM: {}.", upstream::OPR_SOURCE),
+        (false, _) => format!(" No OPR, DPR, or CCWM {} yet.", upstream::OPR_SOURCE),
     });
     said
 }

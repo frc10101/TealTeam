@@ -186,7 +186,17 @@ async fn a_pull_imports_the_event_its_teams_matches_and_rankings() {
         (Some(1), Some(1), Some(0))
     );
     assert_eq!(stats.qual_average, Some(51.0));
-    assert_eq!(stats.opr, None, "no OPRs from FTC");
+    // One played match is 2 equations for 4 robots: no OPR, rather than one
+    // of many that fit.
+    assert_eq!(stats.opr, None);
+    assert_eq!(stats.dpr, None);
+    assert_eq!(
+        pulled.rated,
+        Some(ftc::Rated {
+            teams: 0,
+            played: 1
+        })
+    );
 
     // Every raw body is in the log as 'ftc', and the matches as the CSV
     // import writes them.
