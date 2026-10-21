@@ -5,7 +5,8 @@
 //! the sheet under the answer. See `docs/SCOUTING_ASSISTANT.md`.
 //!
 //! - `ASK_BACKEND=local`: any OpenAI-compatible chat endpoint at `ASK_URL`,
-//!   such as `llama-server` on a team laptop on the event LAN, or on the Pi.
+//!   such as `llama-server` on the Pi (the team's laptops are Chromebooks,
+//!   which cannot run one).
 //! - `ASK_BACKEND=anthropic`: the Anthropic Messages API with
 //!   `ANTHROPIC_API_KEY`. It needs internet, so it is for use away from the
 //!   venue: the event LAN has no uplink, and event data does not go by radio.
@@ -364,7 +365,7 @@ pub async fn page(
     };
     page.question = question.chars().take(MAX_QUESTION).collect();
 
-    let sheet = match build_sheet(state, user, event).await {
+    let sheet = match build_sheet(state, user, event, &page.question).await {
         Ok(sheet) => sheet,
         Err(e) => {
             warn!("assistant sheet for {}: {e}", event.key);
@@ -390,6 +391,13 @@ fn about(sheet: &Sheet, at: &str) -> String {
         sheet.teams,
         if sheet.teams == 1 { "" } else { "s" },
     );
+    if !sheet.focused.is_empty() {
+        let named: Vec<String> = sheet.focused.iter().map(i32::to_string).collect();
+        about.push_str(&format!(
+            "; in full for {}, the rest in brief",
+            named.join(", ")
+        ));
+    }
     if sheet.notes_left_out > 0 {
         about.push_str(&format!(
             ", {} notes left out for length",
@@ -403,6 +411,7 @@ async fn build_sheet(
     state: &AppState,
     user: &User,
     event: &tt_core::records::Event,
+    question: &str,
 ) -> tt_repo::Result<Sheet> {
     let approved = state.repo.approved_observations(&event.key).await?;
     let overrides = state.repo.weight_overrides().await?;
@@ -448,6 +457,7 @@ async fn build_sheet(
         &teams,
         &observed,
         user.team_number,
+        &ask::named_teams(question),
         SHEET_BUDGET,
     ))
 }
