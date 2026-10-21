@@ -18,7 +18,7 @@ On the Pi, with internet, in the TealTeam folder: `deploy/build-release.sh`, the
 4. **Check:** in the TealTeam folder, `deploy/pi/network/status.sh`. Every line should be `ok`. Any `FAIL` names the fix. `no uplink` is fine for now.
 5. **Do not enable a phone tether at the event.** The Pi operates without an uplink; rankings and upstream data use the latest local snapshot.
 6. **Confirm from a Chromebook:** plug it into the switch and open **http://tealteam.local**. If needed, use **http://tealteam** or **http://10.101.0.1**.
-7. **Lead scout:** sign in, pick the event, and check the rankings age. Phones that are not wired use local data and sync later away from the event.
+7. **Lead scout:** sign in, pick the event, and check the rankings age. Scouting and the lead's pages run on the wired Chromebooks. Phones are only for viewing data: one that is not wired uses its local copy and syncs later away from the event.
 
 ## Between match blocks: back up to the stick
 

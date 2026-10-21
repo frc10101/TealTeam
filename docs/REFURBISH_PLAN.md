@@ -64,9 +64,11 @@ Consequences:
 
 A Raspberry Pi has **no battery-backed real-time clock**. Without internet, a Pi that loses power comes back believing it is whenever it last shut down. A sync design built on timestamps that runs on a server with a wrong clock will silently corrupt the ordering of every record.
 
-### C3. Devices are phones, and screens are small
+### C3. Laptops do the work; phones view data and sync
 
-Design target is a 360 px-wide viewport in a scout's hand, in a loud arena, possibly with gloves on, with roughly 15 seconds of attention between matches. Not a laptop.
+*Revised 2026-10-20 (Open decision 1 in `ACTION_ITEMS.md`). This section first said devices are phones, with a 360 px design target for everything.*
+
+Scouts fill in the form, and the lead scout assigns, reviews, imports the schedule, edits the pick list and runs admin, on team-owned Lenovo Chromebooks wired to the Pi, in a loud arena with roughly 15 seconds of attention between matches. Phones are only for viewing data (team pages, rankings, graph, drive coach, pick list) and for offline sync. The 360 px target applies to those viewing pages, not to the form or the lead and admin pages.
 
 ### C4. The game changes every January
 
@@ -377,7 +379,9 @@ The `n=` badge deserves emphasis. An average built from one match and an average
 
 ### 2F. Mobile-First Ground Rules
 
-- Design at 360 px. If it does not work there, it does not work.
+*Scope (2026-10-20): these rules bind the pages a phone uses, which are the read-only views and offline sync (C3). The scouting form and the lead and admin pages run on laptops, so they are designed and checked at laptop width; large targets there are still welcome, since Chromebooks may be touchscreens.*
+
+- Design the viewing pages at 360 px. If they do not work there, they do not work.
 - Touch targets 44 × 44 px minimum, 56 px for anything used during a match.
 - **Primary navigation at the bottom** (thumb zone), not the top.
 - Counters get large `+` / `−` buttons, never a text input with a spinner.
@@ -1302,7 +1306,7 @@ None of this requires the workspace refactor. All of it ships before kickoff.
 Decisions that need a human before Phase 2 starts.
 
 1. **Rules.** What is the exact 2026 E143 text, and what will your FTA actually tolerate? This determines the entire network topology.
-2. **Devices.** What are scouts actually holding — team-owned tablets, or personal phones? Personal phones means iOS is in scope, which affects `BarcodeDetector`, `navigator.vibrate`, and storage eviction.
+2. **Devices — resolved (2026-10-20).** Laptops (team-owned Lenovo Chromebooks, wired) do the scouting and the lead's work; phones only view data and sync offline. iOS is still in scope for viewing, which affects storage eviction; `BarcodeDetector` and `navigator.vibrate` matter only on the laptops.
 3. **Port retirement timeline.** When do Go and .NET actually get deleted, and who does it? Until then every feature in this plan costs three times what it should, and the shared-schema constraint blocks the season-schema redesign in Section 2C.
 4. **Season schema.** Who owns writing the JSON schema each January, and what is the deadline relative to Kickoff?
 5. **Chat moderation.** Which mentor owns the log review, and what is the retention policy?

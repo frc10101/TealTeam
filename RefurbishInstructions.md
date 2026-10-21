@@ -62,9 +62,9 @@ Consequences:
 
 A Raspberry Pi has **no battery-backed real-time clock**. Without internet, a Pi that loses power comes back believing it is whenever it last shut down. A sync design built on timestamps that runs on a server with a wrong clock will silently corrupt the ordering of every record.
 
-### C3. Primary devices are team-owned Lenovo Chromebooks, with mobile fallback
+### C3. Laptops do the work; phones view data and sync
 
-The primary event clients are team-owned Lenovo Chromebooks running Chrome and connected to the Pi over wired Ethernet. Phones are secondary disconnected clients: they must support local lookup and review, preserve drafts or queued data without the Pi, and synchronize when they regain internet access after leaving the venue. The interface still needs to work at a compact viewport and under event-day time pressure.
+The event clients are team-owned Lenovo Chromebooks running Chrome and connected to the Pi over wired Ethernet. Everything but viewing happens on them: scouts fill in the form there, and the lead scout assigns, reviews, imports the schedule, edits the pick list and runs admin there. Phones are only for viewing data (team pages, rankings, graph, drive coach, pick list) and for offline sync: they hold a copy of the event's data to read without the Pi, and update it when they next reach the Pi or the internet. Nobody scouts or runs a lead page on a phone (decided 2026-10-20). The viewing pages still need to work at a compact viewport and under event-day time pressure.
 
 ### C4. The game changes every January
 
@@ -365,7 +365,9 @@ The `n=` badge deserves emphasis. An average built from one match and an average
 
 ### 2F. Mobile-First Ground Rules
 
-- Design at 360 px. If it does not work there, it does not work.
+*Scope (2026-10-20): these rules bind the pages a phone uses, which are the read-only views and offline sync (C3). The scouting form and the lead and admin pages run on laptops, so they are designed and checked at laptop width; large targets there are still welcome, since Chromebooks may be touchscreens.*
+
+- Design the viewing pages at 360 px. If they do not work there, they do not work.
 - Touch targets 44 × 44 px minimum, 56 px for anything used during a match.
 - **Primary navigation at the bottom** (thumb zone), not the top.
 - Counters get large `+` / `−` buttons, never a text input with a spinner.
@@ -1293,7 +1295,7 @@ None of this requires the workspace refactor. All of it ships before kickoff.
 Decisions that need a human before Phase 2 starts.
 
 1. **Rules — resolved by project policy.** No Wi-Fi, 802.11, Bluetooth, hotspot, mesh, cellular tether, or other radio-based data transfer. Wired Ethernet is the event client path; QR codes and physical media are the offline handoff paths. Exact rule citation and FTA confirmation remain useful validation, but do not block the architecture.
-2. **Devices — resolved.** Primary scouts use team-owned Lenovo Chromebooks running Chrome over wired Ethernet. Phones are supported as disconnected secondary clients for local lookup/review and deferred sync after leaving the venue; validate the supported mobile browser(s), Chromebook models, and any required Ethernet adapters.
+2. **Devices — resolved (revised 2026-10-20).** Laptops do the work: scouts and the lead scout use team-owned Lenovo Chromebooks running Chrome over wired Ethernet for the form, assignments, review, schedule import, the pick list and admin. Phones are only for viewing data and offline sync. Validate the supported mobile browser(s) for viewing, the Chromebook models, and any required Ethernet adapters.
 3. **Port retirement timeline.** When do Go and .NET actually get deleted, and who does it? Until then every feature in this plan costs three times what it should, and the shared-schema constraint blocks the season-schema redesign in Section 2C.
 4. **Season schema — resolved.** The lead scout and programming lead review and approve the JSON schema together, finalizing it at Kickoff. Later changes require an explicit versioned update and rebuild rather than an event-day edit.
 5. **Multi-team — resolved.** TealTeam is for Team 10101 only; alliance-partner accounts and shared event tenancy are out of scope.

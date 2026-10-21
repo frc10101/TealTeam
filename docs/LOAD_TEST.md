@@ -1,10 +1,10 @@
 # The load test (Q3)
 
 Run this before the season, and again after any change to how saving or
-syncing works. Thirty scouts' phones save observations, pull changes, and hold
+syncing works. Thirty scouts' devices save observations, pull changes, and hold
 live streams against a real `tt-web` for two hours. Meanwhile the cable is
 pulled and the power cut, on purpose. A third check, separate from the
-server's, fills a phone's storage.
+server's, fills a browser's storage.
 
 Everything here is `crates/tt-load` (the server side) and
 `crates/tt-web/tests/browser/storage-full.mjs` (the phone).

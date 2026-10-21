@@ -323,8 +323,8 @@ Only after the form design is approved:
 3. Add tests that parse the schema.
 4. Add a realistic payload test.
 5. Add invalid select, counter, required-field, and stale-schema tests.
-6. Render the form at phone width and verify that a scout can complete it
-   quickly.
+6. Render the form at laptop width (scouts use laptops; phones only view
+   data) and verify that a scout can complete it quickly.
 
 If the application still embeds a single `2026.json`, do not put both FRC and
 FTC meanings in that one file. Split schemas by program or make selection
