@@ -32,11 +32,14 @@ pub fn compare_href(event_key: &str, teams: &[i32]) -> String {
 }
 
 /// The comparison for the event `context` selected. `query` is a list, not
-/// a map: `team` repeats.
+/// a map: `team` repeats. Unless the URL says otherwise, the others are
+/// measured against `viewer_team` when it is among those chosen.
+#[allow(clippy::too_many_arguments)]
 pub async fn page<R: LocalRepo>(
     repo: &R,
     schema: &SeasonSchema,
     nav: Nav,
+    viewer_team: Option<i32>,
     context: &EventContext,
     query: &[(String, String)],
     now: DateTime<Utc>,
@@ -210,7 +213,13 @@ pub async fn page<R: LocalRepo>(
         }
         top
     };
-    let reference = asked_ref.filter(|r| teams.contains(r));
+    // `ref=` (Nobody) is a choice too; only no `ref` at all means ours.
+    let reference = if all("ref").is_empty() {
+        viewer_team
+    } else {
+        asked_ref
+    }
+    .filter(|r| teams.contains(r));
 
     let chip = |team: i32| {
         let name = name_of(team);

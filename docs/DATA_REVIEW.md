@@ -34,8 +34,10 @@ scouts record, in the order of the form.
 - **The best in each row is marked.** Higher is better except where it is
   not: fouls, DPR and official rank are lower-is-better, and the row says so.
   No mark when only one team has a value or all are equal.
-- **Measure against a team.** Pick a reference, such as us or our first pick,
-  and every other cell shows how far ahead (green) or behind (red) it is: in
+- **Measure against a team.** When our own team is among those chosen, the
+  others are measured against it unless "Nobody" is picked (user,
+  2026-10-21). Any other chosen team can be picked instead, such as our first
+  pick. Every other cell then shows how far ahead (green) or behind (red) it is: in
   points for counts, in percentage points for yes/no rates.
 - **Last 3 or 5 matches.** Like AdvantageScope's time range: how a team plays
   now, not on its first match.
@@ -109,5 +111,5 @@ In order of value for selection, from what the beta shows:
 
 1. **Is 6 teams the right width?** Eight would match Graph's colours but
    gets cramped on a Chromebook screen.
-2. **Should "measure against" default to our own team** when we are among the
-   teams chosen?
+2. ~~Should "measure against" default to our own team when we are among the
+   teams chosen?~~ Yes (2026-10-21), built.

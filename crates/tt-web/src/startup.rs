@@ -4856,6 +4856,32 @@ mod flow_tests {
         let graph = text(get(&state, "/graph?event=2026now", Some(&sam)).await).await;
         assert!(graph.contains(r#"href="/compare?event=2026now">Compare</a>"#));
 
+        // Sam is on 10101: with 10101 chosen, the others are measured
+        // against it unless the URL picks Nobody.
+        let ours = text(
+            get(
+                &state,
+                "/compare?event=2026now&chosen=1&team=254&team=10101",
+                Some(&sam),
+            )
+            .await,
+        )
+        .await;
+        assert!(
+            ours.contains(r#"<option value="10101" selected>10101</option>"#),
+            "{ours}"
+        );
+        let nobody = text(
+            get(
+                &state,
+                "/compare?event=2026now&chosen=1&team=254&team=10101&ref=",
+                Some(&sam),
+            )
+            .await,
+        )
+        .await;
+        assert!(nobody.contains(r#"<option value="" selected>Nobody</option>"#));
+
         let against = text(get(&state, "/compare?event=2026now&ref=254", Some(&sam)).await).await;
         assert!(against.contains(r#"<span class="badge badge-teal">reference</span>"#));
     }

@@ -722,6 +722,7 @@ pub async fn compare(
             &*state.repo,
             &state.season,
             nav,
+            user.team_number,
             &context,
             &query,
             Utc::now(),
