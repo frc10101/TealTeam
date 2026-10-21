@@ -9,17 +9,18 @@
 {% for error in errors %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endfor %}
 
 <section class="card">
-  <div class="card-header"><h1>{% if let Some(team) = team %}{{ team.number }} · {{ team.name }}{% else %}Teams{% endif %}</h1></div>
-  <div class="card-body">
+  <div class="card-header">
+    <h1>{% if let Some(team) = team %}{{ team.number }} · {{ team.name }}{% else %}Teams{% endif %}</h1>
     {% if let Some(team) = team %}
-      {% if !team.location.is_empty() || !team.rookie_year.is_empty() %}
-        <p class="muted">{{ team.location }}{% if !team.location.is_empty() && !team.rookie_year.is_empty() %} · {% endif %}{% if !team.rookie_year.is_empty() %}rookie year {{ team.rookie_year }}{% endif %}</p>
+      {% if !team.location.is_empty() || !team.rookie_year.is_empty() || !team.website.is_empty() %}
+        <p class="muted header-meta">{{ team.location }}{% if !team.location.is_empty() && !team.rookie_year.is_empty() %} · {% endif %}{% if !team.rookie_year.is_empty() %}rookie year {{ team.rookie_year }}{% endif %}{% if !team.website.is_empty() %}{% if !team.location.is_empty() || !team.rookie_year.is_empty() %} · {% endif %}<a href="{{ team.website }}" rel="noopener noreferrer">{{ team.website }}</a>{% endif %}</p>
       {% endif %}
-      {% if !team.website.is_empty() %}<p><a href="{{ team.website }}" rel="noopener noreferrer">{{ team.website }}</a></p>{% endif %}
     {% endif %}
-    {# A GET form with no action: the team shown is in the URL, bookmarkable.
-       Only before a team is chosen: after, the header's team box does it. #}
-    {% if team.is_none() %}
+  </div>
+  {# A GET form with no action: the team shown is in the URL, bookmarkable.
+     Only before a team is chosen: after, the header's team box does it. #}
+  {% if team.is_none() %}
+  <div class="card-body">
     <form method="get" class="keypad">
       {% if !nav.event.selected.is_empty() %}<input type="hidden" name="event" value="{{ nav.event.selected }}">{% endif %}
       <label class="form-label" for="team-number">Team number</label>
@@ -32,8 +33,8 @@
         {% for entry in roster %}<option value="{{ entry.number }}">{{ entry.name }}</option>{% endfor %}
       </datalist>
     </form>
-    {% endif %}
   </div>
+  {% endif %}
 </section>
 
 {% if !not_at_event.is_empty() %}<p class="alert alert-info" role="status">{{ not_at_event }}</p>{% endif %}

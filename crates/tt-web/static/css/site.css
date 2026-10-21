@@ -212,6 +212,7 @@ body.has-tabs { padding-bottom: calc(var(--tap-match) + env(safe-area-inset-bott
   .card-header > .btn, .card-header > div > .btn, .card-header .header-links .btn { min-height: var(--tap); }
 }
 .header-links { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.header-meta { margin: 0; font-size: 0.875rem; flex-basis: 100%; }
 
 /* Scout (L3): the match picker beside the title, small; the robots lead. */
 .card-header .match-select { display: flex; gap: 0.375rem; align-items: center; flex: 0 1 18rem; }
