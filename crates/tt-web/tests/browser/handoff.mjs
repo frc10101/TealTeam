@@ -4,6 +4,7 @@
 //
 //   cargo build -p tt-web
 //   node --experimental-websocket handoff.mjs <empty folder> target/debug/tt-web
+//   (TT_PORT and TT_CDP move it off 18423 and 9338.)
 //
 // Kim's tablet saves a form the server never answers, and shows it as QR
 // codes. Each code is screenshotted to a PNG, as a lead's camera would see
@@ -17,7 +18,7 @@ import { spawn, execFileSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 const [D, BIN] = process.argv.slice(2).map((a) => resolve(a));
-const PORT = 18423, CDP = 9338, local = `http://127.0.0.1:${PORT}`;
+const PORT = Number(process.env.TT_PORT || 18423), CDP = Number(process.env.TT_CDP || 9338), local = `http://127.0.0.1:${PORT}`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 mkdirSync(D, { recursive: true });
 rmSync(`${D}/chr`, { recursive: true, force: true });
@@ -81,16 +82,19 @@ await send("Emulation.setDeviceMetricsOverride", { width: 360, height: 800, devi
 await as(kim);
 await go(`${local}/submission?event=2026demo&match=2026demo_qm2&team=254`);
 check("Kim's tablet holds a token", await until(`!!(window.ttToken && ttToken.token())`));
-// Kim fills the form and presses Save; no answer ever comes back.
+// Kim fills the form and presses Save; no answer ever comes back. Since
+// C13 the form saves by fetch, and holds what does not land, so the save
+// and the outbox's push are both cut off, as when the Pi is out of reach.
+await send("Network.setBlockedURLs", { urls: ["*/api/submission*", "*/api/sync/push*"] });
 await evaluate(`(() => {
   const form = document.getElementById("scout-form");
   form.elements["f.robot_status"].value = "played";
   form.elements["f.launched"].value = "9";
   form.elements["f.teleop_park"].checked = true;
   form.elements["f.notes"].value = "tippy on the ramp";
-  form.addEventListener("submit", (e) => e.preventDefault());
   form.querySelector("button[type=submit]").click();
 })()`);
+await until(`document.body.textContent.includes("Held on this tablet")`, 15000);
 const recordId = await evaluate(`document.getElementById("scout-form").elements.record_id.value`);
 await evaluate(`document.querySelector("#handoff summary").click()`);
 await sleep(300);
@@ -102,6 +106,12 @@ await evaluate(`document.querySelector("[data-handoff-show]").click()`);
 check("the code shows", await until(`document.querySelectorAll("[data-handoff-frames] svg.qr").length > 0`));
 const texts = await evaluate(`[...document.querySelectorAll("[data-handoff-frames] svg.qr")].map((s) => s.dataset.text)`);
 check("in our format", texts.every((t) => /^TT2:H:[0-9A-F]{8}:\d+\/\d+:/.test(t)), `${texts.length} part(s)`);
+// T1: what the codes carry names Kim and holds a MAC, and no token.
+const carried = await evaluate(`(async () => {
+  const done = await (() => { const a = new ttQr.Assembler(); ${JSON.stringify(texts)}.forEach((t) => a.add(t)); return a.finish(); })();
+  return new TextDecoder().decode(done.bytes);
+})()`);
+check("the codes carry no token, only who and a MAC", !!carried && !carried.includes("v4.public.") && /"mac":"[A-Za-z0-9_-]{43}"/.test(carried) && carried.includes('\\"scout\\":{'), (carried || "").slice(0, 120));
 check("no horizontal scroll at 360px", await evaluate(`document.documentElement.scrollWidth <= 360`));
 await page(`${D}/tablet.png`);
 // Each part, photographed.
@@ -133,6 +143,20 @@ await send("Network.emulateNetworkConditions", { offline: true, latency: 0, down
 server.kill();
 check("the form still waits on the tablet", await evaluate(`Object.keys(localStorage).some((k) => k.startsWith("tt-draft:v1:2:") && JSON.parse(localStorage[k]).recordId === ${JSON.stringify(recordId)})`));
 await evaluate(`document.querySelector("#handoff summary").click()`);
+// A receipt the server did not make (R1): it names Kim's form, and this
+// tablet's nonce, but its MAC is not the server's. Nothing is deleted.
+const nonce = await evaluate(`JSON.parse(localStorage.getItem("tt-handoff:v1:2")).nonce`);
+const forgedTexts = await evaluate(`ttQr.frames("R", new TextEncoder().encode(JSON.stringify({
+  body: JSON.stringify({ nonce: ${JSON.stringify(nonce)}, receipts: [{ client_record_id: ${JSON.stringify(recordId)}, outcome: "recorded" }] }),
+  mac: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" })))`);
+await evaluate(`(() => { const box = document.createElement("div"); box.id = "forged"; box.style.cssText = "background:#fff;padding:16px;width:320px";
+  box.appendChild(ttQr.draw(${JSON.stringify(forgedTexts[0])})); document.body.prepend(box); })()`);
+const forged = await shoot("#forged svg", `${D}/forged.png`);
+await evaluate(`document.getElementById("forged").remove()`);
+await setFiles("[data-handoff-photo]", [forged]);
+const turnedAway = await until(`document.querySelector("[data-handoff-status]").textContent.includes("not made by the server")`, 20000);
+check("a forged receipt is turned away", turnedAway, await evaluate(`document.querySelector("[data-handoff-status]").textContent`));
+check("  and the form still waits", await evaluate(`Object.keys(localStorage).some((k) => k.startsWith("tt-draft:v1:2:") && JSON.parse(localStorage[k]).recordId === ${JSON.stringify(recordId)})`));
 await setFiles("[data-handoff-photo]", [receipt]);
 const settled = await until(`document.querySelector("[data-handoff-status]").textContent.includes("The server has 1 of your forms.")`, 20000);
 check("the receipt is read with no server, and says so", settled, await evaluate(`document.querySelector("[data-handoff-status]").textContent`));

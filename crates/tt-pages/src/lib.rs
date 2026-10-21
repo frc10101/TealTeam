@@ -10,11 +10,13 @@
 //! guards) and how the request arrives (extractors, the worker's fetch event)
 //! stay with each side. A page moves here when it is wanted offline (C6), one
 //! at a time; the rest stay in `tt-web`. So far: what a scout reads at an
-//! event, which is home, a team, the notes, and the graph. Lead scout pages,
-//! the pick list, and anything that writes stay with the server.
+//! event, which is home, a team, the notes, and the graph, and the drive
+//! coach's schedule (C6b). Lead scout pages, the pick list, and anything that
+//! writes stay with the server.
 //!
 //! [`LocalRepo`]: tt_repo::LocalRepo
 
+pub mod coach;
 pub mod events;
 pub mod graph;
 pub mod home;

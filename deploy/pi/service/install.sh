@@ -3,9 +3,12 @@
 #
 #   sudo ./install.sh path/to/tt-web             install or upgrade
 #   sudo ./install.sh path/to/tt-web --dry-run   say what it would change
+#   sudo ./install.sh path/to/tt-web --no-client install one without the
+#                                                offline client anyway
 #
-# Build the binary after deploy/build-client.sh, so it carries the service
-# worker's wasm module and devices can make pages offline (C5).
+# Build the binary with deploy/build-release.sh, so it carries the service
+# worker's wasm module and devices can make pages offline (C5). This refuses
+# a binary without it (C14).
 #
 # Idempotent: rerun it with each new build. Do the SSD (docs/PI_STORAGE.md)
 # first; the service will not start until /srv/tealteam is mounted.
@@ -19,16 +22,25 @@ APP_DIR=/opt/tealteam
 DATA_ROOT=/srv/tealteam
 SERVICE_USER=tealteam
 DRY_RUN=0
+NO_CLIENT=0
 
 binary="${1:-}"
-case "${2:-}" in
-    "") ;;
-    --dry-run) DRY_RUN=1 ;;
-    *) binary="" ;;
-esac
+for arg in "${@:2}"; do
+    case "$arg" in
+        --dry-run) DRY_RUN=1 ;;
+        --no-client) NO_CLIENT=1 ;;
+        *) binary="" ;;
+    esac
+done
 if [[ -z "$binary" || ! -f "$binary" ]]; then
-    echo "usage: $0 path/to/tt-web [--dry-run]" >&2
+    echo "usage: $0 path/to/tt-web [--dry-run] [--no-client]" >&2
     exit 2
+fi
+# The asset table names the module only when build-client.sh made one.
+if [[ $NO_CLIENT -eq 0 ]] && ! grep -qaF 'client/tt_client_bg.wasm' "$binary"; then
+    echo "$binary has no offline client: build it with deploy/build-release.sh" >&2
+    echo "(or pass --no-client to install it anyway)" >&2
+    exit 1
 fi
 if [[ $DRY_RUN -eq 0 && $EUID -ne 0 ]]; then
     echo "run as root: sudo $0 $*" >&2

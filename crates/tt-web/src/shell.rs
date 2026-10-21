@@ -39,6 +39,28 @@ pub fn precache() -> Vec<String> {
         .collect()
 }
 
+/// What the worker caches when the whole shell does not fit (Q6): the shell
+/// page and the files it loads itself, read from the page so the two cannot
+/// drift. On a full phone that is the difference between the shell and the
+/// browser's error page; what is left out (the wasm modules, the graph) only
+/// makes pages on the device or draws them, and is fetched on the next try.
+pub fn essential() -> Vec<String> {
+    let html = OfflinePage::default()
+        .render_html()
+        .expect("the offline page renders");
+    let mut list = vec!["/offline".to_string()];
+    for attr in [r#"src=""#, r#"href=""#] {
+        for (at, _) in html.match_indices(attr) {
+            let rest = &html[at + attr.len()..];
+            let url = &rest[..rest.find('"').unwrap_or(0)];
+            if url.starts_with("/static/") && !list.iter().any(|u| u == url) {
+                list.push(url.to_string());
+            }
+        }
+    }
+    list
+}
+
 /// The wasm module's script, if this binary was built with one
 /// (`deploy/build-client.sh`): the worker makes pages from the device's
 /// copy with it (C5).
@@ -54,6 +76,10 @@ pub fn script() -> String {
         .replace(
             "__PRECACHE__",
             &serde_json::to_string(&precache()).expect("strings serialise"),
+        )
+        .replace(
+            "__ESSENTIAL__",
+            &serde_json::to_string(&essential()).expect("strings serialise"),
         )
         .replace(
             "__CLIENT__",
@@ -94,7 +120,10 @@ mod tests {
         let js = script();
         assert!(js.contains(&format!("const BUILD = \"{BUILD_VERSION}\";")));
         assert!(
-            !js.contains("__PRECACHE__") && !js.contains("__BUILD__") && !js.contains("__CLIENT__")
+            !js.contains("__PRECACHE__")
+                && !js.contains("__ESSENTIAL__")
+                && !js.contains("__BUILD__")
+                && !js.contains("__CLIENT__")
         );
         let list = precache();
         assert_eq!(list[0], "/offline");
@@ -123,6 +152,25 @@ mod tests {
             // Without it: no import that would fail the worker's install.
             None => assert!(js.contains("const CLIENT = null;")),
         }
+    }
+
+    #[test]
+    fn a_full_device_falls_back_to_the_shell_and_what_it_loads() {
+        // Q6.
+        let list = essential();
+        let all = precache();
+        assert_eq!(list[0], "/offline");
+        for url in [
+            "/static/css/site.css",
+            "/static/js/link.js",
+            "/static/js/shell.js",
+            "/static/js/agenda.js",
+        ] {
+            assert!(list.contains(&url.to_string()), "{url}");
+        }
+        assert!(list.iter().all(|u| all.contains(u)), "only what is served");
+        assert!(!list.iter().any(|u| u.ends_with(".wasm")), "{list:?}");
+        assert!(list.len() < all.len());
     }
 
     #[test]

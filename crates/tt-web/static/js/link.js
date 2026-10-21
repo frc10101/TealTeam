@@ -4,7 +4,10 @@
 // picks which. The words and the rule live in tt_core::link -- this is the
 // same order as Link::classify: unreachable, then sending, then what needs
 // review, then synced. The review count is the server's, as of this page
-// (C10b); only a page that has it renders that state.
+// (C10b); only a page that has it renders that state. What the page's outbox
+// holds (C13, outbox.js) is the device's: window.ttLink.held(n) says how
+// many, and the chip reads "Offline · n held" while the server is gone, or
+// Syncing while it is there and they are on their way.
 //
 // Offline is observed, never a mode. Nothing here can be switched on or off.
 //
@@ -34,11 +37,22 @@
   var reachable = !shell;
   var sending = false;
   var review = !!chip.querySelector('[data-link="review"]');
+  var held = 0;
   var timer = null;
   var checking = false;
 
   function show() {
-    var key = !reachable ? "offline" : sending ? "syncing" : review ? "review" : "synced";
+    var key = !reachable
+      ? held ? "held" : "offline"
+      : sending || held ? "syncing" : review ? "review" : "synced";
+    var counted = chip.querySelector('[data-link="held"]');
+    if (counted) {
+      var label = counted.dataset.label.replace("{n}", held);
+      var meaning = counted.dataset.meaning.replace("{n}", held);
+      counted.querySelector("[data-link-label]").textContent = label;
+      counted.querySelector("[data-link-meaning]").textContent = meaning;
+      counted.title = meaning;
+    }
     chip.querySelectorAll("[data-link]").forEach(function (state) {
       state.hidden = state.dataset.link !== key;
     });
@@ -57,9 +71,12 @@
     var giveUp = setTimeout(function () { if (abort) abort.abort(); }, TIMEOUT_MS);
 
     // Any answer at all means the server is there; only no answer is offline.
+    var was = reachable;
     fetch("/health", { cache: "no-store", credentials: "same-origin", signal: abort && abort.signal })
       .then(function (response) {
         reachable = true;
+        // Back: what the outbox holds can go now.
+        if (!was) document.dispatchEvent(new Event("tt:reachable"));
         if (shell) return location.reload();
         return response.json().then(compare, function () {});
       })
@@ -143,6 +160,21 @@
     sending = false;
     check();
   });
+
+  // For the outbox (C13): how many it holds, a save it is sending itself
+  // (its submit is prevented, so the listener above does not see it), and a
+  // save that got no answer, which is worth a look at once.
+  window.ttLink = {
+    held: function (n) {
+      held = n;
+      show();
+    },
+    sending: function (on) {
+      sending = on;
+      show();
+    },
+    check: check,
+  };
 
   if (navigator.onLine === false) reachable = false;
   show();

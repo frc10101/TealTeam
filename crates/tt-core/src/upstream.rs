@@ -592,6 +592,128 @@ impl FirstTeam {
     }
 }
 
+/// One entry of `/{season}/schedule/{code}` (G4): a match as FIRST schedules
+/// it, before TBA has it. No scores; the schedule is the point.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FirstScheduledMatch {
+    /// `"Qualification 12"`, `"Match 7 (R3)"`, `"Final 1"`.
+    #[serde(default, deserialize_with = "or_default")]
+    pub description: String,
+    /// `"Qualification"` or `"Playoff"`.
+    #[serde(default, deserialize_with = "or_default")]
+    pub tournament_level: String,
+    #[serde(default, deserialize_with = "or_default")]
+    pub match_number: i32,
+    /// The event's own clock, with no offset: `"2026-03-20T08:50:00"`.
+    #[serde(default)]
+    pub start_time: Option<String>,
+    #[serde(default, deserialize_with = "or_default")]
+    pub teams: Vec<FirstStation>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FirstStation {
+    /// Null for a playoff slot whose alliance is not decided yet.
+    #[serde(default)]
+    pub team_number: Option<i32>,
+    /// `"Red1"` .. `"Blue3"`.
+    #[serde(default, deserialize_with = "or_default")]
+    pub station: String,
+}
+
+/// The first season of the double-elimination bracket, whose keys
+/// [`FirstScheduledMatch::tba_slot`] knows. Earlier playoffs were best-of-three
+/// sets FIRST numbers differently.
+pub const DOUBLE_ELIMINATION_SINCE: i32 = 2023;
+
+/// The bracket's matches before the finals: TBA's `sf1m1` to `sf13m1`.
+const BRACKET_MATCHES: i32 = 13;
+
+impl FirstScheduledMatch {
+    /// Where TBA files this match: its level, set, and number. `None` for a
+    /// level this cannot place, so the caller skips it rather than invent a
+    /// key TBA will never send.
+    ///
+    /// Qualification `n` is `qm` `n`. A playoff in the double-elimination
+    /// bracket is `sf{n}m1` for FIRST's matches 1 to 13; the finals are
+    /// `f1m{k}`, which FIRST numbers on from 14 and describes as `"Final k"`.
+    pub fn tba_slot(&self, season: i32) -> Option<(CompLevel, i32, i32)> {
+        let n = self.match_number;
+        if n < 1 {
+            return None;
+        }
+        match self.tournament_level.trim().to_ascii_lowercase().as_str() {
+            "qualification" | "qual" => Some((CompLevel::Qualification, 1, n)),
+            "playoff" if season >= DOUBLE_ELIMINATION_SINCE => {
+                let is_final = self
+                    .description
+                    .trim()
+                    .to_ascii_lowercase()
+                    .starts_with("final");
+                if is_final || n > BRACKET_MATCHES {
+                    let k = if n > BRACKET_MATCHES {
+                        n - BRACKET_MATCHES
+                    } else {
+                        n
+                    };
+                    Some((CompLevel::Final, 1, k))
+                } else {
+                    Some((CompLevel::Semifinal, n, 1))
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// TBA's match key, `"2026mslr_sf3m1"`, under `event_key` -- TBA's key
+    /// for the event, which for a division is not FIRST's code.
+    pub fn tba_key(&self, event_key: &str, season: i32) -> Option<String> {
+        let (level, set, number) = self.tba_slot(season)?;
+        Some(match level {
+            CompLevel::Qualification => format!("{event_key}_qm{number}"),
+            _ => format!("{event_key}_{}{set}m{number}", level.as_str()),
+        })
+    }
+
+    pub fn red_teams(&self) -> Alliance {
+        self.alliance("red")
+    }
+
+    pub fn blue_teams(&self) -> Alliance {
+        self.alliance("blue")
+    }
+
+    /// Slots by station number, so `Red2` is always the second, whatever
+    /// order FIRST lists them in.
+    fn alliance(&self, colour: &str) -> Alliance {
+        let mut out = [None; ALLIANCE_SIZE];
+        for team in &self.teams {
+            let station = team.station.trim().to_ascii_lowercase();
+            let Some(slot) = station.strip_prefix(colour) else {
+                continue;
+            };
+            if let Ok(i @ 1..=ALLIANCE_SIZE) = slot.parse::<usize>() {
+                out[i - 1] = team.team_number.filter(|n| *n > 0);
+            }
+        }
+        out
+    }
+
+    /// The start time on the event's clock, unparsed into a zone.
+    pub fn local_start(&self) -> Option<chrono::NaiveDateTime> {
+        let raw = self.start_time.as_deref()?.trim();
+        [
+            "%Y-%m-%dT%H:%M:%S%.f",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%dT%H:%M",
+        ]
+        .iter()
+        .find_map(|f| chrono::NaiveDateTime::parse_from_str(raw, f).ok())
+    }
+}
+
 /// Parse a FIRST date, which appears in three shapes across endpoints.
 ///
 /// Returns `(year, month, day)`. Deliberately not a chrono type: the caller
@@ -1172,5 +1294,89 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(neither.display_name(), "Team 10101");
+    }
+
+    // ── FIRST schedule (G4) ─────────────────────────────────────────────────
+
+    fn scheduled(level: &str, number: i32, description: &str) -> FirstScheduledMatch {
+        FirstScheduledMatch {
+            description: description.into(),
+            tournament_level: level.into(),
+            match_number: number,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_scheduled_match_is_keyed_as_tba_will_key_it() {
+        let key = |m: FirstScheduledMatch| m.tba_key("2026mil", 2026);
+        assert_eq!(
+            key(scheduled("Qualification", 12, "Qualification 12")).as_deref(),
+            Some("2026mil_qm12"),
+            "under TBA's division key, not FIRST's MILSTEIN"
+        );
+        assert_eq!(
+            key(scheduled("Playoff", 1, "Match 1 (R1)")).as_deref(),
+            Some("2026mil_sf1m1")
+        );
+        assert_eq!(
+            key(scheduled("Playoff", 13, "Match 13 (R5)")).as_deref(),
+            Some("2026mil_sf13m1")
+        );
+        assert_eq!(
+            key(scheduled("Playoff", 14, "Final 1")).as_deref(),
+            Some("2026mil_f1m1")
+        );
+        assert_eq!(
+            key(scheduled("Playoff", 16, "Final Tiebreaker")).as_deref(),
+            Some("2026mil_f1m3")
+        );
+        // Should FIRST ever restart the finals at 1, the description says so.
+        assert_eq!(
+            key(scheduled("Playoff", 2, "Final 2")).as_deref(),
+            Some("2026mil_f1m2")
+        );
+    }
+
+    #[test]
+    fn a_match_that_cannot_be_placed_gets_no_key() {
+        // Best-of-three playoffs numbered differently; inventing keys for them
+        // would leave rows TBA never updates.
+        assert_eq!(
+            scheduled("Playoff", 3, "Quarterfinal 3").tba_key("2019lake", 2019),
+            None
+        );
+        assert_eq!(
+            scheduled("Practice", 3, "Practice 3").tba_key("2026mslr", 2026),
+            None
+        );
+        assert_eq!(
+            scheduled("Qualification", 0, "").tba_key("2026mslr", 2026),
+            None
+        );
+        // Qualifications are the same in every season.
+        assert_eq!(
+            scheduled("Qualification", 3, "")
+                .tba_key("2019lake", 2019)
+                .as_deref(),
+            Some("2019lake_qm3")
+        );
+    }
+
+    #[test]
+    fn stations_fill_their_own_slots_and_an_undecided_one_stays_empty() {
+        let raw = r#"{"description":"Match 9 (R4)","tournamentLevel":"Playoff","matchNumber":9,
+            "startTime":"2026-03-21T13:21:00","teams":[
+            {"teamNumber":9153,"station":"Red2"},{"teamNumber":2183,"station":"Red1"},
+            {"teamNumber":null,"station":"Red3"},{"teamNumber":10101,"station":"Blue1"},
+            {"teamNumber":10661,"station":"Blue2"},{"teamNumber":6184,"station":"Blue3"}]}"#;
+        let m: FirstScheduledMatch = serde_json::from_str(raw).unwrap();
+        // A third station is cut: an FTC alliance is two robots.
+        assert_eq!(m.red_teams(), [Some(2183), Some(9153)]);
+        assert_eq!(m.blue_teams(), [Some(10101), Some(10661)]);
+        assert_eq!(
+            m.local_start().map(|t| t.to_string()).as_deref(),
+            Some("2026-03-21 13:21:00")
+        );
     }
 }

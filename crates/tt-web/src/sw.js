@@ -1,11 +1,15 @@
 // TealTeam's service worker (C1). Served at /sw.js by src/shell.rs, which
-// fills in the three placeholders below.
+// fills in the four placeholders below.
 //
 // What it does, and only this:
 //
 //   * On install, precache the offline shell: /offline and every static file,
 //     into a cache named for this build. A new binary is a new worker with a
 //     new cache; the old cache is deleted when it takes over.
+//     A device too full for all of it (Q6) keeps just /offline and the files
+//     it loads, marked as such; static/js/shell.js reads the mark and warns.
+//     With not even room for that, the install fails, the page warns, and
+//     the next page tries again.
 //   * Pages (navigations): the network, always. Only when the network fails,
 //     the device makes the page itself (C5): tt-client's wasm module runs the
 //     server's own page code over the device's copy in OPFS. For an address
@@ -23,11 +27,12 @@
 //     the wasm module fetches from TBA with this device's signal and hands
 //     the Pi what it fetched. One at a time, since it writes the device's
 //     copy, and the asker gets the same answer as a tick already running.
-//   * Any signed-in page may ask for a pull sync (C7, static/js/sync.js): the
-//     wasm module applies whatever changed on the Pi to the device's copy --
-//     there is nothing of the browser's own to push, so this never does. It
-//     may also ask where to open the live stream (S8) for this device's own
-//     cursors, which only the wasm module can read.
+//   * Any signed-in page may ask for a sync (C7, C12, static/js/sync.js): the
+//     wasm module pushes the device's outbox, if anything is in it, and then
+//     applies whatever changed on the Pi to the device's copy. It may also
+//     ask where to open the live stream (S8) for this device's own cursors,
+//     which only the wasm module can read, and for the outbox as a file to
+//     hand to the lead scout when it cannot be pushed.
 //
 // Registered by static/js/shell.js, and only in a secure context.
 
@@ -37,6 +42,12 @@ const BUILD = "__BUILD__";
 const CACHE = "tealteam-shell-" + BUILD;
 const SHELL = "/offline";
 const PRECACHE = __PRECACHE__;
+// The shell page and what it loads, for when PRECACHE does not fit (Q6).
+const ESSENTIAL = __ESSENTIAL__;
+// In a cache that holds only ESSENTIAL: why the rest did not fit, and what
+// the rest is, for shell.js to add once there is room.
+const PARTIAL = "/offline?partial";
+const rest = () => PRECACHE.filter((url) => !ESSENTIAL.includes(url));
 // The wasm module's script, or null in a binary built without it
 // (deploy/build-client.sh). Its .wasm is beside it, and in PRECACHE.
 const CLIENT = __CLIENT__;
@@ -88,13 +99,23 @@ function fromDevice(url) {
     });
 }
 
+// The courier tick and the sync both write the device's copy, and each
+// opens the file for itself and writes it back whole: two at once and the
+// last one wins. So they take turns, and each runs one at a time -- a page
+// that asks again while one is under way gets the same answer.
+let turn = Promise.resolve();
+function inTurn(work) {
+  const next = turn.then(work, work);
+  turn = next.catch(() => {});
+  return next;
+}
+
 // The tick under way, if any.
 let ticking = null;
 function courierTick(bearer) {
   if (typeof wasm_bindgen === "undefined") return Promise.resolve(null);
   if (!ticking) {
-    ticking = client()
-      .then(() => wasm_bindgen.courier(bearer || null))
+    ticking = inTurn(() => client().then(() => wasm_bindgen.courier(bearer || null)))
       .then((report) => (report === null ? null : JSON.parse(report)))
       .catch((e) => {
         console.warn("TealTeam: fetching upstream on this device:", e);
@@ -107,25 +128,32 @@ function courierTick(bearer) {
   return ticking;
 }
 
-// One pull at a time, same reasoning as the courier tick: it writes the
-// device's copy, and a page that asks again while one is under way gets the
-// same answer.
-let pulling = null;
-function pull(bearer) {
+// The sync under way, if any.
+let syncing = null;
+function sync(bearer) {
   if (typeof wasm_bindgen === "undefined") return Promise.resolve(null);
-  if (!pulling) {
-    pulling = client()
-      .then(() => wasm_bindgen.pull(bearer || null))
+  if (!syncing) {
+    syncing = inTurn(() => client().then(() => wasm_bindgen.sync(bearer || null)))
       .then((report) => (report === null ? null : JSON.parse(report)))
       .catch((e) => {
-        console.warn("TealTeam: pulling this device's copy up to date:", e);
+        console.warn("TealTeam: syncing this device's copy:", e);
         return null;
       })
       .finally(() => {
-        pulling = null;
+        syncing = null;
       });
   }
-  return pulling;
+  return syncing;
+}
+
+// The outbox as a file's text, or null when there is nothing in it. It reads
+// only, but in turn, so it is what the last sync left, not a sync's start.
+function exportOutbox() {
+  if (typeof wasm_bindgen === "undefined") return Promise.resolve(null);
+  return inTurn(() => client().then(() => wasm_bindgen.exportOutbox())).catch((e) => {
+    console.warn("TealTeam: writing this device's outbox out:", e);
+    return null;
+  });
 }
 
 function streamUrl() {
@@ -149,8 +177,14 @@ self.addEventListener("message", (event) => {
     );
   } else if (data.type === "tt-sync") {
     event.waitUntil(
-      pull(data.bearer).then((report) => {
+      sync(data.bearer).then((report) => {
         if (port) port.postMessage(report);
+      }),
+    );
+  } else if (data.type === "tt-export-outbox") {
+    event.waitUntil(
+      exportOutbox().then((file) => {
+        if (port) port.postMessage(file);
       }),
     );
   } else if (data.type === "tt-stream-url") {
@@ -162,13 +196,42 @@ self.addEventListener("message", (event) => {
   }
 });
 
+function fill(cache, urls) {
+  return cache.addAll(urls.map((url) => new Request(url, { cache: "reload" })));
+}
+
+// To every page of the site, controlled or not: a failed install leaves no
+// cache for a page to read.
+function tell(message) {
+  return self.clients
+    .matchAll({ includeUncontrolled: true, type: "window" })
+    .then((pages) => pages.forEach((page) => page.postMessage(message)));
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(CACHE)
       // Past the HTTP cache: the shell must be this build's, not a copy the
       // browser kept from the last one.
-      .then((cache) => cache.addAll(PRECACHE.map((url) => new Request(url, { cache: "reload" }))))
+      .then((cache) => fill(cache, PRECACHE))
+      // Out of room: addAll keeps nothing of a failed call, so try the part
+      // that keeps a reload with no server off the browser's error page.
+      .catch((e) =>
+        caches
+          .delete(CACHE)
+          .then(() => caches.open(CACHE))
+          .then((cache) =>
+            fill(cache, ESSENTIAL).then(() => cache.put(PARTIAL, new Response(JSON.stringify({ reason: e.name, rest: rest() })))),
+          ),
+      )
+      .catch((e) =>
+        tell({ type: "tt-shell", state: "none", reason: e.name })
+          .then(() => caches.delete(CACHE))
+          .then(() => {
+            throw e;
+          }),
+      )
       // Take over at once. Pages and files still come from the network
       // first, so an open page does not mix two builds.
       .then(() => self.skipWaiting()),

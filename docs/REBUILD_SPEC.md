@@ -31,7 +31,7 @@ It merges the two into per-team, per-event profiles used to make alliance-select
 ### The operating environment (this drives every design decision)
 
 - The server runs **at the event**, on a Raspberry Pi 5, on a LAN with no reliable internet.
-- Clients are **phones and tablets** held by students, on small screens, often with no signal.
+- Clients are **laptops for the work and phones for viewing** (decided 2026-10-20, Open decision 1 in `ACTION_ITEMS.md`). Scouts fill in the form, and the lead scout assigns, reviews, imports and administers, on the team's Lenovo Chromebooks, wired to the Pi. Phones are only for viewing data and for offline sync, often with no signal. The retired app assumed phones and tablets for everything.
 - FRC event rules (**E143**) prohibit running your own Wi-Fi access point in the venue. Connectivity is wired Ethernet, USB tethering, or sneakernet.
 - The game **changes completely every January**. Any structure hardcoded to one season's game is a January rewrite.
 - The developers and users are **high-school students**. Complexity that a professional team would absorb is complexity this team cannot maintain.

@@ -48,7 +48,8 @@ impl ReviewedParam {
             Some(ReviewState::Declined) => {
                 "Declined. The scout will see why, with a button to record it again.".into()
             }
-            _ => String::new(),
+            Some(ReviewState::Pending) => "Put back to waiting. Review it again below.".into(),
+            None => String::new(),
         }
     }
 }
@@ -186,6 +187,10 @@ pub async fn page(
         .unwrap_or_else(|| "a lead scout".into());
     let when = ago(o.reviewed_at, now);
     let verdict = match o.review_state {
+        // A pending row with a reviewer was put back to waiting (G3).
+        ReviewState::Pending if o.reviewed_at.is_some() => {
+            format!("Put back to waiting by {reviewer}, {when}.")
+        }
         ReviewState::Pending => String::new(),
         ReviewState::Approved => format!("Approved by {reviewer}, {when}."),
         ReviewState::Declined => format!(
@@ -334,6 +339,51 @@ pub async fn decide(
         ));
     }
     Ok(queue_href(&o.event_key, reviewed))
+}
+
+/// Undo a verdict (G3): put the observation back to waiting. `Ok` is its
+/// own page again, ready for the verdict the lead meant.
+pub async fn reopen(state: &AppState, user: &User, id: i64) -> Result<String, Refused> {
+    let again = |error: &str| Refused::Again {
+        errors: vec![error.into()],
+        reason: String::new(),
+    };
+    let unavailable = "Not put back: the server's storage did not answer. Try again.";
+    let o = match state.repo.observation(id).await {
+        Ok(Some(o)) => o,
+        Ok(None) => return Err(Refused::Missing),
+        Err(e) => {
+            warn!("loading observation {id}: {e}");
+            return Err(again(unavailable));
+        }
+    };
+    match state.repo.reopen_observation(id, user.id, Utc::now()).await {
+        Ok(true) => {}
+        Ok(false) if o.review_state == ReviewState::Pending => {
+            return Err(again("This is already waiting for review."));
+        }
+        Ok(false) => {
+            // Declined, and the scout has recorded the robot again since.
+            return Err(again(
+                "Not put back: the scout has recorded this robot again since, and that record is the one to review.",
+            ));
+        }
+        Err(e) => {
+            warn!("reopening observation {id}: {e}");
+            return Err(again(unavailable));
+        }
+    }
+    info!(
+        user = %user.email,
+        observation = id,
+        was = o.review_state.as_str(),
+        "observation put back to waiting"
+    );
+    Ok(format!(
+        "{}&reviewed={}",
+        detail_href(id, &o.event_key),
+        ReviewState::Pending.as_str()
+    ))
 }
 
 /// What the scouting page tells a scout about their declined records (L10).

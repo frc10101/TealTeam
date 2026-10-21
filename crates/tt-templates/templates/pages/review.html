@@ -1,11 +1,12 @@
 {#
   One observation in full (L8-L10): every answer, labelled from the season
   schema, and the lead scout's verdict. A decline needs a reason, which the
-  scout is shown on their scouting page. Nothing here deletes anything.
+  scout is shown on their scouting page. A verdict can be undone, back to
+  waiting (G3). Nothing here deletes anything.
 #}
 {% extends "layout.html" %}
 {% block content %}
-{% if !notice.is_empty() %}<p class="alert alert-success" role="status">{{ notice }} Here is the next one.</p>{% endif %}
+{% if !notice.is_empty() %}<p class="alert alert-success" role="status">{{ notice }}</p>{% endif %}
 {% for error in errors %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endfor %}
 
 <section class="card">
@@ -61,6 +62,16 @@
         </div>
         <button class="btn btn-danger" type="submit">Decline</button>
       </form>
+    </div>
+  </section>
+{% else %}
+  <section class="card" id="undo">
+    <div class="card-header"><h2>Undo</h2></div>
+    <div class="card-body stack">
+      <form method="post" action="/api/observations/{{ id }}/reopen{{ nav.event.query() }}">
+        <button class="btn btn-secondary" type="submit">Put back to waiting</button>
+      </form>
+      <p class="hint">For a mis-tap. It goes back in the queue{% if state == "declined" %} and the scout no longer sees the decline{% endif %}; who did it and when is kept.</p>
     </div>
   </section>
 {% endif %}

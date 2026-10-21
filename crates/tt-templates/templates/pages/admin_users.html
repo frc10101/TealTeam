@@ -1,0 +1,110 @@
+{#
+  Account administration (G1): every account, with its roles, team number,
+  and last sign-in, and a form for each to change them or reset a forgotten
+  password. Reached only through the `Admin` extractor. The last admin
+  cannot stop being one, and a reset signs that account out everywhere --
+  both are the repo's rules; this page only says what happened.
+#}
+{% extends "layout.html" %}
+{% block content %}
+<section class="card">
+  <div class="card-header">
+    <h1>Accounts</h1>
+  </div>
+  <div class="card-body stack">
+    {% if !notice.is_empty() %}
+      {% if notice_is_error %}
+        <p class="alert alert-error" role="alert">{{ notice }}</p>
+      {% else %}
+        <p class="alert alert-success" role="status">{{ notice }}</p>
+      {% endif %}
+    {% endif %}
+    {% if !unavailable.is_empty() %}
+      <p>{{ unavailable }}</p>
+    {% else %}
+      <p class="hint">
+        Roles are independent: an admin can already do what a lead scout and a
+        drive coach can. A change takes effect on that person's next page.
+        There is always at least one admin.
+      </p>
+      <div class="table-scroll">
+        <table class="data-table accounts cards" role="table">
+          <caption class="visually-hidden">Every account</caption>
+          <thead>
+            <tr>
+              <th scope="col">Name</th>
+              <th scope="col">Email</th>
+              <th scope="col" class="num">Team</th>
+              <th scope="col">Roles</th>
+              <th scope="col">Last sign-in</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for account in accounts %}
+              <tr>
+                <td data-label="Name"><a href="#account-{{ account.id }}">{{ account.name }}</a>{% if account.is_you %} <span class="muted">(you)</span>{% endif %}</td>
+                <td data-label="Email">{{ account.email }}</td>
+                <td class="num" data-label="Team">{% if account.team_number.is_empty() %}—{% else %}{{ account.team_number }}{% endif %}</td>
+                <td data-label="Roles">{% for role in account.role_labels %}<span class="badge badge-teal">{{ role }}</span> {% endfor %}</td>
+                <td data-label="Last sign-in">{{ account.last_sign_in }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </div>
+</section>
+
+{% for account in accounts %}
+<section class="card narrow" id="account-{{ account.id }}">
+  <div class="card-header">
+    <h2>{{ account.name }}{% if account.is_you %} <span class="muted">(you)</span>{% endif %}</h2>
+  </div>
+  <div class="card-body stack">
+    <form method="post" action="{{ account.save_action }}" class="stack">
+      <div class="field">
+        <label class="form-label" for="team-{{ account.id }}">Team number</label>
+        <input class="form-input" type="text" id="team-{{ account.id }}" name="team_number"
+               value="{{ account.team_number }}" inputmode="numeric" pattern="[0-9]*"
+               maxlength="5" autocomplete="off" placeholder="No team">
+      </div>
+      <fieldset class="field">
+        <legend class="form-label">Roles</legend>
+        <div class="pool">
+          <label class="toggle">
+            <input type="checkbox" name="is_admin" value="on"{% if account.is_admin %} checked{% endif %}>
+            <span>Admin</span>
+          </label>
+          <label class="toggle">
+            <input type="checkbox" name="is_lead_scout" value="on"{% if account.is_lead_scout %} checked{% endif %}>
+            <span>Lead Scout</span>
+          </label>
+          <label class="toggle">
+            <input type="checkbox" name="is_coach" value="on"{% if account.is_coach %} checked{% endif %}>
+            <span>Drive Coach</span>
+          </label>
+        </div>
+        <p class="hint">None ticked is a scout.</p>
+      </fieldset>
+      <button class="btn btn-primary" type="submit">Save {{ account.name }}</button>
+    </form>
+
+    <form method="post" action="{{ account.reset_action }}" class="stack">
+      <div class="field">
+        <label class="form-label" for="reset-{{ account.id }}">Reset a forgotten password</label>
+        <input class="form-input" type="text" id="reset-{{ account.id }}" name="new_password"
+               minlength="8" autocomplete="off" spellcheck="false" required
+               placeholder="At least 8 characters">
+        <p class="hint">
+          Type a new password and tell it to them; they can change it on their
+          Account page. It signs {% if account.is_you %}you{% else %}them{% endif %}
+          out everywhere, every tablet's offline sign-in included.
+        </p>
+      </div>
+      <button class="btn btn-secondary" type="submit">Reset password</button>
+    </form>
+  </div>
+</section>
+{% endfor %}
+{% endblock %}

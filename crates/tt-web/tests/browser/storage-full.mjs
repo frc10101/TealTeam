@@ -109,6 +109,8 @@ check("and is on the server", pulled.changes.some((c) => c.entity_pk === recordI
 const worker = await evaluate(`navigator.serviceWorker.getRegistration().then(r => r ? (r.active ? "active" : r.installing ? "installing" : "waiting") : "none")`);
 const shell = await evaluate(`caches.keys().then(ks => ks.length)`);
 check("the offline shell does not install while full, and the site works without it", worker === "none", `worker ${worker}, caches ${shell}`);
+const warned = await evaluate(`[...document.querySelectorAll("[data-shell-full]")].filter(el => !el.hidden).map(el => el.dataset.shellFull).join()`);
+check("and the scout is told the device has no offline copy (Q6)", warned === "none", warned || "no warning");
 
 // ── The snapshot ──
 await go(`${local}/teams`);
@@ -119,6 +121,17 @@ check("and leaves no cursors behind", (await evaluate(`ttSnapshot.local()`)) ===
 // A first write that fails leaves an empty file; it must not pass for a copy.
 const again = await evaluate(reason(`ttSnapshot.bootstrap({ events: ["2026load"] })`));
 check("a second try is not told the device already has a copy", again === "full", again);
+
+// ── A little room: the shell page, not the rest (Q6) ──
+await evaluate(`navigator.storage.getDirectory().then(async d => { for (const n of [0, 1, 2]) await d.removeEntry("filler-" + n); return true; })`);
+await go(`${local}/teams`);
+await sleep(1500);
+const half = await evaluate(`navigator.serviceWorker.ready.then(() => caches.keys()).then(ks => ks.length ? caches.open(ks[0]) : null)
+  .then(c => c && Promise.all([c.match("/offline"), c.match("/static/vendor/zxing/zxing_reader.wasm"), c.match("/offline?partial")]))
+  .then(r => r ? r.map(Boolean).join() : "no cache")`);
+check("with a little room, the worker keeps just the shell page and its files, marked", half === "true,false,true", half);
+const halfWarned = await evaluate(`[...document.querySelectorAll("[data-shell-full]")].filter(el => !el.hidden).map(el => el.dataset.shellFull).join()`);
+check("and the scout is told it is nearly full", halfWarned === "partial", halfWarned || "no warning");
 
 // ── Room again ──
 await evaluate(`(async () => { for (const k of Object.keys(localStorage)) if (k.startsWith("filler") || k === "one-more") localStorage.removeItem(k);
@@ -131,5 +144,9 @@ await go(`${local}/teams`);
 await sleep(1500);
 const shellBack = await evaluate(`navigator.serviceWorker.ready.then(() => caches.keys()).then(ks => ks.length)`);
 check("and the offline shell installs", shellBack === 1, String(shellBack));
+const whole = await evaluate(`caches.keys().then(ks => caches.open(ks[0])).then(c => Promise.all([c.match("/static/vendor/zxing/zxing_reader.wasm"), c.match("/offline?partial")]))
+  .then(r => r.map(Boolean).join())`);
+const quiet = await evaluate(`[...document.querySelectorAll("[data-shell-full]")].every(el => el.hidden)`);
+check("whole, with the mark gone and no warning", whole === "true,false" && quiet, `${whole}, quiet ${quiet}`);
 
 ws.close(); chrome.kill(); server.kill();

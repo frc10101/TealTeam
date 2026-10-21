@@ -255,7 +255,9 @@ pub fn router(state: AppState) -> Router {
         .route("/sign-in", get(handlers::sign_in_page))
         .route("/sign-up", get(handlers::sign_up_page))
         .route("/account", get(handlers::account))
+        .route("/help", get(handlers::help))
         .route("/submission", get(handlers::submission))
+        .route("/submission/download", get(handlers::download_scout_file))
         .route("/teams", get(handlers::team))
         .route("/notes", get(handlers::notes))
         .route("/graph", get(handlers::graph))
@@ -271,6 +273,7 @@ pub fn router(state: AppState) -> Router {
         .route("/lead-scout/scan", get(handlers::scan_page))
         .route("/pick-list", get(handlers::pick_list))
         .route("/admin/db", get(handlers::admin_db))
+        .route("/admin/users", get(handlers::admin_users))
         // Forms
         .route("/api/auth/login", post(handlers::login))
         .route("/api/auth/signup", post(handlers::signup))
@@ -299,6 +302,15 @@ pub fn router(state: AppState) -> Router {
             post(handlers::distribute_assignments),
         )
         .route("/api/devices/{id}/rename", post(handlers::rename_device))
+        .route(
+            "/api/users/{id}/sign-out",
+            post(handlers::sign_out_everywhere),
+        )
+        .route("/api/admin/users/{id}", post(handlers::save_account))
+        .route(
+            "/api/admin/users/{id}/password",
+            post(handlers::reset_account_password),
+        )
         .route("/api/weights", post(handlers::save_weights))
         .route("/api/rankings/manual", post(handlers::save_rankings))
         .route("/api/schedule/import", post(handlers::import_schedule))
@@ -311,7 +323,12 @@ pub fn router(state: AppState) -> Router {
         .route("/api/sync/pull", get(crate::sync::pull))
         .route("/api/sync/stream", get(crate::sync::stream))
         .route("/api/sync/snapshot", get(crate::snapshot::download))
-        .route("/api/sync/push", post(crate::push::push))
+        .route(
+            "/api/sync/push",
+            post(crate::push::push)
+                .options(crate::push::preflight)
+                .layer(axum::middleware::map_response(crate::push::open_to_files)),
+        )
         .route(
             "/api/sync/bundle",
             post(crate::bundle::push).layer(axum::extract::DefaultBodyLimit::max(
@@ -329,6 +346,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/api/observations/{id}/decline",
             post(handlers::decline_observation),
+        )
+        .route(
+            "/api/observations/{id}/reopen",
+            post(handlers::reopen_observation),
         )
         // Operational
         // The offline shell (C1).
@@ -763,6 +784,16 @@ mod flow_tests {
         // Every page offers the worker; the script decides whether it may.
         let page = text(get(&state, "/", Some(&cookie)).await).await;
         assert!(page.contains(r#"src="/static/js/shell.js""#));
+        // Q6: and the warnings for a device too full to keep it, hidden.
+        for state in ["none", "partial"] {
+            assert!(
+                page.contains(&format!(
+                    r#"data-shell-full="{state}" role="status" hidden"#
+                )),
+                "{state}"
+            );
+        }
+        assert!(js.contains(r#"const ESSENTIAL = ["/offline","#));
         // C9: a signed-in page keeps a token for whoever is signed in.
         assert!(page.contains(r#"<script src="/static/js/token.js" data-user="1""#));
     }
@@ -1120,6 +1151,33 @@ mod flow_tests {
         assert!(!body.contains("/admin/db"));
     }
 
+    #[tokio::test]
+    async fn help_is_public_and_every_page_links_it() {
+        let state = migrated_state().await;
+        let anonymous = get(&state, "/help", None).await;
+        assert_eq!(anonymous.status(), StatusCode::OK);
+        let body = text(anonymous).await;
+        assert!(body.contains("held on this device, not saved"), "{body}");
+        assert!(body.contains("Server out of reach?"), "{body}");
+        // Signed out there is no team box: team pages need a session.
+        assert!(!body.contains(r#"action="/teams""#), "{body}");
+
+        let admin = signed_up(&state).await;
+        let home = text(get(&state, "/", Some(&admin)).await).await;
+        assert!(home.contains(r#"<a href="/help">Help</a>"#), "{home}");
+        assert!(home.contains(r#"action="/teams""#), "{home}");
+        assert!(home.contains(r#"name="team""#), "{home}");
+    }
+
+    #[tokio::test]
+    async fn the_account_page_does_not_say_nothing_is_kept_over_http() {
+        let state = migrated_state().await;
+        let admin = signed_up(&state).await;
+        let body = text(get(&state, "/account", Some(&admin)).await).await;
+        assert!(!body.contains("keeps nothing on the device"), "{body}");
+        assert!(body.contains("held"), "{body}");
+    }
+
     // ── Admin database viewer (U17) ─────────────────────────────────────────
 
     #[tokio::test]
@@ -1172,6 +1230,214 @@ mod flow_tests {
             !main.contains("<form"),
             "the viewer must be read-only: {main}"
         );
+    }
+
+    // ── Account administration (G1) ─────────────────────────────────────────
+
+    const KIM: &str =
+        "name=Kim&email=kim%40example.com&password=longenough1&confirm_password=longenough1";
+
+    /// Sam (admin, id 1) and Kim (scout, id 2), both signed in.
+    async fn admin_and_scout(state: &AppState) -> (String, String) {
+        let admin = signed_up(state).await;
+        let response = post(state, "/api/auth/signup", KIM, None).await;
+        (admin, session_cookie_from(&response).expect("session"))
+    }
+
+    #[tokio::test]
+    async fn nobody_but_an_admin_reaches_account_administration() {
+        let state = migrated_state().await;
+        let (_, scout) = admin_and_scout(&state).await;
+
+        let anonymous = get(&state, "/admin/users", None).await;
+        assert_eq!(location(&anonymous), "/sign-in");
+        assert_eq!(
+            location(&get(&state, "/admin/users", Some(&scout)).await),
+            "/"
+        );
+
+        // A scout cannot make themselves an admin, or reset anybody's password.
+        let promoted = post(&state, "/api/admin/users/2", "is_admin=on", Some(&scout)).await;
+        assert_eq!(location(&promoted), "/");
+        let reset = post(
+            &state,
+            "/api/admin/users/1/password",
+            "new_password=takenover1",
+            Some(&scout),
+        )
+        .await;
+        assert_eq!(location(&reset), "/");
+        let kim = state.repo.user_by_id(2).await.unwrap().unwrap();
+        assert!(!kim.roles.is_admin);
+        let signed_in = post(
+            &state,
+            "/api/auth/login",
+            "email=sam%40example.com&password=longenough1",
+            None,
+        )
+        .await;
+        assert!(
+            session_cookie_from(&signed_in).is_some(),
+            "Sam's password stands"
+        );
+    }
+
+    #[tokio::test]
+    async fn an_admin_lists_accounts_and_makes_a_scout_a_lead_on_a_team() {
+        let state = migrated_state().await;
+        let (admin, scout) = admin_and_scout(&state).await;
+        post(
+            &state,
+            "/api/auth/login",
+            "email=kim%40example.com&password=longenough1",
+            None,
+        )
+        .await;
+
+        let body = text(get(&state, "/admin/users", Some(&admin)).await).await;
+        assert!(body.contains("kim@example.com"), "{body}");
+        assert!(body.contains("10101"), "Sam's team: {body}");
+        assert!(body.contains("just now"), "Kim's last sign-in: {body}");
+        assert!(body.contains("Never"), "Sam signed up, never in: {body}");
+        assert!(
+            body.contains(r#"href="/admin/users">Accounts</a>"#),
+            "{body}"
+        );
+
+        let saved = post(
+            &state,
+            "/api/admin/users/2",
+            "team_number=254&is_lead_scout=on",
+            Some(&admin),
+        )
+        .await;
+        assert_eq!(location(&saved), "/admin/users?done=saved&id=2#account-2");
+        let kim = state.repo.user_by_id(2).await.unwrap().unwrap();
+        assert_eq!(kim.team_number, Some(254));
+        assert!(kim.roles.is_lead_scout && !kim.roles.is_admin && !kim.roles.is_coach);
+        assert_eq!(
+            get(&state, "/lead-scout", Some(&scout)).await.status(),
+            StatusCode::OK,
+            "on Kim's very next page"
+        );
+        let after = text(get(&state, location(&saved), Some(&admin)).await).await;
+        assert!(after.contains("Saved Kim."), "{after}");
+
+        let bad = post(
+            &state,
+            "/api/admin/users/2",
+            "team_number=ten",
+            Some(&admin),
+        )
+        .await;
+        assert!(location(&bad).contains("done=bad-team"));
+        let kim = state.repo.user_by_id(2).await.unwrap().unwrap();
+        assert_eq!(kim.team_number, Some(254), "nothing changed");
+        assert!(kim.roles.is_lead_scout);
+    }
+
+    #[tokio::test]
+    async fn the_last_admin_cannot_be_removed() {
+        let state = migrated_state().await;
+        let (admin, _) = admin_and_scout(&state).await;
+
+        let refused = post(
+            &state,
+            "/api/admin/users/1",
+            "is_lead_scout=on",
+            Some(&admin),
+        )
+        .await;
+        assert!(location(&refused).contains("done=last-admin"));
+        let sam = state.repo.user_by_id(1).await.unwrap().unwrap();
+        assert!(sam.roles.is_admin, "still an admin");
+        let body = text(get(&state, location(&refused), Some(&admin)).await).await;
+        assert!(body.contains("Sam is the only admin"), "{body}");
+
+        // With Kim made an admin too, Sam may step down.
+        post(&state, "/api/admin/users/2", "is_admin=on", Some(&admin)).await;
+        let stepped = post(&state, "/api/admin/users/1", "", Some(&admin)).await;
+        assert!(location(&stepped).contains("done=saved"));
+        assert!(
+            !state
+                .repo
+                .user_by_id(1)
+                .await
+                .unwrap()
+                .unwrap()
+                .roles
+                .is_admin
+        );
+    }
+
+    #[tokio::test]
+    async fn a_reset_password_works_and_ends_that_accounts_sessions() {
+        let state = migrated_state().await;
+        let (admin, scout) = admin_and_scout(&state).await;
+
+        let short = post(
+            &state,
+            "/api/admin/users/2/password",
+            "new_password=short",
+            Some(&admin),
+        )
+        .await;
+        assert!(location(&short).contains("done=short-password"));
+        assert_eq!(
+            get(&state, "/account", Some(&scout)).await.status(),
+            StatusCode::OK
+        );
+
+        let reset = post(
+            &state,
+            "/api/admin/users/2/password?event=2026miket",
+            "new_password=brandnew99",
+            Some(&admin),
+        )
+        .await;
+        let back = location(&reset);
+        assert_eq!(
+            back,
+            "/admin/users?event=2026miket&done=reset&id=2#account-2"
+        );
+        assert!(
+            !back.contains("brandnew99"),
+            "the password never rides in a URL"
+        );
+
+        assert_eq!(
+            location(&get(&state, "/account", Some(&scout)).await),
+            "/sign-in"
+        );
+        assert_eq!(
+            state.repo.token_epoch(2).await.unwrap(),
+            1,
+            "offline tokens too"
+        );
+        assert_eq!(
+            get(&state, "/admin/users", Some(&admin)).await.status(),
+            StatusCode::OK,
+            "the admin who reset it stays signed in"
+        );
+        let old = post(
+            &state,
+            "/api/auth/login",
+            "email=kim%40example.com&password=longenough1",
+            None,
+        )
+        .await;
+        assert!(
+            session_cookie_from(&old).is_none(),
+            "the old password is gone"
+        );
+        let new = post(
+            &state,
+            "/api/auth/login",
+            "email=kim%40example.com&password=brandnew99",
+            None,
+        )
+        .await;
+        assert!(session_cookie_from(&new).is_some());
     }
 
     // ── Password change ─────────────────────────────────────────────────────
@@ -1486,7 +1752,7 @@ mod flow_tests {
         // A phone plugged in, a sync asked for, a bulk load: none fetch.
         upstream::tether_up(&state.repo, &state.upstream).await;
         let manual = upstream::sync_now(&state.repo, &state.upstream).await;
-        assert!(!manual.ok && !manual.tba_pass_started, "{manual:?}");
+        assert!(!manual.ok && !manual.pass_started, "{manual:?}");
         let mut out = Vec::new();
         let loaded = upstream::bulk_load(&state.repo, &state.upstream, &mut out).await;
         assert!(loaded.unwrap_err().to_string().contains("not available"));
@@ -2264,6 +2530,18 @@ mod flow_tests {
         assert!(form.contains(&format!(r#"data-draft="{key}""#)), "{form}");
         assert!(!form.contains("data-draft-posted"), "nothing posted yet");
         assert!(form.contains("/static/js/draft.js"));
+        // C13: the outbox holds what the form cannot send, says so here,
+        // and the chip has a held state for the script to count into.
+        assert!(form.contains(r#"<script src="/static/js/outbox.js" data-user="1""#));
+        assert!(form.contains(r#"<div id="outbox""#));
+        assert!(
+            form.contains(r#"data-link="held" data-label="Offline · {n} held""#),
+            "{form}"
+        );
+        let script = text(get(&state, "/static/js/outbox.js", None).await).await;
+        assert!(script.contains(r#""/api/sync/push?schema=""#));
+        assert!(script.contains("tt-outbox:v1:"));
+        assert!(!script.contains("serviceWorker") && !script.contains("isSecureContext"));
 
         let bad = text(
             post(
@@ -3031,6 +3309,9 @@ mod flow_tests {
         assert!(body.contains("Tablet renamed."));
         assert!(body.contains("<strong>Stands Left</strong>"));
         assert!(body.contains("last used by Sam"));
+        // T1: and a way to void Sam's sign-ins if the tablet goes missing.
+        assert!(body.contains("Sign Sam out everywhere"), "{body}");
+        assert!(body.contains(r#"action="/api/users/"#), "{body}");
 
         post(
             &state,
@@ -3807,6 +4088,58 @@ mod flow_tests {
     }
 
     #[tokio::test]
+    async fn a_lead_can_put_a_verdict_back_to_waiting() {
+        let (state, admin, kim) = two_pending().await;
+        post(
+            &state,
+            "/api/observations/1/decline",
+            "reason=That+was+1678",
+            Some(&kim),
+        )
+        .await;
+        let page = text(
+            get(
+                &state,
+                "/lead-scout/submissions/1?event=2026now",
+                Some(&kim),
+            )
+            .await,
+        )
+        .await;
+        assert!(page.contains(r#"action="/api/observations/1/reopen?event=2026now""#));
+
+        let response = post(
+            &state,
+            "/api/observations/1/reopen?event=2026now",
+            "",
+            Some(&kim),
+        )
+        .await;
+        assert_eq!(
+            location(&response),
+            "/lead-scout/submissions/1?event=2026now&reviewed=pending"
+        );
+        assert_eq!(review_state(&state, 1).await, ("pending".into(), None));
+        let page = text(get(&state, location(&response), Some(&kim)).await).await;
+        assert!(page.contains("Put back to waiting. Review it again below."));
+        assert!(!page.contains("Here is the next one."));
+        assert!(page.contains("Put back to waiting by Kim, just now."));
+        assert!(page.contains("Approve and see the next"), "{page}");
+
+        // The scout no longer sees the decline, and the queue has it again.
+        let scout = text(get(&state, "/submission", Some(&admin)).await).await;
+        assert!(!scout.contains("declined your record"));
+        let queue = text(get(&state, "/lead-scout?event=2026now", Some(&kim)).await).await;
+        assert!(queue.contains("<strong>2</strong> waiting"));
+
+        // Already waiting: nothing to undo.
+        let again = text(post(&state, "/api/observations/1/reopen", "", Some(&kim)).await).await;
+        assert!(again.contains("This is already waiting for review."));
+        let missing = post(&state, "/api/observations/99/reopen", "", Some(&kim)).await;
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
     async fn only_a_lead_reviews() {
         let (state, _, _) = two_pending().await;
         let response = post(
@@ -3821,6 +4154,7 @@ mod flow_tests {
             (false, "/lead-scout/submissions/1"),
             (true, "/api/observations/1/approve"),
             (true, "/api/observations/1/decline"),
+            (true, "/api/observations/1/reopen"),
         ] {
             let response = if method_post {
                 post(&state, uri, "reason=no", Some(&scout)).await

@@ -54,6 +54,7 @@ pub enum Done {
     Distributed { count: u64 },
     Cleared { count: u64 },
     Renamed,
+    SignedOut,
 }
 
 impl Done {
@@ -64,6 +65,7 @@ impl Done {
             Self::Distributed { count } => format!("done=auto&n={count}"),
             Self::Cleared { count } => format!("done=cleared&n={count}"),
             Self::Renamed => "done=renamed".into(),
+            Self::SignedOut => "done=signed-out".into(),
         }
     }
 
@@ -94,6 +96,9 @@ impl Done {
                 }
             ),
             Self::Renamed => "Tablet renamed.".into(),
+            Self::SignedOut => "Signed out everywhere: every session and every tablet's offline \
+                                sign-in is void. They sign in again to scout."
+                .into(),
         }
     }
 }
@@ -119,6 +124,7 @@ impl<S: Send + Sync> FromRequestParts<S> for GridParams {
             Some("auto") => Some(Done::Distributed { count: count() }),
             Some("cleared") => Some(Done::Cleared { count: count() }),
             Some("renamed") => Some(Done::Renamed),
+            Some("signed-out") => Some(Done::SignedOut),
             _ => None,
         };
         Ok(Self {
@@ -278,6 +284,7 @@ impl People {
                     .last_seen_at
                     .map(|seen| describe_age(now - seen))
                     .unwrap_or_else(|| "never".into()),
+                last_user_id: d.last_user_id.unwrap_or(0),
                 last_user: d
                     .last_user_id
                     .and_then(|id| self.scouts.iter().find(|s| s.id == id))
@@ -801,6 +808,32 @@ pub async fn rename_device(
         }
         Err(e) => {
             warn!("renaming device {id}: {e}");
+            Err(Refused::because(Some(&event), NOT_SAVED))
+        }
+    }
+}
+
+/// `POST /api/users/{id}/sign-out?event=` (T1): a tablet was lost, or a
+/// scout's handoff codes were photographed. Every session of theirs ends
+/// and every offline token they hold, on any tablet, is refused from now.
+pub async fn sign_out_everywhere(
+    state: &AppState,
+    user: &User,
+    event_key: Option<&str>,
+    id: i64,
+) -> Outcome {
+    let event = known_event(state, event_key).await?;
+    match state
+        .repo
+        .sign_out_everywhere(id, user.id, Utc::now())
+        .await
+    {
+        Ok(epoch) => {
+            info!(user = %user.email, signed_out = id, epoch, "signed out everywhere");
+            Ok(back_to_grid(&event, None, &Done::SignedOut, "tablets"))
+        }
+        Err(e) => {
+            warn!("signing out user {id}: {e}");
             Err(Refused::because(Some(&event), NOT_SAVED))
         }
     }

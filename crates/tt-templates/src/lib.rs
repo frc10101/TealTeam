@@ -14,7 +14,9 @@
 use askama::Template;
 
 mod admin;
-pub use admin::{AdminCell, AdminPage, AdminRow, AdminTable, AdminTableView};
+pub use admin::{
+    AccountRow, AdminCell, AdminPage, AdminRow, AdminTable, AdminTableView, AdminUsersPage,
+};
 mod coach;
 pub use coach::{AllianceView, CoachCard, CoachTeam, DriveCoachPage};
 mod graph;
@@ -162,6 +164,9 @@ pub struct LinkChip {
     pub shown: bool,
     /// Where tapping it goes, before the page's event; empty when nowhere.
     pub href: &'static str,
+    /// The label and meaning have `tt_core::link::COUNT` where the script
+    /// puts a number (C13's held entries).
+    pub counted: bool,
 }
 
 impl Default for LinkChips {
@@ -173,14 +178,14 @@ impl Default for LinkChips {
 impl LinkChips {
     /// `needs_review` entries the server refused wait for a lead, as the
     /// server counted them for this viewer (C10b). A lead's chip goes to
-    /// them. The outbox is not in pages yet (C5), so offline has nothing
-    /// unsent.
+    /// them. What the page's outbox holds (C13) is the device's to count, so
+    /// the held state is rendered with a blank for `link.js` to fill.
     pub fn new(needs_review: usize, can_lead: bool) -> Self {
         let review = (needs_review > 0).then_some(Link::NeedsReview {
             count: needs_review,
         });
         let shown = Link::classify(true, false, 0, needs_review);
-        let states = [Link::Synced, Link::Syncing, Link::Offline { unsent: 0 }]
+        let mut states: Vec<LinkChip> = [Link::Synced, Link::Syncing, Link::Offline { unsent: 0 }]
             .into_iter()
             .chain(review)
             .map(|link| LinkChip {
@@ -194,8 +199,19 @@ impl LinkChips {
                 } else {
                     ""
                 },
+                counted: false,
             })
             .collect();
+        let (label, meaning) = Link::held_template();
+        states.push(LinkChip {
+            key: "held",
+            label,
+            meaning,
+            class: Link::Offline { unsent: 1 }.css_class(),
+            shown: false,
+            href: "",
+            counted: true,
+        });
         LinkChips { states }
     }
 }
@@ -358,18 +374,13 @@ pub struct SignUpPage {
     pub first_account: bool,
 }
 
-/// A reachable, access-controlled page whose content is still to come.
-///
-/// Exists so the nav never links a 404, and so the guard on a privileged route
-/// is settled before there is anything on it worth protecting.
+/// `GET /help` (U5): how to scout, and what the chip and the notices mean.
+/// Public, so a scout who cannot sign in can still read it.
 #[derive(Template)]
-#[template(path = "pages/placeholder.html")]
-pub struct PlaceholderPage {
+#[template(path = "pages/help.html")]
+pub struct HelpPage {
     pub title: String,
     pub nav: Nav,
-    pub heading: String,
-    pub summary: String,
-    pub season_name: String,
 }
 
 /// The offline shell (C1): what the service worker shows when a page cannot
@@ -690,7 +701,8 @@ pub struct ReviewPage {
     pub byline: String,
     pub state: &'static str,
     pub state_label: &'static str,
-    /// `"Declined by Kim, 2 minutes ago: that was 1678"`. Empty while pending.
+    /// `"Declined by Kim, 2 minutes ago: that was 1678"`, or `"Put back to
+    /// waiting by Kim, ..."` after an undo. Empty while never reviewed.
     pub verdict: String,
     pub answers: Vec<tt_core::review::AnswerGroup>,
     /// Said in place of notes held back from this viewer (U13): whose they
@@ -701,7 +713,7 @@ pub struct ReviewPage {
     pub other_version: String,
     pub pending: bool,
     /// The verdict on the previous observation, when "and see the next" led
-    /// here.
+    /// here, or that this one was just put back to waiting (G3).
     pub notice: String,
     pub errors: Vec<String>,
     /// A decline reason coming back after a refused decline.
@@ -945,6 +957,8 @@ pub struct DeviceRow {
     pub last_seen: String,
     /// Who was signed in on it last. Empty when nobody was.
     pub last_user: String,
+    /// Their id, for signing them out everywhere (T1); 0 when nobody.
+    pub last_user_id: i64,
     /// `"clock 3 s behind"`; empty until the tablet has measured (S12).
     pub clock: String,
     /// More than a minute out.
@@ -1712,6 +1726,44 @@ impl ScoutForm {
     }
 }
 
+/// The downloadable scouting page (C15): one file, with everything it needs
+/// inside it, that a scout saves on their tablet and opens with no server.
+/// `static/js/scout-file.js` runs it from `data`.
+#[derive(Template)]
+#[template(path = "pages/scout_file.html")]
+pub struct ScoutFilePage {
+    pub scout: String,
+    pub event_name: String,
+    /// When it was saved from the server, on the event's clock.
+    pub made: String,
+    /// When its token runs out, on the event's clock.
+    pub expires: String,
+    /// The season form's version, as the scouting page's `tt-form`.
+    pub form_version: i64,
+    /// The season's form, blank.
+    pub sections: Vec<FormSection>,
+    pub notes_unshared: bool,
+    /// The stylesheet, inlined.
+    pub css: String,
+    /// What the page knows, as JSON safe inside a `<script>` element
+    /// ([`json_in_script`]).
+    pub data: String,
+    /// The scripts it runs, in order, each [`script_safe`].
+    pub scripts: Vec<String>,
+}
+
+/// A script's text as it can sit inside an inline `<script>` element: no
+/// `</` to end it early. `<\/` means `</` wherever a script can say it.
+pub fn script_safe(text: &str) -> String {
+    text.replace("</", "<\\/")
+}
+
+/// JSON as it can sit inside a `<script type="application/json">`: every
+/// `<`, which JSON only has inside strings, as `\u003c`.
+pub fn json_in_script(json: &str) -> String {
+    json.replace('<', "\\u003c")
+}
+
 /// The schema's sections and fields, filled in with any answers so far.
 ///
 /// With no answer yet a counter shows its minimum, so leaving it alone records
@@ -1845,6 +1897,7 @@ mod tests {
         assert!(!html.contains("/lead-scout"));
         assert!(!html.contains("/drive-coach"));
         assert!(!html.contains("/admin/db"));
+        assert!(!html.contains("/admin/users"));
     }
 
     #[test]
@@ -1866,6 +1919,7 @@ mod tests {
         assert!(html.contains("/lead-scout"));
         assert!(html.contains("/drive-coach"));
         assert!(html.contains("/admin/db"));
+        assert!(html.contains("/admin/users"));
     }
 
     #[test]

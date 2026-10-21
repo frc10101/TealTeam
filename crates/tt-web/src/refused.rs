@@ -452,7 +452,35 @@ pub async fn record(
     };
     let now = Utc::now();
     let observation = match record_as(state, &entry, author, now).await {
-        Ok(Ok(Recorded::Created(o) | Recorded::Duplicate(o))) => o,
+        Ok(Ok(Recorded::Created(o))) => o,
+        // Already there under this record id: this press's own retry, or the
+        // entry saved some other way since. Only the first may be marked
+        // recorded, or the lead's corrections go nowhere unsaid.
+        Ok(Ok(Recorded::Duplicate(o))) => match state.repo.observation(o).await {
+            Ok(Some(saved))
+                if saved.match_key.eq_ignore_ascii_case(&entry.match_key)
+                    && saved.team_number == entry.team_number
+                    && saved.payload == entry.payload =>
+            {
+                o
+            }
+            Ok(Some(saved)) => {
+                return Err(again(
+                    format!(
+                        "Not recorded: this entry is already saved, as team {} in {}, with \
+                         other answers, so these would go nowhere. Correct it on the review \
+                         page and dismiss this one.",
+                        saved.team_number, saved.match_key
+                    ),
+                    draft,
+                ));
+            }
+            Ok(None) => o,
+            Err(e) => {
+                warn!("reading observation {o} for refused entry {id}: {e}");
+                return Err(again(STORAGE.into(), draft));
+            }
+        },
         Ok(Err(reason)) => return Err(again(reason, draft)),
         Err(e) => {
             warn!("recording refused entry {id}: {e}");

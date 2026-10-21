@@ -47,7 +47,10 @@
            different thing, on the lead scout page. #}
         <span class="link-chip" id="link-chip" role="status" aria-live="polite">
           {% for state in nav.link.states %}
-            {% if state.href.is_empty() %}
+            {% if state.counted %}
+              {# C13: link.js puts the outbox's count where the template has {n}. #}
+              <span class="badge {{ state.class }}" data-link="{{ state.key }}" data-label="{{ state.label }}" data-meaning="{{ state.meaning }}" hidden><span data-link-label>{{ state.label }}</span><span class="visually-hidden">: <span data-link-meaning>{{ state.meaning }}</span></span></span>
+            {% else if state.href.is_empty() %}
               <span class="badge {{ state.class }}" data-link="{{ state.key }}" title="{{ state.meaning }}"{% if !state.shown %} hidden{% endif %}>{{ state.label }}<span class="visually-hidden">: {{ state.meaning }}</span></span>
             {% else %}
               <a class="badge {{ state.class }}" data-link="{{ state.key }}" title="{{ state.meaning }}" href="{{ state.href }}{{ nav.event.query() }}#refused"{% if !state.shown %} hidden{% endif %}>{{ state.label }}<span class="visually-hidden">: {{ state.meaning }}</span></a>
@@ -84,11 +87,27 @@
             {% if nav.can_lead %}<a href="/lead-scout{{ nav.event.query() }}">Lead Scout</a>{% endif %}
             {% if nav.can_coach %}<a href="/drive-coach{{ nav.event.query() }}">Drive Coach</a>{% endif %}
             {% if nav.can_pick %}<a href="/pick-list{{ nav.event.query() }}">Pick List</a>{% endif %}
+            {% if nav.can_admin %}<a href="/admin/users{{ nav.event.query() }}">Accounts</a>{% endif %}
             {% if nav.can_admin %}<a href="/admin/db{{ nav.event.query() }}">Database</a>{% endif %}
           </nav>
         {% endif %}
 
+        {# The team box (RS 7 Navigation): a number goes straight to that
+           team's page. Signed in only, since team pages are. #}
+        {% if nav.signed_in %}
+          <form method="get" action="/teams" class="team-jump" role="search">
+            {% if !nav.event.selected.is_empty() %}<input type="hidden" name="event" value="{{ nav.event.selected }}">{% endif %}
+            <label class="visually-hidden" for="team-jump">Team number</label>
+            <input id="team-jump" class="form-input" type="text" name="team" inputmode="numeric"
+                   pattern="[0-9]*" maxlength="5" placeholder="Team #" autocomplete="off">
+            <button type="submit" class="btn btn-secondary">Go</button>
+          </form>
+        {% endif %}
+
+        {# Help sits with the account, not in the tab bar: it is public, so it
+           shows signed out too, and the bar has no room on a phone. #}
         <div class="nav-account">
+          <a href="/help{{ nav.event.query() }}">Help</a>
           {% if nav.signed_in %}
             <a href="/account{{ nav.event.query() }}">{{ nav.name }}</a>
             <form method="post" action="/api/auth/logout" class="inline">
@@ -131,6 +150,19 @@
           as soon as the server answers.
         </p>
       {% endif %}
+      {# Q6: a device too full to keep the offline shell (C1). static/js/shell.js
+         shows the one that applies; without a service worker, neither. #}
+      <p class="alert alert-warning" data-shell-full="none" role="status" hidden>
+        <strong>This device is out of space, so it has no offline copy of TealTeam.</strong>
+        If the server drops, reloading shows the browser's error page instead. While the
+        chip says Offline, don't reload: stay on this page, or free some space and the
+        next page tries again.
+      </p>
+      <p class="alert alert-warning" data-shell-full="partial" role="status" hidden>
+        <strong>This device is nearly out of space.</strong> It keeps TealTeam's offline
+        page, but can't make pages from its own copy of the data with no server. Free
+        some space and it fills in the rest.
+      </p>
       {% block content %}{% endblock %}
     </main>
 
@@ -152,11 +184,16 @@
     <script src="/static/js/tabs.js" defer></script>
     {% if nav.signed_in %}<script src="/static/js/persist.js" defer></script>{% endif %}
     {% if nav.signed_in || nav.offline_shell || nav.from_device %}<script src="/static/js/agenda.js" defer></script>{% endif %}
-    {% if nav.signed_in || nav.offline_shell %}<script src="/static/js/token.js" data-user="{{ nav.user_id }}" defer></script>{% endif %}
+    {# C9: every page, so signing in or out drops the kept token (T1); only a
+       signed-in page fetches one. #}
+    <script src="/static/js/token.js" data-user="{{ nav.user_id }}" defer></script>
+    {# C13: what the scouting form could not send, held on this device and
+       pushed when the server answers. Every signed-in page sends it. #}
+    {% if nav.signed_in %}<script src="/static/js/outbox.js" data-user="{{ nav.user_id }}" defer></script>{% endif %}
     {% if nav.signed_in || nav.offline_shell %}<script src="/static/js/courier.js" data-lead="{{ nav.can_lead }}" defer></script>{% endif %}
-    {# The browser pull sync client (C7): nothing to push, so only on a live
-       page with a session worth syncing for -- not the shell or a page
-       already made from the device's own copy. #}
+    {# The device's sync loop (C7, C12): only on a live page with a session
+       worth syncing for -- not the shell or a page already made from the
+       device's own copy, which has no Pi to sync with. #}
     {% if nav.signed_in %}<script src="/static/js/snapshot.js" defer></script>{% endif %}
     {% if nav.signed_in %}<script src="/static/js/sync.js" defer></script>{% endif %}
     {% block scripts %}{% endblock %}

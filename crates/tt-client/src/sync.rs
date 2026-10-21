@@ -112,17 +112,20 @@ impl<T: Transport> SyncClient<T> {
     /// Push the outbox, then pull until caught up, saving as it goes.
     pub async fn sync(&self, repo: &ClientRepo, now: DateTime<Utc>) -> Result<Report> {
         let mut report = Report::default();
-        report.stopped = self.push(repo, now, &mut report).await?;
-        if report.stopped.is_none() {
-            report.stopped = self.pull(repo, now, &mut report).await?;
-        }
+        let pushed = self.push(repo, now, &mut report).await?;
+        // A push refused as a whole will be refused again, so it is no
+        // reason to leave this device's copy as it is: pull anyway, and say
+        // why the push stopped unless the pull has more to say.
+        report.stopped = match pushed {
+            None | Some(Stop::Refused(_)) => self.pull(repo, now, &mut report).await?.or(pushed),
+            stopped => stopped,
+        };
         Ok(report)
     }
 
-    /// Pull until caught up, with no push. Browser pages are read-only (open
-    /// decision 3): there is never anything of the device's own to send, so
-    /// this is what `tt_client::worker::pull` calls, and what loads the
-    /// outbox code need not be true for the browser to still sync.
+    /// Pull until caught up, with no push: for a caller that must leave the
+    /// outbox alone. The browser's loop (`tt_client::worker::sync`) calls
+    /// [`Self::sync`], whose push sends nothing while the outbox is empty.
     pub async fn pull_only(&self, repo: &ClientRepo, now: DateTime<Utc>) -> Result<Report> {
         let mut report = Report::default();
         report.stopped = self.pull(repo, now, &mut report).await?;
@@ -586,8 +589,9 @@ fn upsert_pick(tx: &Transaction, f: &Fields) -> rusqlite::Result<bool> {
 /// service worker. Same-origin, so the session and device cookies go with
 /// it, and redirects are not followed, so a lost session reads as one.
 ///
-/// `bearer` is the device's offline token (C9, `static/js/token.js`), sent
-/// as `Authorization: Bearer`, so a sync still goes as the scout once the
+/// `bearer` is the device's offline credential (C9, `static/js/token.js`:
+/// the token, `~`, its device key, T1), sent as `Authorization: Bearer`, so
+/// a sync still goes as the scout once the
 /// session has run out. A worker cannot read `localStorage`; whoever owns
 /// the database is handed it by the page.
 ///

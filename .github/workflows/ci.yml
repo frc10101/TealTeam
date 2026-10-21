@@ -68,8 +68,20 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.98.1
         with:
           components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
 
       - uses: Swatinem/rust-cache@v2
+
+      # The offline client (C14), before the tests so they and the binary
+      # embed it, as a Pi's build does. build-client.sh installs the pinned
+      # wasm-bindgen CLI into ~/.cargo/wasm-bindgen-<version>/ when missing.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cargo/wasm-bindgen-0.2.127
+          key: wasm-bindgen-cli-0.2.127-${{ runner.os }}
+
+      - name: Build the offline client bundle
+        run: deploy/build-client.sh
 
       - name: Formatting
         run: cargo fmt --all --check

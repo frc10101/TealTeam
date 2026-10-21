@@ -7,13 +7,13 @@
 //!
 //! Startup (F5) is deliberately fault-tolerant. See [`startup::run`].
 
+mod accounts;
 mod admin;
 mod assets;
 mod assignments;
 mod auth;
 mod backups;
 mod bundle;
-mod coach;
 mod config;
 mod errors;
 mod events;
@@ -26,6 +26,7 @@ mod ranking;
 mod refused;
 mod review;
 mod schedule;
+mod scout_file;
 mod scouting;
 mod shell;
 mod snapshot;

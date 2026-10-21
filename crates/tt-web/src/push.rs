@@ -7,6 +7,9 @@
 //! still known by the device's offline token (C9, `crate::token`). The answer is a [`Receipt`] per entry:
 //! recorded (now, or already), or refused with a reason a person can read.
 //! The Pi keeps each refusal for the lead scout (C10, `crate::refused`).
+//! The downloadable scouting page (C15) posts here from a file, with its
+//! credential and no cookie, so the push answers any origin ([`preflight`],
+//! [`open_to_files`]).
 //! The device clears an entry only once it comes back through the change
 //! log (`tt_core::outbox` says why).
 //!
@@ -24,7 +27,11 @@ use std::collections::HashMap;
 use axum::Json;
 use axum::body::Bytes;
 use axum::extract::{Query, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::header::{
+    ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN,
+    ACCESS_CONTROL_MAX_AGE,
+};
+use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use chrono::{DateTime, TimeDelta, Utc};
 use serde_json::json;
@@ -35,8 +42,47 @@ use tt_core::user::User;
 use tt_repo::{Device, NewObservation, Recorded, Repo, RepoError};
 use tt_repo_sqlite::refused::NewRefusal;
 
-use crate::auth::device_uuid;
 use crate::startup::AppState;
+
+/// `OPTIONS /api/sync/push`: the browser asking, before the downloadable
+/// scouting page (C15) posts, whether a page from no origin may. It may:
+/// the push takes a credential in `Authorization`, which no other page has,
+/// and never a cookie on a cross-origin post, since [`open_to_files`]
+/// allows none.
+pub async fn preflight(headers: HeaderMap) -> Response {
+    let mut response = StatusCode::NO_CONTENT.into_response();
+    let out = response.headers_mut();
+    out.insert(
+        ACCESS_CONTROL_ALLOW_METHODS,
+        HeaderValue::from_static("POST"),
+    );
+    out.insert(
+        ACCESS_CONTROL_ALLOW_HEADERS,
+        HeaderValue::from_static("authorization, content-type"),
+    );
+    out.insert(ACCESS_CONTROL_MAX_AGE, HeaderValue::from_static("600"));
+    // Chrome's Private Network Access: a page from a file asking a LAN
+    // address.
+    if headers.contains_key("access-control-request-private-network") {
+        out.insert(
+            "access-control-allow-private-network",
+            HeaderValue::from_static("true"),
+        );
+    }
+    response
+}
+
+/// Every answer to the push readable by the downloadable scouting page
+/// (C15), opened from a file, whose origin is `null`. `*` and no
+/// `Allow-Credentials`: the browser sends no cookie with such a post, so
+/// the page must send its credential, and no other page can read an answer
+/// made for a session.
+pub async fn open_to_files(mut response: Response) -> Response {
+    response
+        .headers_mut()
+        .insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
+    response
+}
 
 fn refuse(status: StatusCode, error: impl Into<String>) -> Response {
     (status, Json(json!({ "error": error.into() }))).into_response()
@@ -48,7 +94,7 @@ pub async fn push(
     Query(query): Query<HashMap<String, String>>,
     body: Bytes,
 ) -> Response {
-    let Some(user) = crate::token::sync_user(&state, &headers).await else {
+    let Some(caller) = crate::token::sync_caller(&state, &headers).await else {
         return refuse(
             StatusCode::UNAUTHORIZED,
             "sign in to send what this device saved",
@@ -80,7 +126,8 @@ pub async fn push(
         );
     }
 
-    let device = match device_uuid(&headers) {
+    let user = caller.user;
+    let device = match caller.device {
         Some(uuid) => state.repo.device_by_uuid(&uuid).await.unwrap_or_else(|e| {
             warn!("looking up device: {e}");
             None
@@ -913,6 +960,50 @@ mod tests {
         let kept = pending.iter().find(|o| o.team_number == 254).unwrap();
         assert_eq!(kept.schema_version, state.season.version - 1);
         assert_eq!(kept.payload, refusal.entry.payload);
+
+        // Saved some other way since it was refused: the lead's corrections
+        // would go nowhere, so the lead is told and it still waits.
+        let late = QueuedObservation {
+            client_record_id: "0191f7ac-1234-7000-8000-000000000004".into(),
+            team_number: 10101,
+            ..refusal.entry.clone()
+        };
+        let refusal = NewRefusal {
+            entry: late.clone(),
+            ..refusal
+        };
+        state.repo.keep_refusal(&refusal, Utc::now()).await.unwrap();
+        let id = state.repo.open_refusals().await.unwrap()[0].id;
+        let author = Author {
+            scouter_id: refusal.scouter_id,
+            device_id: refusal.device_id,
+            submitting_team: refusal.submitting_team,
+        };
+        let saved = record_as(&state, &late, author, Utc::now()).await.unwrap();
+        assert!(matches!(saved, Ok(Recorded::Created(_))), "{saved:?}");
+        let post = |body: &'static str| {
+            sam.send(
+                Request::post(format!("/api/refused/{id}/record?event=2026now"))
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded"),
+                Body::from(body),
+            )
+        };
+        let told = post(
+            "match=2026now_qm2&team=10101&answers=1&f.starting_position=center&f.teleop_scored=7\
+             &f.auto_scored=&f.penalties=&f.notes=",
+        )
+        .await;
+        assert_eq!(told.status, 200, "{}", told.body);
+        assert!(told.body.contains("already saved"), "{}", told.body);
+        assert_eq!(state.repo.open_refusal_count(None).await.unwrap(), 1);
+        // Posted as it was saved, it is that observation, and is marked so.
+        let marked = post(
+            "match=2026now_qm2&team=10101&answers=1&f.teleop_scored=5\
+             &f.auto_scored=&f.penalties=&f.notes=",
+        )
+        .await;
+        assert_eq!(marked.status, 303, "{}", marked.body);
+        assert_eq!(state.repo.open_refusal_count(None).await.unwrap(), 0);
     }
 
     #[tokio::test]
@@ -960,10 +1051,14 @@ mod tests {
         assert_eq!(issued.status, 200, "{}", issued.body);
         let issued: serde_json::Value = serde_json::from_str(&issued.body).unwrap();
         let token = issued["token"].as_str().unwrap().to_string();
+        // What a sync sends (T1): the token, "~", its device key.
+        let credential = format!("{token}~{}", issued["key"].as_str().unwrap());
         let claims = tt_core::token::read_unverified(&token).unwrap();
         assert_eq!(claims.name, "Sam");
         assert_eq!(claims.team, Some(10101));
         assert_eq!(format!("tt_device={}", claims.device), DEVICE);
+        assert_eq!(claims.epoch, 0);
+        let claims_user = claims.user_id;
         // The device can check it with the key that came with it.
         use base64::Engine;
         let key: [u8; 32] = base64::engine::general_purpose::URL_SAFE_NO_PAD
@@ -1013,8 +1108,9 @@ mod tests {
             assert_eq!(nobody.get("/api/sync/pull").await.unwrap().status, 401);
         }
 
-        // With the token, from the tablet it was issued to: recorded as Sam.
-        let tablet = wire(Some(DEVICE.into()), Some(token.clone()));
+        // With the token and its key, from the tablet it was issued to:
+        // recorded as Sam.
+        let tablet = wire(Some(DEVICE.into()), Some(credential.clone()));
         let reply = (&tablet)
             .post_json("/api/sync/push", push.clone())
             .await
@@ -1029,19 +1125,25 @@ mod tests {
         // A token is not a session: pages still want Sam to sign in.
         assert_eq!((&tablet).get("/account").await.unwrap().status, 303);
 
-        // Copied to another browser, altered, or nonsense: refused.
+        // Copied to another browser, altered, without its key or with
+        // another, or nonsense: refused.
         let elsewhere = wire(
             Some("tt_device=0191f7ac-1234-7000-8000-000000000999".into()),
-            Some(token.clone()),
+            Some(credential.clone()),
         );
         let mut altered = token.clone();
         altered.pop();
         altered.push(if token.ends_with('A') { 'B' } else { 'A' });
+        let other_key = format!("{token}~{}", "A".repeat(43));
         for refused in [
             elsewhere,
-            wire(Some(DEVICE.into()), Some(altered)),
+            wire(
+                Some(DEVICE.into()),
+                Some(format!("{altered}~{}", issued["key"].as_str().unwrap())),
+            ),
+            wire(Some(DEVICE.into()), Some(token.clone())),
+            wire(Some(DEVICE.into()), Some(other_key)),
             wire(Some(DEVICE.into()), Some("v4.public.nonsense".into())),
-            wire(None, Some(token)),
         ] {
             let refused = &refused;
             assert_eq!(
@@ -1054,6 +1156,35 @@ mod tests {
             );
             assert_eq!(refused.get("/api/sync/pull").await.unwrap().status, 401);
         }
+
+        // With no cookie at all, as the downloadable page posts from a file
+        // (C15): taken as from the tablet the token names.
+        let from_file = wire(None, Some(credential.clone()));
+        let reply = (&from_file)
+            .post_json("/api/sync/push", push.clone())
+            .await
+            .unwrap();
+        assert_eq!(reply.status, 200, "{}", reply.body);
+        let reply: PushReply = serde_json::from_str(&reply.body).unwrap();
+        assert_eq!(reply.receipts[0].outcome, Outcome::Recorded);
+
+        // Signed out everywhere (T1): the tablet's credential is void too.
+        assert_eq!((&tablet).get("/api/sync/pull").await.unwrap().status, 200);
+        state
+            .repo
+            .sign_out_everywhere(claims_user, claims_user, Utc::now())
+            .await
+            .unwrap();
+        assert_eq!((&tablet).get("/api/sync/pull").await.unwrap().status, 401);
+        assert_eq!(
+            (&from_file)
+                .post_json("/api/sync/push", push.clone())
+                .await
+                .unwrap()
+                .status,
+            401,
+            "and the downloaded page's"
+        );
     }
 
     /// TBA for 2026now, on localhost: Q2 played, and an OPR for 254.
@@ -1186,7 +1317,11 @@ mod tests {
             .await
             .unwrap();
         let issued: serde_json::Value = serde_json::from_str(&issued.body).unwrap();
-        let token = issued["token"].as_str().unwrap().to_string();
+        let token = format!(
+            "{}~{}",
+            issued["token"].as_str().unwrap(),
+            issued["key"].as_str().unwrap()
+        );
         (&sam)
             .post_json("/api/auth/logout", String::new())
             .await

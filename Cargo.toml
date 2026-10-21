@@ -68,9 +68,11 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 trait-variant = "0.1"
 # The browser side of tt-upstream (S4): a timer for retry backoff, over the
-# same wasm-bindgen that reqwest's fetch backend already pulls in.
+# same wasm-bindgen that reqwest's fetch backend already pulls in. Exact,
+# because deploy/build-client.sh's wasm-bindgen CLI must match it (C14):
+# bump both together, with the script's PIN and ci.yml's cache key.
 js-sys = "0.3"
-wasm-bindgen = "0.2"
+wasm-bindgen = "=0.2.127"
 wasm-bindgen-futures = "0.4"
 # Offline auth tokens (C9): PASETO v4.public is Ed25519. Pure Rust, so a
 # token verifies the same in the browser's wasm as on the Pi, with no

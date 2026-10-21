@@ -6,6 +6,10 @@
 
 **Kit:** Pi (SSD attached) · official 27 W Pi supply · unmanaged switch + its power · one flat Ethernet cable per Lenovo Chromebook · USB-C-to-Ethernet adapters where needed · gaff tape · USB stick. **No Wi-Fi hotspot, router, mesh, cellular tether, or other 802.11/radio network for event data, ever.**
 
+## Before you leave: install the build
+
+On the Pi, with internet, in the TealTeam folder: `deploy/build-release.sh`, then the `sudo .../install.sh ...` line it prints. That build carries the offline client; `install.sh` refuses one without it.
+
 ## Set up (about 10 minutes)
 
 1. **Cable before power.** Pi `eth0` → switch. Each Lenovo Chromebook → switch, using an adapter only when needed. Tape every cable run flat.
@@ -14,7 +18,7 @@
 4. **Check:** in the TealTeam folder, `deploy/pi/network/status.sh`. Every line should be `ok`. Any `FAIL` names the fix. `no uplink` is fine for now.
 5. **Do not enable a phone tether at the event.** The Pi operates without an uplink; rankings and upstream data use the latest local snapshot.
 6. **Confirm from a Chromebook:** plug it into the switch and open **http://tealteam.local**. If needed, use **http://tealteam** or **http://10.101.0.1**.
-7. **Lead scout:** sign in, pick the event, and check the rankings age. Phones that are not wired use local data and sync later away from the event.
+7. **Lead scout:** sign in, pick the event, and check the rankings age. Scouting and the lead's pages run on the wired Chromebooks. Phones are only for viewing data: one that is not wired uses its local copy and syncs later away from the event.
 8. **Seeding the schedule (FTC beta, F3):** once the qualification schedule is posted, open **Lead Scout → Match schedule**. Enter the event code, name and IANA time zone (e.g. `America/Detroit`), then paste or pick the CSV (`match,red1,red2,blue1,blue2`; a `*` marks a surrogate). The roster is optional.
    Nothing is imported until every row is good, and each bad row is named. Check every match against the printed sheet and note the surrogates in the report. If the schedule changes, import again: it replaces the matches and keeps every observation. Then re-run auto-assign.
 

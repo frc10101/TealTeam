@@ -20,8 +20,8 @@ pub enum Link {
     Synced,
     /// Connected, and something is on its way.
     Syncing,
-    /// The server cannot be reached. `unsent` is what is kept on this device
-    /// until it can be -- zero until there is an outbox (C5).
+    /// The server cannot be reached. `unsent` is what the page's outbox
+    /// (C13, `static/js/outbox.js`) holds on this device until it can be.
     Offline { unsent: usize },
     /// Connected, but `count` things need a person to decide: entries the
     /// server refused (C10), until a lead scout records or dismisses them.
@@ -63,7 +63,7 @@ impl Link {
             Link::Synced => "Synced".into(),
             Link::Syncing => "Syncing…".into(),
             Link::Offline { unsent: 0 } => "Offline · nothing unsent".into(),
-            Link::Offline { unsent } => format!("Offline · {unsent} saved"),
+            Link::Offline { unsent } => held_label(&unsent.to_string()),
             Link::NeedsReview { count: 1 } => "1 needs review".into(),
             Link::NeedsReview { count } => format!("{count} need review"),
         }
@@ -76,13 +76,11 @@ impl Link {
             Link::Syncing => "Connected to the server, and sending what you entered.".into(),
             Link::Offline { unsent: 0 } => {
                 "This device can't reach the TealTeam server. Everything you saved \
-                 before is on it; wait for Synced before saving again."
+                 before is on it; a scouting form sent now is held here until it \
+                 answers."
                     .into()
             }
-            Link::Offline { unsent } => format!(
-                "This device can't reach the TealTeam server. {unsent} saved here \
-                 will send when it reconnects."
-            ),
+            Link::Offline { unsent } => held_meaning(&unsent.to_string()),
             Link::NeedsReview { count: 1 } => {
                 "The server refused something saved on a tablet. A lead scout decides \
                  what happens to it."
@@ -95,6 +93,13 @@ impl Link {
         }
     }
 
+    /// The label and meaning of [`Link::Offline`] with something held, with
+    /// [`COUNT`] where the number goes, for the page's script to fill in: only
+    /// the device knows what its outbox holds (C13).
+    pub fn held_template() -> (String, String) {
+        (held_label(COUNT), held_meaning(COUNT))
+    }
+
     /// CSS modifier, so templates carry no state logic.
     pub fn css_class(self) -> &'static str {
         match self {
@@ -104,6 +109,21 @@ impl Link {
             Link::NeedsReview { .. } => "badge-red",
         }
     }
+}
+
+/// Where the number goes in [`Link::held_template`].
+pub const COUNT: &str = "{n}";
+
+// "Held", never "saved": nothing is saved until the server has it.
+fn held_label(count: &str) -> String {
+    format!("Offline · {count} held")
+}
+
+fn held_meaning(count: &str) -> String {
+    format!(
+        "This device can't reach the TealTeam server. {count} held here, not saved \
+         yet; they are sent when it answers."
+    )
 }
 
 #[cfg(test)]
@@ -135,7 +155,17 @@ mod tests {
 
     #[test]
     fn offline_always_says_what_is_safe() {
-        assert_eq!(Link::Offline { unsent: 4 }.label(), "Offline · 4 saved");
+        assert_eq!(Link::Offline { unsent: 4 }.label(), "Offline · 4 held");
+        assert!(!Link::Offline { unsent: 4 }.label().contains("saved"));
+        let (label, meaning) = Link::held_template();
+        assert_eq!(
+            label.replace(COUNT, "4"),
+            Link::Offline { unsent: 4 }.label()
+        );
+        assert_eq!(
+            meaning.replace(COUNT, "4"),
+            Link::Offline { unsent: 4 }.meaning()
+        );
         assert_eq!(
             Link::Offline { unsent: 0 }.label(),
             "Offline · nothing unsent"

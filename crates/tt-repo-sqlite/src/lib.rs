@@ -15,6 +15,7 @@
 //!
 //! The pool is capped at one connection deliberately -- see [`connect`].
 
+pub mod accounts;
 pub mod admin;
 mod assignments;
 pub mod backup;
@@ -26,10 +27,11 @@ mod picklist;
 pub mod refused;
 pub mod replication;
 pub mod schedule;
+pub mod scratch;
 pub mod snapshot;
 mod standings;
 pub mod storage;
-mod token_key;
+pub mod token_key;
 mod upstream;
 mod users;
 mod weights;
@@ -387,6 +389,15 @@ impl Repo for SqliteRepo {
     ) -> Result<bool> {
         self.review_observation_impl(id, decision, reviewer_id, now)
             .await
+    }
+
+    async fn reopen_observation(
+        &self,
+        id: i64,
+        reopener_id: i64,
+        now: DateTime<Utc>,
+    ) -> Result<bool> {
+        self.reopen_observation_impl(id, reopener_id, now).await
     }
 
     async fn declined_for(

@@ -3,29 +3,32 @@
 //! Reads the local schedule and statistics only. The retired panel fetched the
 //! FIRST schedule live and was empty at every event without internet
 //! (REBUILD_SPEC.md 12.6).
+//!
+//! The device makes this page too (C6b), over its copy, for the team the copy
+//! was cut for. Both tables it reads come down from upstream to every device.
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use tracing::warn;
 use tt_core::connectivity::Freshness;
-use tt_core::user::User;
-use tt_repo::Repo;
+use tt_repo::LocalRepo;
 use tt_templates::{DriveCoachPage, Nav};
 
 use crate::events::EventContext;
-use crate::startup::AppState;
 
-pub async fn page(
-    state: &AppState,
-    user: &User,
+/// `team`'s matches at the event `context` selected, next first.
+pub async fn page<R: LocalRepo>(
+    repo: &R,
     nav: Nav,
+    team: Option<i32>,
     context: &EventContext,
+    now: DateTime<Utc>,
 ) -> DriveCoachPage {
     let storage_ready = nav.storage_ready;
     let mut page = DriveCoachPage {
         title: "Drive Coach".into(),
         nav,
         event_name: String::new(),
-        team: user.team_number.map(|n| n.to_string()).unwrap_or_default(),
+        team: team.map(|n| n.to_string()).unwrap_or_default(),
         unavailable: String::new(),
         errors: Vec::new(),
         next: None,
@@ -35,7 +38,7 @@ pub async fn page(
         stats_synced: String::new(),
         stats_stale: false,
     };
-    let Some(team) = user.team_number else {
+    let Some(team) = team else {
         page.unavailable = "Your account has no team number, so there is no schedule to \
             follow. An admin can add it."
             .into();
@@ -59,8 +62,8 @@ pub async fn page(
     }
 
     let loaded = async {
-        let matches = state.repo.event_matches(&event.key).await?;
-        let stats = state.repo.event_stats(&event.key).await?;
+        let matches = repo.event_matches(&event.key).await?;
+        let stats = repo.event_stats(&event.key).await?;
         tt_repo::Result::Ok((matches, stats))
     };
     let (matches, stats) = match loaded.await {
@@ -78,7 +81,6 @@ pub async fn page(
         );
         return page;
     }
-    let now = Utc::now();
     page.schedule(event, &matches, team, &stats, now);
     let synced = stats
         .iter()

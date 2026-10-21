@@ -9,6 +9,24 @@
 (function () {
   "use strict";
 
+  // A scout's saved file (C15), from the downloadable scouting page: read
+  // here and posted as text, for the server to check as it checks codes.
+  var filePost = document.getElementById("forms-file-post");
+  if (filePost && window.FileReader) {
+    var picker = filePost.querySelector("[data-forms-file]");
+    filePost.hidden = false;
+    picker.addEventListener("change", function () {
+      var file = picker.files && picker.files[0];
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function () {
+        filePost.elements.file.value = String(reader.result || "");
+        filePost.submit();
+      };
+      reader.readAsText(file);
+    });
+  }
+
   var root = document.querySelector("[data-scanner]");
   var form = document.getElementById("handoff-post");
   if (!root || !form || !window.ttQr || !window.ttScan) return;

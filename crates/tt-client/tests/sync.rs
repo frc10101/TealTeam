@@ -318,6 +318,11 @@ async fn a_refusal_is_kept_with_its_reason_and_can_be_handed_over() {
     assert!(!device.is_queued(OTHER).unwrap());
     let outbox = device.outbox().unwrap();
     assert_eq!(outbox.len(), 2, "kept, not dropped");
+    assert_eq!(
+        device.waiting_count().unwrap(),
+        1,
+        "a refusal is not still to send, so it does not hold a stale copy"
+    );
     assert_eq!(outbox[1].refused.as_deref(), Some("Not saved: no."));
     assert_eq!(
         device.observed_teams("2026here_qm1", 7).await.unwrap(),
@@ -396,10 +401,19 @@ async fn nothing_but_an_echo_empties_the_outbox() {
         stop(Err("no connection to the Pi")).await,
         Some(Stop::Offline("no connection to the Pi".into()))
     );
-    assert_eq!(
-        stop(Ok((422, json!({ "error": "not an outbox" })))).await,
-        Some(Stop::Refused("not an outbox".into()))
-    );
+    // A push refused as a whole still pulls: one bad outbox must not stop
+    // the copy updating.
+    let pi = Pi::answers([
+        Ok((422, json!({ "error": "not an outbox" }))),
+        pulled(schema, json!([echo(50, PIS, 1678, 7, "approved")]), 50),
+    ]);
+    let report = SyncClient::new(&pi, vec![])
+        .sync(&device, at(10))
+        .await
+        .unwrap();
+    assert_eq!(pi.paths().len(), 2, "pulled after the refusal");
+    assert_eq!(report.applied, 1);
+    assert_eq!(report.stopped, Some(Stop::Refused("not an outbox".into())));
     let outbox = device.outbox().unwrap();
     assert_eq!(outbox.len(), 1);
     assert_eq!(outbox[0].attempts, 7);
@@ -606,4 +620,47 @@ async fn pull_only_never_pushes_but_applies_and_advances_the_cursor() {
         52,
         "a refused pull moves no cursor"
     );
+}
+
+/// C12's browser loop calls `sync`, not `pull_only`: with nothing queued it
+/// must be the pull alone, so a read-only browser (open decision 3) sends the
+/// Pi no push at all. Once something is queued, a build the Pi has moved past
+/// keeps it for `export_outbox`, which the worker offers as a file.
+#[tokio::test]
+async fn sync_with_an_empty_outbox_is_the_pull_alone() {
+    let device = device("empty-outbox").await;
+    let schema = device.schema().unwrap().unwrap();
+
+    let pi = Pi::answers([pulled(
+        schema,
+        json!([echo(50, PIS, 1678, 7, "approved")]),
+        50,
+    )]);
+    let client = SyncClient::new(&pi, vec![]);
+    let report = client.sync(&device, at(10)).await.unwrap();
+    assert_eq!(
+        pi.paths(),
+        vec![format!(
+            "/api/sync/pull?schema={schema}&changes=0&upstream=0"
+        )],
+        "nothing queued, nothing pushed"
+    );
+    assert_eq!((report.sent, report.applied, report.stopped), (0, 1, None));
+    assert!(device.outbox().unwrap().is_empty());
+
+    device
+        .queue_observation(&observation(MINE, 254, 7), at(11))
+        .await
+        .unwrap();
+    let pi = Pi::answers([Ok((409, json!({ "action": "reload" })))]);
+    let client = SyncClient::new(&pi, vec![]);
+    let report = client.sync(&device, at(12)).await.unwrap();
+    assert_eq!(report.stopped, Some(Stop::Reload));
+    assert_eq!(
+        device.outbox().unwrap().len(),
+        1,
+        "a reload keeps the queue"
+    );
+    let file: JsonValue = serde_json::from_str(&device.export_outbox(at(12)).unwrap()).unwrap();
+    assert_eq!(file["observations"][0]["client_record_id"], MINE);
 }

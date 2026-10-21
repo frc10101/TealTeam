@@ -30,8 +30,6 @@
 //! the Pi's own uplink is answering, so a device leaves fetching to it.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use axum::Json;
 use axum::body::Bytes;
@@ -44,6 +42,7 @@ use tracing::{info, warn};
 use tt_core::connectivity::{self, UplinkState};
 use tt_repo::RepoError;
 use tt_repo_sqlite::bundle::{BundleImport, Pusher};
+use tt_repo_sqlite::scratch::Scratch;
 use tt_upstream::project;
 
 use crate::auth::device_uuid;
@@ -56,26 +55,6 @@ pub const MAX_BUNDLE_BYTES: usize = 32 * 1024 * 1024;
 
 fn refuse(status: StatusCode, error: impl Into<String>) -> Response {
     (status, Json(json!({ "error": error.into() }))).into_response()
-}
-
-/// A file of this process's own, removed when dropped.
-struct Scratch(PathBuf);
-
-impl Scratch {
-    fn new() -> Self {
-        static NEXT: AtomicU64 = AtomicU64::new(0);
-        Self(std::env::temp_dir().join(format!(
-            "tt-bundle-{}-{}.sqlite",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        )))
-    }
-}
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.0);
-    }
 }
 
 pub async fn push(
@@ -97,20 +76,30 @@ pub async fn push(
         return refused;
     }
 
-    let file = Scratch::new();
-    if let Err(e) = tokio::fs::write(&file.0, &body).await {
-        warn!("writing a pushed bundle to {}: {e}", file.0.display());
-        return refuse(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "could not store the bundle",
-        );
-    }
+    let written = match Scratch::new("bundle") {
+        Ok(file) => tokio::fs::write(file.path(), &body).await.map(|()| file),
+        Err(e) => Err(e),
+    };
+    let file = match written {
+        Ok(file) => file,
+        Err(e) => {
+            warn!("writing a pushed bundle to the temp dir: {e}");
+            return refuse(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "could not store the bundle",
+            );
+        }
+    };
     let device = device_uuid(&headers);
     let pusher = Pusher {
         user_id: user.id,
         device: device.as_deref(),
     };
-    let imported = match state.repo.import_bundle(&file.0, pusher, Utc::now()).await {
+    let imported = match state
+        .repo
+        .import_bundle(file.path(), pusher, Utc::now())
+        .await
+    {
         Ok(imported) => imported,
         Err(RepoError::Refused(why)) => {
             info!(user = %user.email, "bundle refused: {why}");

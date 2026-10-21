@@ -8,19 +8,23 @@
 //!
 //! - **The device reads it.** The claims are plain JSON in the token, so a
 //!   page or worker decides what to show with no request and no key.
-//! - **The Pi verifies it, on every write.** A sync that comes with a token
-//!   and no live session is taken only if the signature is the Pi's, it has
-//!   not expired, and it names the tablet whose device cookie came with it.
-//!   The token is layered on device identity (A5): copied to another
-//!   browser, it is refused there.
-//! - **It cannot be revoked.** The plan accepts this for a three-day event
-//!   with a known roster. The Pi does load the user again, so a deleted
-//!   account's token is refused, and roles come from the database, not the
-//!   claims.
+//! - **It is no use alone (T1).** With each token the Pi hands the device a
+//!   [`device_key`], kept beside it and never put in the token. The Pi
+//!   derives the key again from the claims and its own seed, so it stores
+//!   nothing per token. A sync sends both, as one [`credential`]; a QR
+//!   handoff (S13) sends neither, only who the scout is ([`Holder`]) and a
+//!   [`mac`] over the forms made with the key; a receipt comes back with a
+//!   `mac` too, so the tablet lets go of nothing the Pi did not answer for.
+//!   A token copied, or read off a screen, signs nothing.
+//! - **The Pi verifies it, on every write.** The signature, the expiry, the
+//!   key, the device cookie, and the user's [`Claims::epoch`]: a lead who
+//!   signs a scout out everywhere bumps it, and every token issued before is
+//!   refused. Roles come from the database, not the claims.
 //!
-//! Pure Rust (`ed25519-dalek`), so the browser's wasm verifies a token
-//! exactly as the Pi does, without `crypto.subtle`, which a browser offers
-//! only over https (open decision 9).
+//! Pure Rust (`ed25519-dalek`, `sha2`), so the browser's wasm verifies a
+//! token exactly as the Pi does, without `crypto.subtle`, which a browser
+//! offers only over https (open decision 9). `static/js/hmac.js` is the
+//! same HMAC in page script.
 //!
 //! [PASETO]: https://github.com/paseto-standard/paseto-spec
 
@@ -29,6 +33,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, TimeDelta, Utc};
 use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::user::{Roles, User};
@@ -54,6 +59,11 @@ pub struct Claims {
     /// The device UUID the token was issued to (A5).
     #[serde(rename = "dev")]
     pub device: String,
+    /// The user's token epoch when it was issued. Bumped to sign them out
+    /// everywhere; a token from before is refused. Required, so a token
+    /// from before T1, whose device holds no key, does not read.
+    #[serde(rename = "ep")]
+    pub epoch: i64,
     #[serde(rename = "iat")]
     pub issued_at: DateTime<Utc>,
     #[serde(rename = "exp")]
@@ -61,8 +71,9 @@ pub struct Claims {
 }
 
 impl Claims {
-    /// A token's claims for `user` on `device`, from `now`, to the second.
-    pub fn new(user: &User, device: &str, now: DateTime<Utc>) -> Self {
+    /// A token's claims for `user` on `device` at `epoch`, from `now`, to
+    /// the second.
+    pub fn new(user: &User, device: &str, epoch: i64, now: DateTime<Utc>) -> Self {
         let now = DateTime::from_timestamp(now.timestamp(), 0).unwrap_or(now);
         Self {
             user_id: user.id,
@@ -70,10 +81,138 @@ impl Claims {
             team: user.team_number,
             roles: user.roles,
             device: device.to_string(),
+            epoch,
             issued_at: now,
             expires_at: now + TOKEN_DURATION,
         }
     }
+}
+
+/// Who holds a token, without the token: what a QR handoff names (S13), so
+/// a photo of the codes carries nothing that signs. The Pi derives the
+/// [`device_key`] from these, as from the claims.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Holder {
+    #[serde(rename = "sub", with = "subject")]
+    pub user_id: i64,
+    #[serde(rename = "dev")]
+    pub device: String,
+    #[serde(rename = "ep")]
+    pub epoch: i64,
+    #[serde(rename = "iat")]
+    pub issued_at: DateTime<Utc>,
+}
+
+impl Holder {
+    pub fn of(claims: &Claims) -> Self {
+        Self {
+            user_id: claims.user_id,
+            device: claims.device.clone(),
+            epoch: claims.epoch,
+            issued_at: claims.issued_at,
+        }
+    }
+
+    /// When the token it names runs out.
+    pub fn expires_at(&self) -> DateTime<Utc> {
+        self.issued_at + TOKEN_DURATION
+    }
+}
+
+/// What a [`mac`] is for, so one made for a handoff is never a receipt's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Purpose {
+    /// A tablet's forms, shown as codes ([`crate::qr::Handoff`]).
+    Handoff,
+    /// The Pi's answer to them ([`crate::qr::HandoffReceipts`]).
+    Receipt,
+    /// The same forms saved as a file (C15), which a lead uploads: not
+    /// bound to [`crate::qr::HANDOFF_WINDOW`], so never taken as codes.
+    File,
+}
+
+impl Purpose {
+    fn label(self) -> &'static [u8] {
+        match self {
+            Purpose::Handoff => b"tt-handoff:v1\n",
+            Purpose::Receipt => b"tt-receipt:v1\n",
+            Purpose::File => b"tt-file:v1\n",
+        }
+    }
+}
+
+/// Between a token and its key in a [`credential`]. `~` is a `token68`
+/// character (RFC 7235) and in neither base64url nor a PASETO token.
+pub const CREDENTIAL_SEPARATOR: char = '~';
+
+/// The device's key for the token `holder` names: HMAC-SHA256, keyed by a
+/// key the Pi derives from its signing seed, over who and when. Handed to
+/// the device once, with the token, and never inside it.
+pub fn device_key(seed: &[u8; 32], holder: &Holder) -> [u8; 32] {
+    let mut root = Sha256::new();
+    root.update(b"tealteam device key root v1\0");
+    root.update(seed);
+    let root: [u8; 32] = root.finalize().into();
+    let what = format!(
+        "tt-device-key:v1\n{}\n{}\n{}\n{}",
+        holder.user_id,
+        holder.device,
+        holder.epoch,
+        holder.issued_at.timestamp()
+    );
+    hmac_sha256(&root, what.as_bytes())
+}
+
+/// What a sync sends as `Authorization: Bearer`: the token, `~`, the key.
+pub fn credential(token: &str, key: &[u8; 32]) -> String {
+    format!(
+        "{token}{CREDENTIAL_SEPARATOR}{}",
+        URL_SAFE_NO_PAD.encode(key)
+    )
+}
+
+/// A [`credential`]'s token and key, if it is one.
+pub fn split_credential(credential: &str) -> Option<(&str, [u8; 32])> {
+    let (token, key) = credential.split_once(CREDENTIAL_SEPARATOR)?;
+    let key = URL_SAFE_NO_PAD.decode(key).ok()?.try_into().ok()?;
+    Some((token, key))
+}
+
+/// `body`'s MAC for `purpose` with a device key, unpadded base64url.
+pub fn mac(key: &[u8; 32], purpose: Purpose, body: &str) -> String {
+    let mut message = purpose.label().to_vec();
+    message.extend_from_slice(body.as_bytes());
+    URL_SAFE_NO_PAD.encode(hmac_sha256(key, &message))
+}
+
+/// Whether `given` is `body`'s MAC for `purpose`, compared in constant time.
+pub fn mac_holds(key: &[u8; 32], purpose: Purpose, body: &str, given: &str) -> bool {
+    same(mac(key, purpose, body).as_bytes(), given.as_bytes())
+}
+
+/// Equal, without stopping at the first difference.
+pub fn same(a: &[u8], b: &[u8]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
+
+/// RFC 2104 HMAC with SHA-256.
+pub fn hmac_sha256(key: &[u8], message: &[u8]) -> [u8; 32] {
+    let mut block = [0u8; 64];
+    if key.len() > 64 {
+        block[..32].copy_from_slice(&Sha256::digest(key));
+    } else {
+        block[..key.len()].copy_from_slice(key);
+    }
+    let pad = |byte: u8| block.map(|b| b ^ byte);
+    let inner = Sha256::new()
+        .chain_update(pad(0x36))
+        .chain_update(message)
+        .finalize();
+    Sha256::new()
+        .chain_update(pad(0x5c))
+        .chain_update(inner)
+        .finalize()
+        .into()
 }
 
 /// Why a token was not taken.
@@ -268,7 +407,7 @@ mod tests {
     #[test]
     fn a_token_says_who_on_which_device_until_when() {
         let seed = [9u8; 32];
-        let claims = Claims::new(&scout(), "tablet-1", noon());
+        let claims = Claims::new(&scout(), "tablet-1", 0, noon());
         let token = sign(&seed, &claims);
         assert!(token.starts_with(HEADER));
         assert_eq!(
@@ -290,7 +429,7 @@ mod tests {
     fn an_expired_forged_or_altered_token_is_refused() {
         let seed = [9u8; 32];
         let public = public_key(&seed);
-        let token = sign(&seed, &Claims::new(&scout(), "tablet-1", noon()));
+        let token = sign(&seed, &Claims::new(&scout(), "tablet-1", 0, noon()));
 
         assert_eq!(
             verify(&public, &token, noon() + TOKEN_DURATION),
@@ -306,7 +445,7 @@ mod tests {
         );
 
         // Signed by another key, as a different Pi would.
-        let forged = sign(&[1u8; 32], &Claims::new(&scout(), "tablet-1", noon()));
+        let forged = sign(&[1u8; 32], &Claims::new(&scout(), "tablet-1", 0, noon()));
         assert_eq!(
             verify(&public, &forged, noon()),
             Err(TokenError::BadSignature)
@@ -338,5 +477,88 @@ mod tests {
                 "{junk:?}"
             );
         }
+    }
+
+    #[test]
+    fn hmac_matches_rfc_4231() {
+        let hex = |b: [u8; 32]| b.iter().map(|x| format!("{x:02x}")).collect::<String>();
+        assert_eq!(
+            hex(hmac_sha256(b"Jefe", b"what do ya want for nothing?")),
+            "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843"
+        );
+        // A key longer than a block is hashed first.
+        assert_eq!(
+            hex(hmac_sha256(
+                &[0xaa; 131],
+                b"Test Using Larger Than Block-Size Key - Hash Key First"
+            )),
+            "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54"
+        );
+    }
+
+    #[test]
+    fn a_device_key_is_the_tokens_own_and_its_macs_are_for_one_purpose() {
+        let seed = [9u8; 32];
+        let claims = Claims::new(&scout(), "tablet-1", 0, noon());
+        let holder = Holder::of(&claims);
+        let key = device_key(&seed, &holder);
+        assert_eq!(key, device_key(&seed, &holder), "derived, not stored");
+        assert_eq!(holder.expires_at(), claims.expires_at);
+        for other in [
+            Holder {
+                epoch: 1,
+                ..holder.clone()
+            },
+            Holder {
+                device: "tablet-2".into(),
+                ..holder.clone()
+            },
+            Holder {
+                user_id: 8,
+                ..holder.clone()
+            },
+            Holder {
+                issued_at: noon() + TimeDelta::seconds(1),
+                ..holder.clone()
+            },
+        ] {
+            assert_ne!(device_key(&seed, &other), key, "{other:?}");
+        }
+        assert_ne!(device_key(&[1u8; 32], &holder), key, "another Pi's");
+
+        // Pinned (and checked with Python's hmac), for static/js/hmac.js.
+        assert_eq!(
+            mac(&[7u8; 32], Purpose::Handoff, "{}"),
+            "_qFEa5yG_0m-5l-AW9u4zBqYDu7XgEFs43nkru1xV9c"
+        );
+        let made = mac(&key, Purpose::Handoff, "the forms");
+        assert!(mac_holds(&key, Purpose::Handoff, "the forms", &made));
+        assert!(!mac_holds(&key, Purpose::Receipt, "the forms", &made));
+        assert!(!mac_holds(&key, Purpose::File, "the forms", &made));
+        assert!(!mac_holds(&key, Purpose::Handoff, "other forms", &made));
+        assert!(!mac_holds(&[1u8; 32], Purpose::Handoff, "the forms", &made));
+
+        // The holder reads as the claims' JSON does.
+        let json = serde_json::to_value(&holder).unwrap();
+        assert_eq!(json["sub"], "7");
+        assert_eq!(json["iat"], "2026-03-13T12:00:00Z");
+        assert_eq!(json["ep"], 0);
+
+        let token = sign(&seed, &claims);
+        let both = credential(&token, &key);
+        assert_eq!(split_credential(&both), Some((token.as_str(), key)));
+        assert_eq!(split_credential(&token), None, "a token alone");
+        assert_eq!(split_credential(&format!("{token}~short")), None);
+    }
+
+    #[test]
+    fn a_token_from_before_device_keys_does_not_read() {
+        let seed = [9u8; 32];
+        let old = br#"{"sub":"7","name":"Sam","team":10101,"roles":{"is_admin":false,"is_lead_scout":false,"is_drive_coach":false},"dev":"tablet-1","iat":"2026-03-13T12:00:00Z","exp":"2026-03-16T12:00:00Z"}"#;
+        let token = sign_raw(&seed, old, b"", b"");
+        assert_eq!(
+            verify(&public_key(&seed), &token, noon()),
+            Err(TokenError::Malformed)
+        );
     }
 }

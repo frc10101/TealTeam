@@ -238,7 +238,8 @@ async fn team_page(repo: &impl LocalRepo, season: &SeasonSchema, query: Option<&
 }
 
 /// The other pages a scout reads at an event, as `tt-web` makes them for a
-/// 10101 scout, over `repo`: home, the notes, and the graph.
+/// 10101 scout, over `repo`: home, the notes, the graph, and the drive
+/// coach's schedule (for 10101, a team not on it, and no team).
 async fn other_pages(repo: &impl LocalRepo, season: &SeasonSchema) -> Vec<(&'static str, String)> {
     let mut made = Vec::new();
     let (nav, context) = scout_view(repo).await;
@@ -266,6 +267,15 @@ async fn other_pages(repo: &impl LocalRepo, season: &SeasonSchema) -> Vec<(&'sta
             .collect();
         let (nav, context) = scout_view(repo).await;
         let page = tt_pages::graph::page(repo, season, nav, &context, &query, now()).await;
+        made.push((name, page.render_html().unwrap()));
+    }
+    for (name, team) in [
+        ("coach", Some(10101)),
+        ("coach off the schedule", Some(9999)),
+        ("coach with no team", None),
+    ] {
+        let (nav, context) = scout_view(repo).await;
+        let page = tt_pages::coach::page(repo, nav, team, &context, now()).await;
         made.push((name, page.render_html().unwrap()));
     }
     made
@@ -328,9 +338,10 @@ async fn the_device_makes_the_page_the_server_makes() {
     for ((name, served), (_, made)) in served.iter().zip(&made) {
         assert_eq!(served, made, "{name}");
     }
-    let [(_, home), (_, notes), _, (_, graph), ..] = made.as_slice() else {
+    let [(_, home), (_, notes), _, (_, graph), _, _, (_, coach), ..] = made.as_slice() else {
         panic!("every page made");
     };
+    assert!(coach.contains(r#"id="coach-schedule""#) && coach.contains("OPR 50.5 · DPR"));
     assert!(home.contains("Citrus"), "the roster");
     assert!(notes.contains("10101&#39;s notes") && notes.contains("Q1 · Sam"));
     assert!(!notes.contains("254&#39;s notes"), "another team's notes");
@@ -405,6 +416,13 @@ async fn the_worker_answers_the_addresses_it_knows_and_no_others() {
     ] {
         assert!(graph.contains(on), "{on}");
     }
+
+    // The coach's schedule, for the copy's team, though the tab is not offered.
+    let coach = render(&device, &season, "/drive-coach", "", now())
+        .await
+        .unwrap();
+    assert!(coach.contains(r#"id="device-page""#) && coach.contains(r#"id="coach-schedule""#));
+    assert!(!page.contains(r#"href="/drive-coach"#));
 
     for elsewhere in [
         "/lead-scout",

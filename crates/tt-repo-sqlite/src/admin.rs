@@ -92,7 +92,9 @@ pub async fn rows(pool: &SqlitePool, table: &str, page: i64) -> Result<Option<Di
         return Ok(None);
     };
     let page = page.max(0);
-    let offset = page * PAGE_SIZE;
+    // `?page=` is the admin's to type: a huge one is past the end, not an
+    // overflow.
+    let offset = page.saturating_mul(PAGE_SIZE);
 
     // `table` is only used below once it has matched a name `tables` itself
     // returned, so it carries no caller-chosen text into the query either.
@@ -258,5 +260,15 @@ mod tests {
         assert_eq!(page.rows.len(), 3);
         assert_eq!(page.total, 3);
         assert_eq!(page.page, 0);
+    }
+
+    #[tokio::test]
+    async fn a_page_past_any_end_is_empty_not_an_overflow() {
+        let pool = migrated().await;
+        insert_user(&pool, "sam@example.com", "Sam").await;
+
+        let page = rows(&pool, "users", i64::MAX).await.unwrap().unwrap();
+        assert!(page.rows.is_empty());
+        assert_eq!(page.total, 1);
     }
 }

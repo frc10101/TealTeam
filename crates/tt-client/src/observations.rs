@@ -196,6 +196,32 @@ impl ClientRepo {
         Ok(done == 1)
     }
 
+    pub(crate) fn reopen_observation_impl(
+        &self,
+        id: i64,
+        reopener_id: i64,
+        now: DateTime<Utc>,
+    ) -> Result<bool> {
+        let ts = to_sql(now);
+        // The server's undo, guarded the same way.
+        let done = self
+            .conn
+            .execute(
+                "UPDATE observations SET \
+                    review_state = 'pending', review_note = NULL, reviewed_by = ?, \
+                    reviewed_at = ?, updated_at = ? \
+                 WHERE id = ? AND review_state <> 'pending' \
+                   AND NOT EXISTS (SELECT 1 FROM observations again \
+                       WHERE again.match_key = observations.match_key \
+                         AND again.team_number = observations.team_number \
+                         AND again.scouter_id = observations.scouter_id \
+                         AND again.id <> observations.id AND again.review_state <> 'declined')",
+                params![reopener_id, ts, ts, id],
+            )
+            .ctx("reopening observation")?;
+        Ok(done == 1)
+    }
+
     pub(crate) fn declined_for_impl(
         &self,
         event_key: &str,

@@ -81,6 +81,15 @@
       <form method="post" action="{{ post_href }}" id="handoff-post" hidden>
         <input type="hidden" name="frames" value="">
       </form>
+      {# C15: the forms a scout's downloaded page saved as a file, carried
+         over on a USB stick or by any other road. #}
+      <form method="post" action="{{ post_href }}" id="forms-file-post" class="stack" hidden>
+        <input type="hidden" name="file" value="">
+        <p class="hint">Or the scout saved their forms as a file from their downloaded scouting page:</p>
+        <p><label class="btn btn-secondary file-button">Upload a scout's saved forms
+          <input type="file" accept=".json,application/json" data-forms-file>
+        </label></p>
+      </form>
       <p><a class="back" href="{{ back_href }}">Back to the lead-scout page</a></p>
     </div>
   </section>

@@ -541,6 +541,19 @@ pub trait LocalRepo {
         now: DateTime<Utc>,
     ) -> Result<bool>;
 
+    /// Undo a review (G3): an approved or declined observation goes back to
+    /// waiting, its reason cleared, with `reopener_id` and `now` in
+    /// `reviewed_by`/`reviewed_at` so the row says who reopened it and when;
+    /// the change log keeps the verdict it replaced. `false` when nothing
+    /// changed: it was already waiting, or it was declined and the scout has
+    /// since recorded the robot again, so reopening it would make two.
+    async fn reopen_observation(
+        &self,
+        id: i64,
+        reopener_id: i64,
+        now: DateTime<Utc>,
+    ) -> Result<bool>;
+
     /// A scout's declined observations at an event that they have not since
     /// recorded again, newest review first: what the scout needs to be told.
     async fn declined_for(

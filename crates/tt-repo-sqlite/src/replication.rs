@@ -13,8 +13,10 @@
 pub const REPLICATED: &[&str] = &["observations", "scout_assignments", "pick_list_entries"];
 
 /// Never to leave the server: password hashes, session tokens, which person
-/// holds which tablet, and the key that signs offline tokens (C9).
-pub const NEVER_REPLICATED: &[&str] = &["users", "sessions", "devices", "token_key"];
+/// holds which tablet, the key that signs offline tokens (C9), and who was
+/// signed out everywhere (T1).
+pub const NEVER_REPLICATED: &[&str] =
+    &["users", "sessions", "devices", "token_key", "token_epochs"];
 
 /// Derived from FIRST and TBA. Clients get the responses they came from,
 /// through the `upstream` log (S1), and derive the same rows.
@@ -35,6 +37,9 @@ pub const FROM_UPSTREAM: &[&str] = &[
 /// list it is, since a yrs update is merged, not replayed. Their rows, in
 /// `pick_list_entries`, replicate as usual.
 ///
+/// Handoff scans (T1) are the audit trail of which lead scanned a tablet's
+/// forms in; the forms themselves reach devices as observations.
+///
 /// Refused outbox entries (C10) are for the lead scout's page. Whatever a lead
 /// makes of one reaches devices as an ordinary observation.
 pub const SERVER_ONLY: &[&str] = &[
@@ -45,6 +50,7 @@ pub const SERVER_ONLY: &[&str] = &[
     "sync_state",
     "bundle_imports",
     "refused_entries",
+    "handoff_scans",
 ];
 
 #[cfg(test)]

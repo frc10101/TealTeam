@@ -22,15 +22,17 @@ use chrono::Utc;
 use serde::Deserialize;
 use tt_core::user::{self, Roles};
 use tt_repo::{NewUser, Repo};
-use tt_templates::{AccountPage, LeadScoutPage, LinkChips, Nav, Page, SignInPage, SignUpPage};
+use tt_templates::{
+    AccountPage, HelpPage, LeadScoutPage, LinkChips, Nav, Page, SignInPage, SignUpPage,
+};
 
+use crate::accounts;
 use crate::admin;
 use crate::assignments::{self, GridParams};
 use crate::auth::{
     Admin, Auth, Coach, LeadScout, MaybeAuth, SESSION_COOKIE, Strategist, clear_session_cookie,
     device_uuid, hash_password, new_session, session_cookie, verify_password,
 };
-use crate::coach;
 use crate::events::{self, EventContext, EventParam};
 use crate::handoff;
 use crate::picklist;
@@ -333,6 +335,19 @@ fn account_page(nav: Nav, user: &tt_core::user::User, error: String, success: St
     })
 }
 
+/// `GET /help` (U5): public, so it reads the same signed in or out.
+pub async fn help(
+    State(state): State<AppState>,
+    MaybeAuth(user): MaybeAuth,
+    EventParam(requested): EventParam,
+) -> Response {
+    let (nav, _) = event_page(&state, user.as_ref(), requested.as_deref()).await;
+    html(HelpPage {
+        title: "Help".into(),
+        nav,
+    })
+}
+
 pub async fn account(
     State(state): State<AppState>,
     Auth(user): Auth,
@@ -559,6 +574,17 @@ pub async fn rename_device(
     Form(pairs): Form<Vec<(String, String)>>,
 ) -> Response {
     let outcome = assignments::rename_device(&state, &user, requested.as_deref(), id, &pairs).await;
+    assignment_outcome(&state, &user, requested.as_deref(), outcome).await
+}
+
+/// `POST /api/users/{id}/sign-out` (T1): sign a scout out everywhere.
+pub async fn sign_out_everywhere(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
+    Path(id): Path<i64>,
+) -> Response {
+    let outcome = assignments::sign_out_everywhere(&state, &user, requested.as_deref(), id).await;
     assignment_outcome(&state, &user, requested.as_deref(), outcome).await
 }
 
@@ -955,17 +981,12 @@ pub async fn review_page(
     Path(id): Path<i64>,
 ) -> Response {
     let (nav, _) = event_page(&state, Some(&user), requested.as_deref()).await;
-    match review::page(
-        &state,
-        nav,
-        &user,
-        id,
-        reviewed.message(),
-        Vec::new(),
-        String::new(),
-    )
-    .await
-    {
+    // A verdict led here by "and see the next"; an undo, back to this one.
+    let notice = match reviewed.0 {
+        Some(tt_core::review::ReviewState::Pending) | None => reviewed.message(),
+        Some(_) => format!("{} Here is the next one.", reviewed.message()),
+    };
+    match review::page(&state, nav, &user, id, notice, Vec::new(), String::new()).await {
         Some(page) => html(page),
         None => StatusCode::NOT_FOUND.into_response(),
     }
@@ -981,6 +1002,26 @@ async fn verdict(
     decline: bool,
 ) -> Response {
     match review::decide(&state, &user, id, &pairs, decline).await {
+        Ok(next) => Redirect::to(&next).into_response(),
+        Err(review::Refused::Missing) => StatusCode::NOT_FOUND.into_response(),
+        Err(review::Refused::Again { errors, reason }) => {
+            let (nav, _) = event_page(&state, Some(&user), requested.as_deref()).await;
+            match review::page(&state, nav, &user, id, String::new(), errors, reason).await {
+                Some(page) => html(page),
+                None => StatusCode::NOT_FOUND.into_response(),
+            }
+        }
+    }
+}
+
+/// `POST /api/observations/{id}/reopen`: undo a verdict (G3).
+pub async fn reopen_observation(
+    State(state): State<AppState>,
+    LeadScout(user): LeadScout,
+    EventParam(requested): EventParam,
+    Path(id): Path<i64>,
+) -> Response {
+    match review::reopen(&state, &user, id).await {
         Ok(next) => Redirect::to(&next).into_response(),
         Err(review::Refused::Missing) => StatusCode::NOT_FOUND.into_response(),
         Err(review::Refused::Again { errors, reason }) => {
@@ -1095,16 +1136,21 @@ pub async fn receive_handoff(
     EventParam(requested): EventParam,
     Form(pairs): Form<Vec<(String, String)>>,
 ) -> Response {
-    let frames = pairs
-        .iter()
-        .find(|(name, _)| name == "frames")
-        .map(|(_, value)| value.as_str())
-        .unwrap_or_default();
+    let field = |wanted: &str| {
+        pairs
+            .iter()
+            .find(|(name, _)| name == wanted)
+            .map(|(_, value)| value.as_str())
+    };
     let query = requested
         .as_deref()
         .map(|key| format!("?event={key}"))
         .unwrap_or_default();
-    let outcome = handoff::receive(&state, &user, frames, &query).await;
+    // A scout's saved file (C15), or the codes off their screen (S13).
+    let outcome = match field("file") {
+        Some(file) => handoff::receive_file(&state, &user, file, &query).await,
+        None => handoff::receive(&state, &user, field("frames").unwrap_or_default(), &query).await,
+    };
     let (nav, _) = event_page(&state, Some(&user), requested.as_deref()).await;
     match outcome {
         Ok(result) => html(handoff::page(nav, Some(result), Vec::new())),
@@ -1123,6 +1169,18 @@ pub(crate) fn wants_html(headers: &HeaderMap) -> bool {
 }
 
 // ── Scouting (U4) ───────────────────────────────────────────────────────────
+
+/// `GET /submission/download`: the scouting page as one file, for this
+/// scout on this tablet, to open with no server (C15).
+pub async fn download_scout_file(
+    State(state): State<AppState>,
+    Auth(user): Auth,
+    EventParam(requested): EventParam,
+    headers: HeaderMap,
+) -> Response {
+    let (_, context) = event_page(&state, Some(&user), requested.as_deref()).await;
+    crate::scout_file::download(&state, &user, &context, &headers).await
+}
 
 pub async fn submission(
     State(state): State<AppState>,
@@ -1193,7 +1251,7 @@ pub async fn drive_coach(
     EventParam(requested): EventParam,
 ) -> Response {
     let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
-    html(coach::page(&state, &user, nav, &context).await)
+    html(tt_pages::coach::page(&*state.repo, nav, user.team_number, &context, Utc::now()).await)
 }
 
 // ── Admin database viewer (U17) ─────────────────────────────────────────────
@@ -1211,4 +1269,56 @@ pub async fn admin_db(
     let table = query.get("table").map(String::as_str);
     let page = query.get("page").and_then(|p| p.parse().ok());
     html(admin::page(&state, nav, table, page).await)
+}
+
+// ── Account administration (G1) ─────────────────────────────────────────────
+
+/// `?event=` to carry back to the page, only if it could be an event key:
+/// it lands in a redirect, so nothing else of the request's goes with it.
+fn event_query(requested: Option<&str>) -> String {
+    requested
+        .filter(|key| key.chars().all(|c| c.is_ascii_alphanumeric()))
+        .map(|key| format!("?event={key}"))
+        .unwrap_or_default()
+}
+
+/// `GET /admin/users?done=&id=`: every account, to change its roles and team
+/// number or reset its password.
+pub async fn admin_users(
+    State(state): State<AppState>,
+    Admin(user): Admin,
+    EventParam(requested): EventParam,
+    Query(query): Query<HashMap<String, String>>,
+) -> Response {
+    let (nav, _) = event_page(&state, Some(&user), requested.as_deref()).await;
+    let done = query
+        .get("done")
+        .and_then(|code| accounts::Done::parse(code))
+        .zip(query.get("id").and_then(|id| id.parse().ok()));
+    html(accounts::page(&state, &user, nav, done).await)
+}
+
+/// `POST /api/admin/users/{id}`: set an account's roles and team number.
+pub async fn save_account(
+    State(state): State<AppState>,
+    Admin(user): Admin,
+    EventParam(requested): EventParam,
+    Path(id): Path<i64>,
+    Form(pairs): Form<Vec<(String, String)>>,
+) -> Response {
+    let back = event_query(requested.as_deref());
+    Redirect::to(&accounts::save(&state, &user, &back, id, &pairs).await).into_response()
+}
+
+/// `POST /api/admin/users/{id}/password`: reset a forgotten password, which
+/// signs that account out everywhere.
+pub async fn reset_account_password(
+    State(state): State<AppState>,
+    Admin(user): Admin,
+    EventParam(requested): EventParam,
+    Path(id): Path<i64>,
+    Form(pairs): Form<Vec<(String, String)>>,
+) -> Response {
+    let back = event_query(requested.as_deref());
+    Redirect::to(&accounts::reset_password(&state, &user, &back, id, &pairs).await).into_response()
 }

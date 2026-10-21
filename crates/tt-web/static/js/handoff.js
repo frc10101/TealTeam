@@ -2,11 +2,20 @@
 //
 // When the tablet cannot reach the server, the forms it kept (draft.js, C3)
 // go out as codes, shown in turn, for a lead scout who can reach it to scan
-// (static/js/receive.js). They travel with the scout's offline token (C9),
-// so the server records them as this scout, from this tablet. The lead's
-// screen then shows a receipt; scanned here, it lets the tablet delete the
-// forms the server answered for, recorded or refused. A refused one waits
-// for a lead scout on the server, as a refused push does (C10).
+// (static/js/receive.js). The codes never carry the scout's token (T1):
+// they name its holder (who, which tablet, when issued) and carry an HMAC
+// over the forms by the device key token.js keeps beside it, which the
+// server derives again, so it records them as this scout, from this
+// tablet. The lead's screen then shows a receipt with the server's HMAC by
+// the same key over the codes' nonce; scanned here and checked, it lets the
+// tablet delete the forms the server answered for, recorded or refused, as
+// they were when the codes were made. A refused one waits for a lead scout
+// on the server, as a refused push does (C10).
+//
+// What the codes last showed is kept as tt-handoff:v1:{user} -- the nonce,
+// the key that made the MAC, and a digest of each form as sent -- so a
+// receipt still settles after a reload or a fresh token, an old receipt
+// answers nothing, and a form edited since is kept.
 //
 // Only the signed-in scout's own forms, by the token's user: on a shared
 // tablet, the others' wait for their own sign-in.
@@ -14,9 +23,10 @@
   "use strict";
 
   var panel = document.querySelector("[data-handoff]");
-  if (!panel || !window.ttQr || !window.ttScan || !window.ttToken) return;
+  if (!panel || !window.ttQr || !window.ttScan || !window.ttToken || !window.ttHmac) return;
 
   var PREFIX = "tt-draft:v1:";
+  var SHOWN = "tt-handoff:v1:";
   var SHOW_MS = 600;
   var $ = function (name) {
     return panel.querySelector("[data-handoff-" + name + "]");
@@ -144,16 +154,47 @@
     wakeLock = null;
   }
 
+  function nonce() {
+    var bytes = new Uint8Array(16);
+    if (window.crypto && window.crypto.getRandomValues) {
+      window.crypto.getRandomValues(bytes);
+    } else {
+      for (var i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+    }
+    return window.ttHmac.toBase64Url(bytes);
+  }
+
+  // What a form said, for telling whether it changed since it was sent.
+  function digest(match, team, answers) {
+    var text = JSON.stringify([match, team, answers]);
+    return window.ttHmac.toBase64Url(window.ttHmac.sha256(new TextEncoder().encode(text)));
+  }
+
+  function remember(who, shown) {
+    try {
+      window.localStorage.setItem(SHOWN + who.sub, JSON.stringify(shown));
+    } catch (e) {}
+  }
+
   function showCode() {
-    var token = window.ttToken.token();
+    var holder = window.ttToken.holder();
+    var key = window.ttToken.key();
     var forms = chosen();
-    if (!token) return render();
+    if (!holder || !key) return render();
     if (!forms.length) return say("Tick the forms to send.");
-    var body = new TextEncoder().encode(JSON.stringify({ token: token, forms: forms }));
+    // tt_core::qr::{Handoff, HandoffBody}: the MAC is over these exact bytes.
+    var shown = { nonce: nonce(), at: Date.now(), key: window.ttHmac.toBase64Url(key), forms: {} };
+    forms.forEach(function (form) {
+      shown.forms[form.record_id] = digest(form.match, form.team, form.answers);
+    });
+    var body = JSON.stringify({ scout: holder, nonce: shown.nonce, at: shown.at, forms: forms });
+    var mac = window.ttHmac.mac(key, "handoff", body);
+    var bytes = new TextEncoder().encode(JSON.stringify({ body: body, mac: mac }));
     window.ttQr
-      .frames("H", body)
+      .frames("H", bytes)
       .then(function (texts) {
         hideCode();
+        remember(holder, shown);
         texts.forEach(function (text) {
           var figure = document.createElement("figure");
           figure.className = "qr-frame";
@@ -193,14 +234,34 @@
     video.hidden = true;
   }
 
-  function settle(receipts) {
+  // The receipt's own words, if the server made it for the codes this
+  // tablet last showed; else why not, for the scout.
+  function check(signed) {
     var who = claims();
-    var mine = who ? drafts(who.sub) : [];
+    if (!who) return { why: "Sign in on this tablet to read a receipt." };
+    var shown = read(SHOWN + who.sub);
+    if (!shown || !shown.key) return { why: "This tablet has shown no codes to answer. Nothing changed." };
+    var key = window.ttHmac.fromBase64Url(shown.key);
+    if (!signed || typeof signed.body !== "string" || !window.ttHmac.holds(key, "receipt", signed.body, signed.mac)) {
+      return { why: "That receipt was not made by the server for this tablet's codes. Nothing changed." };
+    }
+    var body = JSON.parse(signed.body);
+    if (body.nonce !== shown.nonce) {
+      return { why: "That receipt is for codes this tablet showed before. Nothing changed." };
+    }
+    return { who: who, shown: shown, receipts: body.receipts || [] };
+  }
+
+  function settle(checked) {
+    var mine = drafts(checked.who.sub);
     var recorded = 0;
     var refused = [];
-    receipts.forEach(function (receipt) {
+    checked.receipts.forEach(function (receipt) {
+      var sent = checked.shown.forms[receipt.client_record_id];
       mine.forEach(function (entry) {
         if (entry.draft.recordId !== receipt.client_record_id) return;
+        // Edited since the codes were made: what the server has is older.
+        if (sent !== digest(entry.draft.match, entry.draft.team, entry.draft.answers)) return;
         try {
           window.localStorage.removeItem(entry.key);
         } catch (e) {}
@@ -211,7 +272,7 @@
     hideCode();
     render();
     if (!recorded && !refused.length) {
-      say("That receipt is for forms this tablet no longer has. Nothing changed.");
+      say("That receipt is for forms this tablet no longer has, or has changed since. Nothing changed.");
       return;
     }
     var text = "The server has " + recorded + (recorded === 1 ? " of your forms." : " of your forms.");
@@ -247,8 +308,9 @@
         .finish()
         .then(function (done) {
           assembler.reset();
-          var receipt = JSON.parse(new TextDecoder().decode(done.bytes));
-          settle(receipt.receipts || []);
+          var checked = check(JSON.parse(new TextDecoder().decode(done.bytes)));
+          if (checked.why) say(checked.why);
+          else settle(checked);
         })
         .catch(function (e) {
           assembler.reset();

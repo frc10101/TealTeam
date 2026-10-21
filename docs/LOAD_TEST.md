@@ -1,10 +1,10 @@
 # The load test (Q3)
 
 Run this before the season, and again after any change to how saving or
-syncing works. Thirty scouts' phones save observations, pull changes, and hold
+syncing works. Thirty scouts' devices save observations, pull changes, and hold
 live streams against a real `tt-web` for two hours. Meanwhile the cable is
 pulled and the power cut, on purpose. A third check, separate from the
-server's, fills a phone's storage.
+server's, fills a browser's storage.
 
 Everything here is `crates/tt-load` (the server side) and
 `crates/tt-web/tests/browser/storage-full.mjs` (the phone).
@@ -107,9 +107,13 @@ checks the following:
 - The scouting page works.
 - The draft (C3) fails quietly.
 - The save reaches the server.
-- The offline shell (C1) does not install and nothing breaks.
+- The offline shell (C1) does not install and nothing breaks, and the page
+  warns that the device has no offline copy (Q6).
 - A snapshot (S10) that does not fit is refused with reason `full`.
-- Once space is freed, both the snapshot and the shell succeed.
+- With about 768 KB freed, the worker keeps only the shell page and the files
+  it loads, marks the cache as partial, and the page says it is nearly full.
+- Once space is freed, both the snapshot and the shell succeed, the rest of
+  the shell is added, and the warning goes.
 
 ## Results
 

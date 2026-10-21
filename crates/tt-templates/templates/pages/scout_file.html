@@ -1,0 +1,110 @@
+{#
+  The downloadable scouting page (C15): one file a scout saves on their
+  tablet ahead of time and opens with no server at all. Not a page the Pi
+  serves to be browsed -- GET /submission/download hands it over as an
+  attachment -- so it extends nothing and links to nothing: the stylesheet
+  and every script are inside it, and so are the season's form, this
+  scout's assignments and the event's schedule, and their offline token and
+  device key (C9, T1).
+
+  static/js/scout-file.js runs it. It draws the form for the robot chosen,
+  keeps what is saved in the tablet's outbox (C13's format), and delivers it
+  to the Pi by POST when the Pi answers, else by the QR handoff (S13,
+  handoff.html and handoff.js, unchanged) or as a file a lead uploads.
+#}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="tt-form" content="{{ form_version }}">
+    <title>Scouting · {{ scout }} · {{ event_name }}</title>
+    <style>{{ css|safe }}</style>
+    <style>
+      .file-header { padding: 0.75rem 1rem; border-bottom: 1px solid var(--gray-700); }
+      .file-header h1 { font-size: 1.125rem; margin: 0; }
+      .file-header p { margin: 0.25rem 0 0; }
+      .file-link[data-state="up"] { color: var(--teal-300); }
+      .file-link[data-state="down"] { color: var(--gray-300); }
+    </style>
+  </head>
+  <body>
+    <header class="file-header">
+      <h1>TealTeam scouting · {{ scout }}</h1>
+      <p class="muted">{{ event_name }}. Saved from the server {{ made }}; it works with no server until {{ expires }}, then download a fresh one.</p>
+      <p class="file-link" id="file-link" role="status" aria-live="polite" data-state="unknown">Not checked for the server yet.</p>
+    </header>
+    <main id="main" class="page">
+      <noscript><p class="alert alert-error">This page needs JavaScript.</p></noscript>
+      {# What is held here, what went, and what the server refused. #}
+      <div id="outbox" class="stack" aria-live="polite" hidden></div>
+
+      <section class="card assigned" id="file-target" hidden>
+        <div class="card-body">
+          <p class="assigned-kicker">You are scouting</p>
+          <p class="assigned-team"><strong data-file-team></strong> <span data-file-team-name></span></p>
+          <p class="assigned-where" data-file-where></p>
+          <p class="muted" data-file-recorded hidden>Already saved on this tablet. Saving again replaces it.</p>
+          <p class="muted">Not your robot? <a href="#" data-file-choose>Choose another</a></p>
+        </div>
+      </section>
+
+      <form class="scout-form stack" id="scout-form" hidden>
+        <input type="hidden" name="match" value="">
+        <input type="hidden" name="team" value="">
+        <input type="hidden" name="record_id" value="">
+        {% for section in sections %}
+          <section class="card">
+            <div class="card-header"><h2>{{ section.label }}</h2></div>
+            <div class="card-body stack">
+              {% for field in section.fields %}
+                {% include "form_field.html" %}
+              {% endfor %}
+            </div>
+          </section>
+        {% endfor %}
+        {% if notes_unshared %}
+          <p class="hint">Your account has no team number, so no team will be able to read the notes you write here.</p>
+        {% endif %}
+        <button class="btn btn-primary btn-lg" type="submit">Save observation</button>
+      </form>
+
+      <section class="card" id="file-picker" hidden>
+        <div class="card-header"><h2>Choose a robot</h2></div>
+        <div class="card-body stack">
+          <label class="form-label" for="file-match">Match</label>
+          <select id="file-match" class="form-select"></select>
+          <p class="form-label">Which robot are you watching?</p>
+          <div class="robots" data-file-robots></div>
+        </div>
+      </section>
+
+      <section class="card" id="my-assignments">
+        <div class="card-header"><h2>Your assignments</h2></div>
+        <div class="card-body stack">
+          <p class="hint">As the lead scout had them when you saved this page. Ones saved here are ticked.</p>
+          <ol class="duties" data-file-duties></ol>
+          <p class="muted" data-file-no-duties hidden>You had no assignments at this event. Choose robots from the schedule.</p>
+          <p><a class="btn btn-secondary" href="#" data-file-choose>Choose from the schedule</a></p>
+        </div>
+      </section>
+
+      <section class="card" id="file-send">
+        <div class="card-header"><h2>Getting them to the server</h2></div>
+        <div class="card-body stack">
+          <p class="hint">Saved forms go to the server by themselves whenever this tablet can reach it. If it cannot, show a lead scout the code below, or save them as a file for a lead to upload.</p>
+          <p class="actions">
+            <button type="button" class="btn btn-secondary" data-file-send>Send now</button>
+            <button type="button" class="btn btn-secondary" data-file-export>Save them as a file</button>
+          </p>
+          <p role="status" data-file-status></p>
+        </div>
+      </section>
+
+      {% include "handoff.html" %}
+    </main>
+    <script type="application/json" id="tt-file-data">{{ data|safe }}</script>
+    {% for script in scripts %}<script>{{ script|safe }}</script>
+    {% endfor %}
+  </body>
+</html>
