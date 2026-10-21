@@ -1,6 +1,6 @@
 # FTC BIOBUZZ beta-test plan
 
-Status: **plan only — nothing implemented.**
+Status: **plan only — nothing implemented.** Setting up the Pi and laptops: [`docs/SETUP_GUIDE.md`](SETUP_GUIDE.md).
 
 **Scope decision (2026-10-15): a separate, FTC-only branch, `ftc-biobuzz`, for one
 test event: **Alabama Athens Qualifier 1, Saturday 2026-10-24.** It is never merged back into `rebuild`.** The migration doc
@@ -159,6 +159,7 @@ table. That table goes in the PR description.
 | F6 | Pin the commit, tag it `ftc-biobuzz-beta-1`, and build and install it on the Pi | The tag exists; the Pi reports that commit |
 | F9 | **Team coverage.** On the assignment page, beside each scout's tally, a Teams table: per team, observations approved, observations waiting for review (declined ones count nowhere), robots assigned but not yet scouted, and qualification matches left. Each team is Covered (2 observed), On track (enough assigned), *Assign N more* with a link to its next open match's editor, or *Can't reach 2*; teams to assign come first. It refreshes with the coverage region, and needs no new assignment logic | Tests count an approved, a waiting and a declined observation; the lead scout can see before alliance selection which teams are below 2 |
 | F11 | **Scouting assistant, optional** (AI1, user 2026-10-20; `docs/SCOUTING_ASSISTANT.md`). `/ask` for leads and coaches answers questions from a data sheet of the event's approved observations, scout estimates and published stats, with the sheet shown under the answer. Off unless `ASK_BACKEND` is set; at the venue only a small local model on the Pi, since there is no uplink and the laptops are Chromebooks; low priority, not tested at Athens (user 2026-10-21) | Without the setting the page says it is not set up and nothing else changes; with a stub model a question is answered and our notes, but no other team's, are in the sheet |
+| F12 | **Setup kit** (`docs/SETUP_GUIDE.md`): `deploy/pi/bootstrap.sh` turns a fresh Pi into the running service from `deploy/profiles/ftc-qual-4robot.env`; `deploy/event/prep-event.sh` creates the accounts, loads the schedule (CSV or FTC pull) and auto-assigns from the Pi over SSH; a printable Chromebook card; optional Linux/Mac/Windows laptop scripts. **Done** — scripts checked with `--dry-run`, prep-event.sh run against a local server (rehearsal CSV, 4 scouts + a lead, 64 of 64 robots covered); bootstrap and the Chromebook steps untested on hardware | A person who is not a developer can bring up the Pi and the laptops from the guide |
 
 **FTC beta (F4):** the switch is `tt_core::upstream::UPSTREAM_ENABLED = false`. In `docs/EVENT_DAY_RUNBOOK.md`, step 7's "check the rankings age" and the "Rankings stale (amber)" row assume TBA data and do not apply; step 5's no-tether rule is moot, because the Pi no longer watches for a tether.
 

@@ -34,3 +34,6 @@ target/
 
 # The service worker's wasm module, made by deploy/build-client.sh (C5)
 crates/tt-web/static/client/
+
+# Event prep sign-in sheets hold temporary passwords: never commit them.
+signin-sheet-*.txt

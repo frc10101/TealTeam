@@ -2,6 +2,8 @@
 
 *One page. Print it, laminate it, tape it to the Pi's case. Detail: `docs/PI_NETWORK.md` (network), `docs/PI_STORAGE.md` (SSD, backups).*
 
+First-time setup of the Pi, the Chromebooks and the accounts: `docs/SETUP_GUIDE.md`.
+
 > **[ PHOTO GOES HERE: the Pi, the switch, and every cable plugged in correctly. Label each cable. ]**
 
 **Kit:** Pi (SSD attached) · official 27 W Pi supply · unmanaged switch + its power · one flat Ethernet cable per Lenovo Chromebook · USB-C-to-Ethernet adapters where needed · gaff tape · USB stick. **No Wi-Fi hotspot, router, mesh, cellular tether, or other 802.11/radio network for event data, ever.**
