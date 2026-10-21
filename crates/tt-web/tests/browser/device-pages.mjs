@@ -98,7 +98,8 @@ const took = await evaluate(`Math.round(performance.getEntriesByType('navigation
 check("server gone: the team page is made on the device", made.device && made.h1 === "254 · Poofs" && made.url === "/teams?event=2026demo&team=254", JSON.stringify({ device: made.device, h1: made.h1, url: made.url }));
 check("from the device's copy", /OPR\s*61\.25/.test(made.text) && /From 1 approved observation/.test(made.text) && /Citrus/.test(made.text), made.text.slice(0, 300));
 check("and says so", /made on this device/.test(made.text));
-check("styled, from the cache", made.bg === "rgb(3, 7, 18)", made.bg);
+// The page colour of either theme: the cached stylesheet, not the browser's white.
+check("styled, from the cache", ["rgb(11, 11, 13)", "rgb(255, 252, 245)"].includes(made.bg), made.bg);
 check("with no account links", !made.signIn);
 console.log(`      (first page, wasm compiled: ${took} ms to the response; ${Date.now() - before} ms with the wait)`);
 await sleep(1500);

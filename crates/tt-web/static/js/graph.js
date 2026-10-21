@@ -23,10 +23,14 @@
   var tables = document.getElementById("graph-tables");
   var readout = document.getElementById("graph-readout");
   var DASH = [[], [10, 6], [2, 5]];
-  var style = getComputedStyle(document.documentElement);
-  var ink = style.getPropertyValue("--gray-300").trim();
-  var rule = style.getPropertyValue("--gray-700").trim();
-  var surface = style.getPropertyValue("--gray-900").trim();
+  var style, ink, rule, surface;
+  function readTheme() {
+    style = getComputedStyle(document.documentElement);
+    ink = style.getPropertyValue("--gray-300").trim();
+    rule = style.getPropertyValue("--gray-700").trim();
+    surface = style.getPropertyValue("--gray-900").trim();
+  }
+  readTheme();
   var plot = null;
 
   var teams = {};
@@ -315,6 +319,14 @@
     clearTimeout(resizing);
     resizing = setTimeout(function () { if (plot) plot.setSize(size()); }, 100);
   });
+
+  // A theme picked by hand (theme.js), or the device switching on its own.
+  function retheme() { readTheme(); draw(); }
+  document.addEventListener("tt-theme", retheme);
+  if (window.matchMedia) {
+    var scheme = matchMedia("(prefers-color-scheme: dark)");
+    if (scheme.addEventListener) scheme.addEventListener("change", retheme);
+  }
 
   draw();
 })();

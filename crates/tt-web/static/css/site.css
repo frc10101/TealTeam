@@ -16,31 +16,85 @@
  */
 
 :root {
-  --teal-300: #5eead4;
-  --teal-500: #14b8a6;
-  --teal-600: #0d9488;
-  --teal-700: #0f766e;
-
-  --gray-950: #030712;
-  --gray-900: #111827;
-  --gray-800: #1f2937;
-  --gray-700: #374151;
-  --gray-500: #6b7280;
-  --gray-300: #d1d5db;
-  --gray-100: #f3f4f6;
-
-  --red-500: #ef4444;
-  --red-900: #7f1d1d;
-  --green-500: #22c55e;
-  --green-900: #14532d;
-  --amber-500: #f59e0b;
-  --amber-900: #78350f;
-  --blue-500: #3b82f6;
-  --blue-900: #1e3a8a;
-
   --radius: 0.5rem;
   --tap: 44px; /* Minimum touch target. Non-negotiable on a phone. */
   --tap-match: 56px; /* Anything tapped while a match is running (RI 2F). */
+}
+
+/* Critical Hit's colours, from criticalhitrobotics.org: cyan, yellow and red
+   on black, or on cream in the light theme. Dark unless the device asks for
+   light; static/js/theme.js sets data-theme when someone picks one in the
+   menu. The names are roles, not hues: --gray-950 is the page and --gray-100
+   its text in both themes, so the rules below never ask which theme it is.
+   --on-* is text on a tint of that colour; --on-accent is text on cyan, which
+   is black in both, since white on cyan is too faint to read. */
+:root {
+  color-scheme: dark;
+  --brand-cyan: #00c1c1;
+  --brand-yellow: #fbca13;
+  --brand-red: #f10101;
+
+  --accent-300: #33d6d6;
+  --accent-500: #00c1c1;
+  --accent-600: #00c1c1;
+  --accent-700: #00a5a5;
+  --on-accent: #000;
+
+  --gray-950: #0b0b0d;
+  --gray-900: #17171a;
+  --gray-800: #232328;
+  --gray-700: #3a3a41;
+  --gray-500: #8e8e96;
+  --gray-300: #cfcfd4;
+  --gray-100: #f5f5f6;
+
+  --red-500: #ff3b3b;
+  --red-900: #7a0d0d;
+  --green-500: #22c55e;
+  --green-900: #14532d;
+  --amber-500: #fbca13;
+  --amber-900: #6b4f00;
+  --blue-500: #3b82f6;
+  --blue-900: #1e3a8a;
+  --on-red: #fecaca;
+  --on-green: #bbf7d0;
+  --on-amber: #fde68a;
+  --on-blue: #bfdbfe;
+
+  --shadow: 0 8px 24px rgb(0 0 0 / 0.4);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --accent-300: #00757a; --accent-500: #00a3a3; --accent-600: #00c1c1; --accent-700: #00acac;
+    --gray-950: #fffcf5; --gray-900: #ffffff; --gray-800: #f4f1e8; --gray-700: #d9d4c6;
+    --gray-500: #67655f; --gray-300: #3b3a37; --gray-100: #0a0a0a;
+    --red-500: #f10101; --red-900: #ffcaca; --green-500: #16a34a; --green-900: #c9f2d6;
+    --amber-500: #c99a00; --amber-900: #ffeaa0; --blue-500: #2563eb; --blue-900: #cbdcff;
+    --on-red: #8a0000; --on-green: #14532d; --on-amber: #5c4300; --on-blue: #1e3a8a;
+    --shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+    --series-4: #a86f00; /* the graph's amber, darker to keep 3:1 on white */
+  }
+}
+/* The same light theme, picked by hand on a device set to dark. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --accent-300: #00757a; --accent-500: #00a3a3; --accent-600: #00c1c1; --accent-700: #00acac;
+  --gray-950: #fffcf5; --gray-900: #ffffff; --gray-800: #f4f1e8; --gray-700: #d9d4c6;
+  --gray-500: #67655f; --gray-300: #3b3a37; --gray-100: #0a0a0a;
+  --red-500: #f10101; --red-900: #ffcaca; --green-500: #16a34a; --green-900: #c9f2d6;
+  --amber-500: #c99a00; --amber-900: #ffeaa0; --blue-500: #2563eb; --blue-900: #cbdcff;
+  --on-red: #8a0000; --on-green: #14532d; --on-amber: #5c4300; --on-blue: #1e3a8a;
+  --shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+  --series-4: #a86f00;
+}
+
+/* Bangers, the team's lettering, for the brand and page titles. It is in the
+   binary (OFL, vendor/fonts), so it shows with no internet; anything it lacks
+   falls back to the body font. */
+@font-face {
+  font-family: "Bangers"; font-style: normal; font-weight: 400; font-display: swap;
+  src: url("/static/vendor/fonts/bangers-latin.woff2") format("woff2");
 }
 
 * { box-sizing: border-box; }
@@ -55,20 +109,25 @@ body {
   flex-direction: column;
   background: var(--gray-950);
   color: var(--gray-100);
-  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Roboto first, as the team site has it; Chromebooks and Android phones
+     carry it, so nothing is downloaded. */
+  font: 16px/1.5 Roboto, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
-a { color: var(--teal-300); }
+a { color: var(--accent-300); }
 /* A page has one title; sections under it read as sections, not as more
    titles, so the eye goes to the page's task first. */
 h1, h2 { margin: 0; line-height: 1.3; }
-h1 { font-size: 1.25rem; }
+h1, .brand, .update-card h2 {
+  font-family: Bangers, Roboto, system-ui, sans-serif; font-weight: 400; letter-spacing: 0.04em;
+}
+h1 { font-size: 1.5rem; }
 h2 { font-size: 1.0625rem; }
 
 /* Keyboard users land here first; visible only when focused. */
 .skip-link {
   position: absolute; left: -9999px;
-  background: var(--teal-600); color: #fff;
+  background: var(--accent-600); color: var(--on-accent);
   padding: 0.75rem 1rem; border-radius: var(--radius);
 }
 .skip-link:focus { left: 1rem; top: 1rem; z-index: 10; }
@@ -79,7 +138,11 @@ h2 { font-size: 1.0625rem; }
    own task leads the screen. One row on a laptop (brand, sections, event,
    team, account); on a phone, the brand and account, then the event and
    team side by side, with the sections a tab bar along the bottom. */
-.nav { background: var(--gray-900); border-bottom: 1px solid var(--gray-700); }
+/* Under the header, the team site's stripe: red, yellow, cyan. */
+.nav {
+  background: var(--gray-900); border-bottom: 3px solid;
+  border-image: linear-gradient(90deg, var(--brand-red) 0 33.33%, var(--brand-yellow) 33.33% 66.66%, var(--brand-cyan) 66.66%) 1;
+}
 .nav-inner {
   max-width: 70rem; margin: 0 auto; padding: 0.375rem 1rem;
   display: flex; flex-wrap: wrap; align-items: center; gap: 0.375rem 0.75rem;
@@ -87,8 +150,9 @@ h2 { font-size: 1.0625rem; }
 .nav-brand { display: flex; align-items: center; gap: 0.5rem; flex: 1 1 auto; min-width: 0; }
 .brand {
   display: inline-flex; align-items: center; min-height: var(--tap);
-  font-weight: 600; font-size: 1.0625rem; color: var(--gray-100); text-decoration: none;
+  gap: 0.375rem; font-size: 1.25rem; color: var(--gray-100); text-decoration: none;
 }
+.brand img { height: 2rem; width: auto; }
 .nav-tools { display: flex; gap: 0.5rem; align-items: center; order: 3; flex: 1 1 100%; min-width: 0; }
 .nav-account { display: flex; align-items: center; gap: 0.5rem; order: 2; }
 .nav-account > a {
@@ -108,16 +172,17 @@ h2 { font-size: 1.0625rem; }
 }
 .account-menu > summary::-webkit-details-marker { display: none; }
 .account-menu > summary::after { content: "▾"; font-size: 0.75rem; }
-.account-menu > summary:hover, .account-menu[open] > summary { background: var(--gray-800); color: var(--teal-300); }
+.account-menu > summary:hover, .account-menu[open] > summary { background: var(--gray-800); color: var(--accent-300); }
 .account-panel {
   position: absolute; right: 0; top: calc(100% + 0.25rem); z-index: 20; min-width: 11rem;
   display: grid; gap: 0.25rem; padding: 0.5rem;
   background: var(--gray-900); border: 1px solid var(--gray-700); border-radius: var(--radius);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 0.4);
+  box-shadow: var(--shadow);
 }
 .account-panel a { display: flex; align-items: center; min-height: var(--tap); padding: 0 0.625rem; border-radius: var(--radius); color: var(--gray-100); text-decoration: none; }
 .account-panel a:hover { background: var(--gray-800); }
 .account-panel .btn { width: 100%; }
+.account-panel .theme-cycle { justify-content: flex-start; padding: 0 0.625rem; }
 
 /* The sections (U16). On a phone, a tab bar fixed along the bottom of the
    screen, where the thumb of the hand holding it reaches; each tab is match
@@ -135,7 +200,7 @@ h2 { font-size: 1.0625rem; }
   color: var(--gray-300); text-decoration: none;
 }
 .nav-links a[aria-current="page"] {
-  color: var(--teal-300); background: var(--gray-800); box-shadow: inset 0 3px 0 var(--teal-500);
+  color: var(--accent-300); background: var(--gray-800); box-shadow: inset 0 3px 0 var(--accent-500);
 }
 body.has-tabs { padding-bottom: calc(var(--tap-match) + env(safe-area-inset-bottom)); }
 .inline { display: inline; }
@@ -157,11 +222,11 @@ body.has-tabs { padding-bottom: calc(var(--tap-match) + env(safe-area-inset-bott
     background: none; border: 0; padding: 0; min-width: 0;
   }
   .nav-links a {
-    flex: none; min-height: 2.5rem; padding: 0 0.625rem;
+    flex: none; min-height: 2.5rem; padding: 0 0.4375rem;
     font-size: 0.9375rem; border-radius: var(--radius);
   }
-  .nav-links a[aria-current="page"] { box-shadow: inset 0 -3px 0 var(--teal-500); }
-  .nav-links a:hover, .nav-account > a:hover { background: var(--gray-800); color: var(--teal-300); }
+  .nav-links a[aria-current="page"] { box-shadow: inset 0 -3px 0 var(--accent-500); }
+  .nav-links a:hover, .nav-account > a:hover { background: var(--gray-800); color: var(--accent-300); }
   body.has-tabs { padding-bottom: 0; }
   .nav-tools { order: 0; flex: 0 1 auto; }
   .nav-account { order: 0; }
@@ -199,7 +264,7 @@ body.has-tabs { padding-bottom: calc(var(--tap-match) + env(safe-area-inset-bott
 }
 .card.narrow { max-width: 32rem; width: 100%; }
 .card-header {
-  padding: 0.625rem 1rem; border-bottom: 2px solid var(--teal-600); background: var(--gray-800);
+  padding: 0.625rem 1rem; border-bottom: 2px solid var(--accent-600); background: var(--gray-800);
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem;
 }
 /* A section's header is quieter than the page's. */
@@ -225,7 +290,7 @@ body.has-tabs { padding-bottom: calc(var(--tap-match) + env(safe-area-inset-bott
 .keypad.keypad-small .btn { min-height: 2.5rem; }
 
 /* Why a page's numbers are what they are: folded, a tap away. */
-.explain > summary { cursor: pointer; color: var(--teal-300); font-size: 0.875rem; min-height: 2rem; display: flex; align-items: center; }
+.explain > summary { cursor: pointer; color: var(--accent-300); font-size: 0.875rem; min-height: 2rem; display: flex; align-items: center; }
 .explain > p { margin: 0.375rem 0 0; }
 .data-table.accounts th, .data-table.accounts td { text-align: left; }
 
@@ -257,7 +322,7 @@ body.has-tabs { padding-bottom: calc(var(--tap-match) + env(safe-area-inset-bott
   border: 1px solid var(--gray-700); border-radius: var(--radius);
 }
 .form-input:focus, .form-select:focus {
-  outline: 2px solid var(--teal-500); outline-offset: 1px; border-color: var(--teal-500);
+  outline: 2px solid var(--accent-500); outline-offset: 1px; border-color: var(--accent-500);
 }
 .hint { font-size: 0.8125rem; color: var(--gray-500); }
 
@@ -269,12 +334,12 @@ body.has-tabs { padding-bottom: calc(var(--tap-match) + env(safe-area-inset-bott
   font: inherit; font-weight: 500; text-decoration: none;
   border: 1px solid transparent; border-radius: var(--radius); cursor: pointer;
 }
-.btn:focus-visible { outline: 2px solid var(--teal-300); outline-offset: 2px; }
-.btn-primary { background: var(--teal-600); color: #fff; }
-.btn-primary:hover { background: var(--teal-700); }
+.btn:focus-visible { outline: 2px solid var(--accent-300); outline-offset: 2px; }
+.btn-primary { background: var(--accent-600); color: var(--on-accent); font-weight: 600; }
+.btn-primary:hover { background: var(--accent-700); }
 .btn-secondary { background: var(--gray-700); color: var(--gray-100); }
 .btn-secondary:hover { background: var(--gray-800); }
-.btn-danger { background: var(--red-900); color: #fecaca; border-color: var(--red-500); }
+.btn-danger { background: var(--red-900); color: var(--on-red); border-color: var(--red-500); }
 .btn-danger:hover { background: color-mix(in srgb, var(--red-900) 70%, black); }
 /* Smaller text and padding, never a smaller target. */
 .btn-sm { min-height: var(--tap); padding: 0 0.625rem; font-size: 0.875rem; }
@@ -283,20 +348,20 @@ body.has-tabs { padding-bottom: calc(var(--tap-match) + env(safe-area-inset-bott
 /* ── Feedback ───────────────────────────────────────────────────────────── */
 
 .alert { margin: 0; padding: 0.75rem 1rem; border-radius: var(--radius); border: 1px solid; }
-.alert-error   { background: color-mix(in srgb, var(--red-900) 40%, transparent);   border-color: var(--red-500);   color: #fecaca; }
-.alert-success { background: color-mix(in srgb, var(--green-900) 40%, transparent); border-color: var(--green-500); color: #bbf7d0; }
-.alert-info    { background: var(--gray-800); border-color: var(--teal-600); color: var(--teal-300); }
-.alert-warning { background: color-mix(in srgb, var(--amber-900) 40%, transparent); border-color: var(--amber-500); color: #fde68a; }
+.alert-error   { background: color-mix(in srgb, var(--red-900) 40%, transparent);   border-color: var(--red-500);   color: var(--on-red); }
+.alert-success { background: color-mix(in srgb, var(--green-900) 40%, transparent); border-color: var(--green-500); color: var(--on-green); }
+.alert-info    { background: var(--gray-800); border-color: var(--accent-600); color: var(--accent-300); }
+.alert-warning { background: color-mix(in srgb, var(--amber-900) 40%, transparent); border-color: var(--amber-500); color: var(--on-amber); }
 
 .badge {
   display: inline-block; padding: 0.125rem 0.625rem; border-radius: 999px;
-  font-size: 0.8125rem; font-weight: 500;
+  font: 500 0.8125rem/1.5 Roboto, system-ui, -apple-system, "Segoe UI", sans-serif; letter-spacing: normal;
 }
-.badge-teal { background: var(--teal-700); color: #ccfbf1; }
-.badge-red  { background: var(--red-900);  color: #fecaca; }
-.badge-amber { background: var(--amber-900); color: #fde68a; }
+.badge-teal { background: color-mix(in srgb, var(--accent-500) 22%, transparent); color: var(--accent-300); }
+.badge-red  { background: var(--red-900);  color: var(--on-red); }
+.badge-amber { background: var(--amber-900); color: var(--on-amber); }
 .badge-gray  { background: var(--gray-700);  color: var(--gray-100); }
-.badge-blue  { background: var(--blue-900);  color: #bfdbfe; }
+.badge-blue  { background: var(--blue-900);  color: var(--on-blue); }
 
 /* The update banner (S11): over everything, since the page under it is out
    of date and must not be used. */
@@ -307,7 +372,7 @@ body.has-tabs { padding-bottom: calc(var(--tap-match) + env(safe-area-inset-bott
 }
 .update-card {
   max-width: 28rem; display: grid; gap: 0.75rem; padding: 1.25rem;
-  background: var(--gray-900); border: 2px solid var(--teal-500); border-radius: var(--radius);
+  background: var(--gray-900); border: 2px solid var(--accent-500); border-radius: var(--radius);
 }
 .update-card p { margin: 0; }
 
@@ -327,7 +392,7 @@ a.back { display: inline-flex; align-items: center; min-height: var(--tap); }
   display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: 0.25rem 1rem;
 }
 .roster li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.roster .you { color: var(--teal-300); }
+.roster .you { color: var(--accent-300); }
 .roster a { display: block; color: inherit; text-decoration: none; overflow: hidden; text-overflow: ellipsis; }
 .roster a:hover { text-decoration: underline; }
 @media (pointer: coarse) { .roster a { padding: 0.375rem 0; } }
@@ -347,7 +412,7 @@ a.back { display: inline-flex; align-items: center; min-height: var(--tap); }
 [data-live-failed]::before {
   content: "Not updating — showing what the server last said.";
   display: block; grid-column: 1 / -1;
-  color: #fde68a; font-size: 0.8125rem;
+  color: var(--on-amber); font-size: 0.8125rem;
 }
 
 /* ── Scouting (U4) ──────────────────────────────────────────────────────── */
@@ -367,19 +432,19 @@ a.back { display: inline-flex; align-items: center; min-height: var(--tap); }
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   min-height: var(--tap-match); padding: 0.375rem;
   border: 2px solid transparent; border-radius: var(--radius);
-  color: #fff; text-decoration: none; font-variant-numeric: tabular-nums;
+  color: var(--gray-100); text-decoration: none; font-variant-numeric: tabular-nums;
 }
 .alliance.red .robot  { background: color-mix(in srgb, var(--red-900) 75%, transparent); }
 .alliance.blue .robot { background: color-mix(in srgb, var(--blue-900) 75%, transparent); }
 .robot strong { font-size: 1.25rem; line-height: 1.2; }
 .robot-station { font-size: 0.75rem; color: var(--gray-300); }
-.robot-done { font-size: 0.75rem; color: #bbf7d0; }
-.robot-yours { font-size: 0.75rem; color: var(--teal-300); font-weight: 600; }
+.robot-done { font-size: 0.75rem; color: var(--on-green); }
+.robot-yours { font-size: 0.75rem; color: var(--accent-300); font-weight: 600; }
 
 /* "You are scouting": the one thing a scout must not misread. */
-.card.assigned { border-color: var(--teal-500); }
+.card.assigned { border-color: var(--accent-500); }
 .assigned .card-body { gap: 0.25rem; text-align: center; }
-.assigned-kicker { text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.8125rem; color: var(--teal-300); }
+.assigned-kicker { text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.8125rem; color: var(--accent-300); }
 .assigned-team strong { font-size: 2.5rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .assigned-team span { display: block; color: var(--gray-300); }
 .assigned-where { font-size: 1.125rem; font-weight: 600; }
@@ -395,16 +460,16 @@ ol.duties { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem;
   border: 1px solid var(--gray-700); border-radius: var(--radius);
   color: inherit; text-decoration: none;
 }
-.duty[aria-current] { border-color: var(--teal-300); }
+.duty[aria-current] { border-color: var(--accent-300); }
 .duty-when, .duty-team { display: grid; }
 .duty-team { text-align: right; }
 .duty-team strong { font-size: 1.25rem; font-variant-numeric: tabular-nums; }
 .duty small { color: var(--gray-300); font-size: 0.8125rem; }
 #offline-agenda h3 { margin: 0.5rem 0 0; }
 
-.robot.selected { border-color: var(--teal-300); box-shadow: 0 0 0 2px var(--teal-300); }
+.robot.selected { border-color: var(--accent-300); box-shadow: 0 0 0 2px var(--accent-300); }
 .robot.empty { opacity: 0.5; }
-a.robot:focus-visible { outline: 2px solid var(--teal-300); outline-offset: 2px; }
+a.robot:focus-visible { outline: 2px solid var(--accent-300); outline-offset: 2px; }
 
 .scout-target h2 { font-size: 1.25rem; }
 .scout-target p { margin: 0.25rem 0 0; }
@@ -417,7 +482,7 @@ fieldset.stack > legend { padding: 0 0.375rem; font-weight: 600; font-size: 0.93
 fieldset.field legend { padding: 0; margin-bottom: 0.25rem; }
 .field > p { margin: 0; }
 .required { font-size: 0.75rem; font-weight: 400; color: var(--amber-500); }
-.form-error { color: #fecaca; font-size: 0.875rem; }
+.form-error { color: var(--on-red); font-size: 0.875rem; }
 textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
 
 /* Options are big buttons, not a dropdown: one tap, and all of them visible. The
@@ -436,19 +501,19 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
   text-align: center; cursor: pointer;
 }
 .choice input:checked + span {
-  background: var(--teal-700); border-color: var(--teal-300); color: #fff; font-weight: 600;
+  background: var(--accent-600); border-color: var(--accent-300); color: var(--on-accent); font-weight: 600;
 }
 .choice input:focus-visible + span, .toggle input:focus-visible + span {
-  outline: 2px solid var(--teal-300); outline-offset: 2px;
+  outline: 2px solid var(--accent-300); outline-offset: 2px;
 }
 .toggle > span { justify-content: flex-start; text-align: left; }
 .toggle > span::before {
   content: ""; flex: none; width: 1.5rem; height: 1.5rem;
   border: 2px solid var(--gray-500); border-radius: 0.375rem;
 }
-.toggle input:checked + span { border-color: var(--teal-300); }
+.toggle input:checked + span { border-color: var(--accent-300); }
 .toggle input:checked + span::before {
-  background: var(--teal-500); border-color: var(--teal-500);
+  background: var(--accent-500); border-color: var(--accent-500);
   box-shadow: inset 0 0 0 3px var(--gray-800);
 }
 
@@ -473,7 +538,7 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
   background: var(--gray-800); border: 1px solid var(--gray-700); border-radius: var(--radius);
   color: var(--gray-100); text-decoration: none;
 }
-.queue-item:hover { border-color: var(--teal-500); }
+.queue-item:hover { border-color: var(--accent-500); }
 .queue form { display: flex; }
 .answers dd.text-answer { white-space: pre-wrap; }
 
@@ -481,7 +546,7 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
 
 .data-table th.num, .data-table td.num { text-align: right; }
 .rankings thead a { color: var(--gray-300); text-decoration: none; display: inline-flex; min-height: var(--tap); min-width: var(--tap); align-items: center; }
-.rankings thead a.current { color: var(--teal-300); text-decoration: underline; }
+.rankings thead a.current { color: var(--accent-300); text-decoration: underline; }
 .data-table.rankings thead th:not(.num) { text-align: left; }
 .rankings td.name { text-align: left; }
 .rankings td.thin { color: var(--gray-500); }
@@ -490,12 +555,12 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
 
 /* ── Admin database viewer (U17) ─────────────────────────────────────────── */
 
-.admin-tables tr.current td { color: var(--teal-300); }
+.admin-tables tr.current td { color: var(--accent-300); }
 .pager { display: flex; gap: 1rem; }
 
 /* ── Team profile (U11) ──────────────────────────────────────────────────── */
 
-.subhead { margin: 0.5rem 0 0; font-size: 1rem; color: var(--teal-300); }
+.subhead { margin: 0.5rem 0 0; font-size: 1rem; color: var(--accent-300); }
 .team-matches { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.375rem; }
 .team-matches li {
   display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.75rem;
@@ -538,9 +603,9 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
   -webkit-tap-highlight-color: transparent;
 }
 .chip input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
-.chip:has(input:checked) { border-color: var(--teal-500); background: var(--gray-800); color: var(--gray-100); }
-.chip:has(input:focus-visible) { outline: 2px solid var(--teal-300); outline-offset: 2px; }
-.more-chips summary { min-height: var(--tap); display: flex; align-items: center; cursor: pointer; color: var(--teal-300); }
+.chip:has(input:checked) { border-color: var(--accent-500); background: var(--gray-800); color: var(--gray-100); }
+.chip:has(input:focus-visible) { outline: 2px solid var(--accent-300); outline-offset: 2px; }
+.more-chips summary { min-height: var(--tap); display: flex; align-items: center; cursor: pointer; color: var(--accent-300); }
 .more-chips .chip-row { padding-top: 0.25rem; }
 
 /* The chips are the legend: a team's swatch is its line's colour, a metric's
@@ -566,7 +631,7 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
 .graph-readout .line-swatch { display: inline-block; width: 1.25rem; margin-right: 0.375rem; vertical-align: middle; border-top: 2px solid currentColor; }
 .graph-readout [data-slot="2"].line-swatch { border-top-style: dashed; }
 .graph-readout [data-slot="3"].line-swatch { border-top-style: dotted; }
-.graph-tables summary { min-height: var(--tap); display: flex; align-items: center; cursor: pointer; color: var(--teal-300); }
+.graph-tables summary { min-height: var(--tap); display: flex; align-items: center; cursor: pointer; color: var(--accent-300); }
 .graph-tables #graph-tables { overflow-x: auto; }
 .graph-tables .data-table { margin-bottom: 1rem; }
 .graph-tables caption { text-align: left; font-weight: 600; padding: 0.5rem 0; }
@@ -586,13 +651,13 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
 .data-table.compare thead th > * { display: block; }
 .data-table.compare thead th .swatch { display: inline-block; width: 0.75rem; height: 0.75rem; border-radius: 2px; background: var(--series); margin-bottom: 0.25rem; }
 .data-table.compare thead th a:not(.cmp-remove) { font-size: 1rem; font-weight: 700; }
-.data-table.compare thead th.reference { box-shadow: inset 0 -3px 0 var(--teal-500); }
+.data-table.compare thead th.reference { box-shadow: inset 0 -3px 0 var(--accent-500); }
 .cmp-name { color: var(--gray-100); overflow-wrap: anywhere; }
 .cmp-head { display: flex !important; align-items: center; justify-content: space-between; }
 .cmp-remove { display: inline-flex; align-items: center; min-height: 2rem; padding: 0 0.625rem;
   font-size: 0.8125rem; font-weight: 500; text-decoration: none; color: var(--gray-300);
   border: 1px solid var(--gray-700); border-radius: var(--radius); }
-.cmp-remove:hover, .cmp-remove:focus-visible { background: var(--gray-800); color: #fca5a5; border-color: #fca5a5; }
+.cmp-remove:hover, .cmp-remove:focus-visible { background: var(--gray-800); color: var(--on-red); border-color: var(--red-500); }
 @media (pointer: coarse) { .cmp-remove { min-height: var(--tap); } }
 .cmp-add { flex-basis: 100%; }
 .cmp-add > summary { display: inline-flex; list-style: none; cursor: pointer; }
@@ -613,17 +678,17 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
 .cmp-main { font-weight: 600; font-size: 1rem; }
 .cmp-detail { display: block; font-size: 0.75rem; }
 .cmp-delta { margin-left: 0.375rem; font-size: 0.8125rem; font-weight: 600; color: var(--gray-300); }
-.cmp-delta.ahead { color: #86efac; }
-.cmp-delta.behind { color: #fca5a5; }
-.cmp-best, .cmp-best-key { box-shadow: inset 3px 0 0 var(--teal-500); }
-.cmp-best .cmp-main { color: var(--teal-300); }
+.cmp-delta.ahead { color: var(--on-green); }
+.cmp-delta.behind { color: var(--on-red); }
+.cmp-best, .cmp-best-key { box-shadow: inset 3px 0 0 var(--accent-500); }
+.cmp-best .cmp-main { color: var(--accent-300); }
 .cmp-best-key { padding-left: 0.375rem; }
 .cmp-box { display: block; width: 100%; height: 0.625rem; margin: 0.25rem 0; overflow: visible; }
 .cmp-box .whisker { stroke: var(--gray-500); stroke-width: 1; vector-effect: non-scaling-stroke; }
-.cmp-box .box { fill: color-mix(in srgb, var(--teal-500) 35%, transparent); stroke: var(--teal-500); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.cmp-box .box { fill: color-mix(in srgb, var(--accent-500) 35%, transparent); stroke: var(--accent-500); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .cmp-box .median { stroke: var(--gray-100); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .compare-tick { text-align: center; width: 3rem; }
-.compare-tick input { width: 1.25rem; height: 1.25rem; accent-color: var(--teal-500); }
+.compare-tick input { width: 1.25rem; height: 1.25rem; accent-color: var(--accent-500); }
 #rank-compare { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; flex: 1 1 auto; }
 .rank-tools { flex-wrap: wrap; gap: 0.5rem 0.75rem; }
 @media (min-width: 40rem) { .phone-only { display: none !important; } }
@@ -634,7 +699,7 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
 .rank-columns-panel {
   position: absolute; right: 0; top: calc(100% + 0.375rem); z-index: 20; width: min(20rem, 85vw);
   display: grid; gap: 0.25rem; padding: 0.75rem; background: var(--gray-900);
-  border: 1px solid var(--gray-700); border-radius: var(--radius); box-shadow: 0 8px 24px rgb(0 0 0 / 0.4);
+  border: 1px solid var(--gray-700); border-radius: var(--radius); box-shadow: var(--shadow);
 }
 .rank-columns-panel .btn { justify-self: start; margin-top: 0.375rem; }
 @media (pointer: fine) {
@@ -663,7 +728,7 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
 /* ── Drive coach (U18) ───────────────────────────────────────────────────── */
 
 .coach-card { display: grid; gap: 0.5rem; padding: 0.75rem; border: 1px solid var(--gray-700); border-radius: var(--radius); }
-.coach-card.next { border: 2px solid var(--teal-500); }
+.coach-card.next { border: 2px solid var(--accent-500); }
 .coach-card-head { margin: 0; display: flex; flex-wrap: wrap; gap: 0.25rem 0.75rem; align-items: baseline; }
 .coach-card-head strong { font-size: 1.25rem; }
 .coach-card.next .coach-card-head strong { font-size: 1.75rem; }
@@ -675,7 +740,7 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
 .coach-side-head { margin: 0 0 0.25rem; font-size: 0.8125rem; color: var(--gray-300); }
 .coach-side ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.125rem; }
 .coach-side li { display: flex; flex-wrap: wrap; gap: 0 0.75rem; align-items: center; min-height: var(--tap); }
-.coach-side li.us strong { color: var(--teal-300); }
+.coach-side li.us strong { color: var(--accent-300); }
 .coach-side a { display: inline-flex; align-items: center; min-height: var(--tap); min-width: var(--tap); }
 #coach-schedule { gap: 0.75rem; }
 
@@ -702,13 +767,13 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
    an event that is most of the grid, so the outline stays quiet and the word
    carries the colour. */
 .slot.open { border-color: var(--gray-500); border-style: dashed; }
-.slot.open .slot-assignee { color: #fde68a; }
+.slot.open .slot-assignee { color: var(--on-amber); }
 /* Coverage (L6): what happened to a robot in a played match. */
 .slot.recorded { opacity: 0.8; }
 .slot.missed, .slot.unscouted { border-color: var(--red-500); border-style: dashed; }
 .slot-state { font-size: 0.75rem; font-weight: 600; }
-.slot.recorded .slot-state { color: #bbf7d0; }
-.slot.missed .slot-state, .slot.unscouted .slot-state { color: #fecaca; }
+.slot.recorded .slot-state { color: var(--on-green); }
+.slot.missed .slot-state, .slot.unscouted .slot-state { color: var(--on-red); }
 
 .table-scroll { overflow-x: auto; }
 .data-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
@@ -716,7 +781,7 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
 .data-table thead th { font-size: 0.8125rem; color: var(--gray-300); font-weight: 500; }
 .data-table td { text-align: right; }
 .data-table thead th:not(:first-child) { text-align: right; }
-.data-table td.missed { color: #fecaca; font-weight: 600; }
+.data-table td.missed { color: var(--on-red); font-weight: 600; }
 
 /* No sideways scrolling on a phone (U16): below 40rem a .cards table turns
    each row into a card. The row's header cell is the card's title, and every
@@ -772,7 +837,7 @@ textarea.form-input { min-height: 6rem; resize: vertical; font: inherit; }
 .slot-name.unknown { font-style: italic; }
 .slot-assignee { font-size: 0.875rem; font-weight: 500; }
 /* A cell someone just changed (S9): a moment's outline, so a lead sees what moved. */
-.slot.slot-changed { outline: 3px solid #5eead4; outline-offset: -3px; }
+.slot.slot-changed { outline: 3px solid var(--accent-300); outline-offset: -3px; }
 .slot-kind { font-size: 0.75rem; font-weight: 400; color: var(--gray-300); }
 
 /* Wide enough for seven columns: a real table, headers on top. */
@@ -825,7 +890,7 @@ details.card:not([open]) > summary { border-bottom: 0; }
   display: grid; gap: 0.5rem; padding: 0.5rem 0.75rem;
   background: var(--gray-800); border: 1px solid var(--gray-700); border-radius: var(--radius);
 }
-.pick:target { border-color: var(--teal-300); }
+.pick:target { border-color: var(--accent-300); }
 .pick-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 0.75rem; }
 .pick-place { min-width: 1.75rem; color: var(--gray-500); font-variant-numeric: tabular-nums; }
 .pick-team { display: inline-flex; align-items: center; min-height: var(--tap); min-width: var(--tap); font-size: 1.25rem; font-weight: 600; color: var(--gray-100); }
@@ -842,10 +907,10 @@ details.card:not([open]) > summary { border-bottom: 0; }
 .pick-more .form-input { max-width: 10rem; }
 /* The colour is named in text too; the swatch is only a quicker read. */
 .pick-tag { padding: 0.125rem 0.5rem; border-radius: 999px; font-size: 0.8125rem; font-weight: 600; border-left: 0.75rem solid; }
-.tag-green  { background: var(--green-900); color: #bbf7d0; border-color: var(--green-500); }
-.tag-yellow { background: var(--amber-900); color: #fde68a; border-color: var(--amber-500); }
-.tag-red    { background: var(--red-900);   color: #fecaca; border-color: var(--red-500); }
-.tag-blue   { background: var(--blue-900);  color: #bfdbfe; border-color: var(--blue-500); }
+.tag-green  { background: var(--green-900); color: var(--on-green); border-color: var(--green-500); }
+.tag-yellow { background: var(--amber-900); color: var(--on-amber); border-color: var(--amber-500); }
+.tag-red    { background: var(--red-900);   color: var(--on-red); border-color: var(--red-500); }
+.tag-blue   { background: var(--blue-900);  color: var(--on-blue); border-color: var(--blue-500); }
 .pick-candidates { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .pick-candidates .btn { gap: 0.375rem; }
 
@@ -867,7 +932,7 @@ details.card:not([open]) > summary { border-bottom: 0; }
 .ring { width: 3.5rem; height: 3.5rem; transform: rotate(-90deg); }
 .ring circle { fill: none; stroke-width: 4; }
 .ring-track { stroke: var(--gray-700); }
-.ring-done { stroke: var(--teal-500); stroke-linecap: round; transition: stroke-dasharray 0.2s; }
+.ring-done { stroke: var(--accent-500); stroke-linecap: round; transition: stroke-dasharray 0.2s; }
 .scanner-done .ring-done { stroke: var(--green-500); }
 .scanner-count { margin: 0; font-size: 1.5rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 .scanner-status { text-align: center; }
@@ -886,7 +951,7 @@ details.card:not([open]) > summary { border-bottom: 0; }
 }
 
 @media (min-width: 40rem) {
-  h1 { font-size: 1.375rem; }
+  h1 { font-size: 1.625rem; }
   h2 { font-size: 1.125rem; }
   .page { padding: 1.25rem 1.5rem; }
 }
