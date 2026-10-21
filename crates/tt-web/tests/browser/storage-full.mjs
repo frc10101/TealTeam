@@ -11,10 +11,10 @@
 // Two kinds of full. localStorage, where drafts live (C3), has its own limit
 // and is filled until it refuses. Everything else -- OPFS, where the snapshot
 // goes (S10), and the service worker's cache (C1) -- shares the origin's
-// quota, which is turned down to 4 MB and filled with one file.
+// quota, which is turned down to 8 MB and filled with one file.
 import { spawn, execFileSync } from "node:child_process";
 import { rmSync } from "node:fs";
-const D = process.argv[2], PORT = 18423, CDP = 9338, QUOTA = 4 * 1024 * 1024;
+const D = process.argv[2], PORT = 18423, CDP = 9338, QUOTA = 8 * 1024 * 1024; // above the whole shell: the wasm client alone is 3.8 MB
 const local = `http://127.0.0.1:${PORT}`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 rmSync(`${D}/chr`, { recursive: true, force: true });
