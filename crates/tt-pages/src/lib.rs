@@ -17,6 +17,7 @@
 //! [`LocalRepo`]: tt_repo::LocalRepo
 
 pub mod coach;
+pub mod compare;
 pub mod events;
 pub mod graph;
 pub mod home;

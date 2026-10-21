@@ -169,6 +169,7 @@ pub async fn page<R: LocalRepo>(
         notes_team: viewer_team,
         notes_href: crate::notes_href(&event.key, number),
         graph_href: crate::graph_href(&event.key, number),
+        compare_href: format!("/compare?event={}&ref={number}", event.key),
         matches: matches
             .iter()
             .filter_map(|m| TeamMatchLine::new(m, number))

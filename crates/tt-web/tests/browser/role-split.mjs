@@ -275,6 +275,7 @@ await audit("laptop /pick-list", `/pick-list?event=${EV}`);
 await audit("laptop /teams", `/teams?event=${EV}`);
 await audit("laptop /teams 10001", `/teams?event=${EV}&team=10001`);
 await audit("laptop /graph", `/graph?event=${EV}`);
+await audit("laptop /compare", `/compare?event=${EV}`);
 await audit("laptop /notes", `/notes?event=${EV}`);
 await audit("laptop /account", `/account?event=${EV}`);
 
@@ -395,7 +396,7 @@ for (const [w, h] of PHONES) {
   for (const [name, path] of [["home", `/?event=${EV}`], ["team", `/teams?event=${EV}&team=10001`], ["teams", `/teams?event=${EV}`],
     ["rankings", `/lead-scout/rankings?event=${EV}`], ["graph", `/graph?event=${EV}`],
     ["pick list", `/pick-list?event=${EV}`], ["notes", `/notes?event=${EV}`], ["team (FTC pull)", `/teams?event=2026usalatq&team=7842`],
-    ["graph (FTC pull)", `/graph?event=2026usalatq`]]) await audit(`phone ${w} ${name}`, path);
+    ["graph (FTC pull)", `/graph?event=2026usalatq`], ["compare", `/compare?event=${EV}`]]) await audit(`phone ${w} ${name}`, path);
   await asUser("cal");
   await audit(`phone ${w} drive coach`, `/drive-coach?event=${EV}`);
   await audit(`phone ${w} drive coach (FTC pull)`, `/drive-coach?event=2026usalatq`);

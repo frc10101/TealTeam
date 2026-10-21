@@ -107,4 +107,10 @@ await sleep(200);
 const shot = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true, clip: { x: 0, y: 0, width: 360, height: await evaluate(`document.documentElement.scrollHeight`), scale: 1 } });
 writeFileSync(`${D}/graph-360.png`, Buffer.from(shot.result.data, "base64"));
 
+await go(`${local}/graph?event=2026demo&chosen=1&team=254&metric=points&metric=f.teleop_park`);
+check("a yes/no beside points gets the right-hand scale", (await evaluate(`document.getElementById("graph").dataset.right`)) === "1");
+check("and the page says so", (await evaluate(`document.getElementById("graph-status").textContent`)).includes("on the right-hand scale"));
+await go(`${local}/graph?event=2026demo&chosen=1&team=254&metric=f.launched&metric=f.garden_delivered`);
+check("two counts of a size share the left", (await evaluate(`document.getElementById("graph").dataset.right`)) === "0");
+
 ws.close(); chrome.kill(); server.kill();

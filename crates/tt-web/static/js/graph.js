@@ -134,6 +134,26 @@
 
     var length = 0;
     onTeams.forEach(function (t) { length = Math.max(length, teams[t.value].points.length); });
+
+    // Two scales, as AdvantageScope's left and right axes: the first metric
+    // sets the left, and a metric whose numbers are more than three times
+    // bigger or smaller goes on the right, so 0-1 parking does not lie flat
+    // under 40-point OPR.
+    function biggest(m) {
+      var at = metrics[m.value].index, top = 0;
+      onTeams.forEach(function (t) {
+        teams[t.value].points.forEach(function (p) {
+          if (p.v[at] !== null) top = Math.max(top, Math.abs(p.v[at]));
+        });
+      });
+      return top;
+    }
+    var left = biggest(onMetrics[0]) || 1;
+    var right = onMetrics.filter(function (m, i) {
+      if (i === 0) return false;
+      var ratio = (biggest(m) || 1) / left;
+      return ratio > 3 || ratio < 1 / 3;
+    }).map(function (m) { return m.value; });
     var xs = [];
     for (var i = 1; i <= length; i++) xs.push(i);
     var columns = [xs];
@@ -150,6 +170,7 @@
           return p ? p.v[at] : null;
         }));
         series.push({
+          scale: right.indexOf(m.value) >= 0 ? "right" : "y",
           label: team.number + " · " + metrics[m.value].label,
           stroke: colour,
           width: 2,
@@ -159,7 +180,10 @@
         });
       });
     });
-    say("");
+    say(right.length
+      ? right.map(function (k) { return metrics[k].label; }).join(", ") + " on the right-hand scale."
+      : "");
+    root.setAttribute("data-right", right.length);
 
     var axis = {
       stroke: ink,
@@ -169,7 +193,7 @@
     plot = new uPlot({
       width: size().width,
       height: size().height,
-      scales: { x: { time: false } },
+      scales: { x: { time: false }, right: {} },
       series: series,
       axes: [
         Object.assign({}, axis, {
@@ -177,7 +201,7 @@
           values: function (u, splits) { return splits.map(function (v) { return Number.isInteger(v) ? v : ""; }); },
         }),
         axis,
-      ],
+      ].concat(right.length ? [Object.assign({}, axis, { scale: "right", side: 1, grid: { show: false } })] : []),
       // Tap to read, never drag: a drag would fight the page's scroll on a
       // phone, and zooming is not what this chart is for.
       // A tap still starts a selection box, which would be left on screen.

@@ -270,6 +270,7 @@ const ROUTES: &[(&str, &str, Access)] = &[
     ("GET", "/teams", Auth),
     ("GET", "/notes", Auth),
     ("GET", "/graph", Auth),
+    ("GET", "/compare", Auth),
     ("GET", "/lead-scout", Lead),
     ("GET", "/lead-scout/assignments", Lead),
     ("GET", "/lead-scout/submissions/{obs}", Lead),
@@ -832,6 +833,7 @@ async fn data_sharing(h: &mut Harness, f: &Facts) {
             format!("/teams?team={robot}"),
             "/".to_string(),
             "/graph".to_string(),
+            "/compare".to_string(),
             "/submission/download".to_string(),
         ] {
             let r = h.send("GET", &page, Some(who), Send::Nothing).await;
@@ -1047,7 +1049,13 @@ async fn data_sharing(h: &mut Harness, f: &Facts) {
         "coach@dev.test",
         "noteam@dev.test",
     ] {
-        for page in ["/notes", "/", "/graph", &format!("/teams?team={robot}")] {
+        for page in [
+            "/notes",
+            "/",
+            "/graph",
+            "/compare",
+            &format!("/teams?team={robot}"),
+        ] {
             let r = h.send("GET", page, Some(who), Send::Nothing).await;
             h.check(
                 &label(Some(who)),

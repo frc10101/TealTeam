@@ -706,6 +706,30 @@ pub async fn graph(
     )
 }
 
+// ── Compare (DR1) ───────────────────────────────────────────────────────────
+
+/// `GET /compare`: chosen teams side by side. The query is a list, not a
+/// map: `team` repeats.
+pub async fn compare(
+    State(state): State<AppState>,
+    Auth(user): Auth,
+    EventParam(requested): EventParam,
+    Query(query): Query<Vec<(String, String)>>,
+) -> Response {
+    let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
+    html(
+        tt_pages::compare::page(
+            &*state.repo,
+            &state.season,
+            nav,
+            &context,
+            &query,
+            Utc::now(),
+        )
+        .await,
+    )
+}
+
 // ── Pick list (U20) ─────────────────────────────────────────────────────────
 
 /// `GET /pick-list`: the viewer's team's list for the selected event.

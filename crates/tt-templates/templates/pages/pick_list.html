@@ -21,6 +21,7 @@
 <section class="card">
   <div class="card-header">
     <h1>Pick list{% if !event_name.is_empty() %} · {{ event_name }}{% endif %}</h1>
+    {% if !rows.is_empty() %}<a class="btn btn-secondary" href="/compare?event={{ nav.event.selected }}&amp;chosen=1{% for row in rows %}{% if !row.crossed %}&amp;team={{ row.team }}{% endif %}{% endfor %}">Compare</a>{% endif %}
     <a class="btn btn-secondary" href="/ask{{ nav.event.query() }}">Ask</a>
   </div>
   <div class="card-body stack">

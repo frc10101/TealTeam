@@ -108,6 +108,8 @@ pub struct TeamAtEvent {
     pub notes_href: String,
     /// The graph view showing this team (U21).
     pub graph_href: String,
+    /// This team beside the best scouted here (DR1).
+    pub compare_href: String,
     pub matches: Vec<TeamMatchLine>,
 }
 

@@ -262,6 +262,7 @@ pub fn router(state: AppState) -> Router {
         .route("/teams", get(handlers::team))
         .route("/notes", get(handlers::notes))
         .route("/graph", get(handlers::graph))
+        .route("/compare", get(handlers::compare))
         .route("/lead-scout", get(handlers::lead_scout))
         .route("/lead-scout/assignments", get(handlers::assignments))
         .route("/lead-scout/submissions/{id}", get(handlers::review_page))
@@ -4802,6 +4803,61 @@ mod flow_tests {
 
         let signed_out = get(&state, "/graph", None).await;
         assert_eq!(signed_out.status(), StatusCode::SEE_OTHER);
+    }
+
+    // ── Compare (DR1) ───────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn compare_starts_with_the_best_scouted_and_shows_each_spread() {
+        let (state, sam) = graphed().await;
+        let body = text(get(&state, "/compare?event=2026now", Some(&sam)).await).await;
+        assert!(
+            body.contains("Showing the team with the best scout estimate here."),
+            "{body}"
+        );
+        assert!(body.contains(r#"<a href="/teams?event=2026now&#38;team=254">254</a>"#));
+        assert!(
+            body.contains(r#"2 matches <span class="badge badge-gray">thin</span>"#),
+            "two matches is too few to trust"
+        );
+        assert!(
+            body.contains("median 5 · 1–9 · ±5.7 · 2 matches"),
+            "teleop launches of 1 and 9, Q1 and Q2"
+        );
+        assert!(body.contains(r#"<svg class="cmp-box""#) || body.contains("cmp-detail"));
+        assert!(body.contains(r#"<script src="/static/js/compare.js" defer></script>"#));
+        assert!(body.contains(
+            "Scouting: 2 approved observations at this event. 1 more is waiting for review."
+        ));
+
+        let signed_out = get(&state, "/compare", None).await;
+        assert_eq!(signed_out.status(), StatusCode::SEE_OTHER);
+    }
+
+    #[tokio::test]
+    async fn compare_is_linked_from_rankings_the_team_page_and_graph() {
+        let (state, sam) = graphed().await;
+        let rankings =
+            text(get(&state, "/lead-scout/rankings?event=2026now", Some(&sam)).await).await;
+        assert!(rankings.contains(
+            r#"<form class="card-header" method="get" action="/compare" id="rank-compare">"#
+        ));
+        assert!(
+            rankings
+                .contains(r#"<input type="checkbox" name="team" value="254" form="rank-compare""#)
+        );
+        let team = text(get(&state, "/teams?event=2026now&team=254", Some(&sam)).await).await;
+        assert!(
+            team.contains(
+                r#"href="/compare?event=2026now&#38;ref=254">Compare with the best here</a>"#
+            ),
+            "{team}"
+        );
+        let graph = text(get(&state, "/graph?event=2026now", Some(&sam)).await).await;
+        assert!(graph.contains(r#"href="/compare?event=2026now">Compare</a>"#));
+
+        let against = text(get(&state, "/compare?event=2026now&ref=254", Some(&sam)).await).await;
+        assert!(against.contains(r#"<span class="badge badge-teal">reference</span>"#));
     }
 
     #[tokio::test]

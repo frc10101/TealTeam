@@ -16,6 +16,7 @@
 <section class="card">
   <div class="card-header">
     <h1>Graph{% if !event_name.is_empty() %} · {{ event_name }}{% endif %}</h1>
+    <a class="btn btn-secondary" href="/compare{{ nav.event.query() }}">Compare</a>
   </div>
   <div class="card-body stack">
     {% if !unavailable.is_empty() %}
@@ -51,7 +52,7 @@
         </figure>
 
         <fieldset class="chips" data-kind="metric" data-max="{{ max_metrics }}">
-          <legend>Metrics <span class="hint">up to {{ max_metrics }}, on one scale</span></legend>
+          <legend>Metrics <span class="hint">up to {{ max_metrics }}; one on a very different scale gets the right-hand axis</span></legend>
           <div class="chip-row">
             {% for chip in metrics %}{% call chip_input(chip, "metric") %}{% endcall %}{% endfor %}
           </div>

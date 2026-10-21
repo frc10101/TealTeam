@@ -1,0 +1,125 @@
+{#
+  Compare teams (DR1, docs/DATA_REVIEW.md): a column per chosen team, a row
+  per thing scouts record, for alliance selection. Each number comes with how
+  many matches it rests on and how spread out they were, and a box plot on a
+  scale the row shares, so a steady team and a streaky one with the same
+  average look different. The best in each row is marked; against a
+  reference team, every other column says how far ahead or behind it is.
+
+  The choices are a GET form, so a comparison is a URL to send to the drive
+  coach. static/js/compare.js submits it the moment a choice changes; without
+  it the Show button does.
+#}
+{% extends "layout.html" %}
+{% block content %}
+{% for error in errors %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endfor %}
+
+<section class="card">
+  <div class="card-header">
+    <h1>Compare{% if !event_name.is_empty() %} · {{ event_name }}{% endif %}</h1>
+    {% if !graph_href.is_empty() %}<a class="btn btn-secondary" href="{{ graph_href }}">Graph these</a>{% endif %}
+  </div>
+  <div class="card-body stack">
+    {% if !unavailable.is_empty() %}
+      <p>{{ unavailable }}</p>
+    {% else %}
+      <form method="get" class="compare-form stack" id="compare-form">
+        {% if !nav.event.selected.is_empty() %}<input type="hidden" name="event" value="{{ nav.event.selected }}">{% endif %}
+        <input type="hidden" name="chosen" value="1">
+        <fieldset class="chips" data-kind="team" data-max="{{ max_teams }}">
+          <legend>Teams <span class="hint">up to {{ max_teams }}, best scout estimate first</span></legend>
+          <div class="chip-row">
+            {% for chip in teams %}{% call chip_input(chip) %}{% endcall %}{% endfor %}
+          </div>
+          {% if !more_teams.is_empty() %}
+            <details class="more-chips"{% if teams.is_empty() %} open{% endif %}>
+              <summary>More teams ({{ more_teams.len() }})</summary>
+              <div class="chip-row">
+                {% for chip in more_teams %}{% call chip_input(chip) %}{% endcall %}{% endfor %}
+              </div>
+            </details>
+          {% endif %}
+        </fieldset>
+        <div class="compare-options">
+          <label class="form-label" for="compare-last">Matches
+            <select class="form-select" id="compare-last" name="last">
+              {% for w in windows %}<option value="{{ w.value }}"{% if w.selected %} selected{% endif %}>{{ w.label }}</option>{% endfor %}
+            </select>
+          </label>
+          <label class="form-label" for="compare-ref">Measure against
+            <select class="form-select" id="compare-ref" name="ref">
+              {% for r in references %}<option value="{{ r.value }}"{% if r.selected %} selected{% endif %}>{{ r.label }}</option>{% endfor %}
+            </select>
+          </label>
+          <button type="submit" class="btn btn-secondary" data-compare-show>Show</button>
+        </div>
+      </form>
+      {% for notice in notices %}<p class="hint" role="status">{{ notice }}</p>{% endfor %}
+      <p class="hint" id="compare-status" role="status" aria-live="polite"></p>
+    {% endif %}
+  </div>
+</section>
+
+{% if !columns.is_empty() %}
+  <section class="card">
+    <div class="card-body table-scroll">
+      <table class="data-table compare" id="compare-table">
+        <caption class="hint">
+          The average for each match, with its median, range and spread (±
+          one standard deviation) under it. The bar is a box plot on the row's
+          own scale: the line is the whole range, the box the middle half, the
+          tick the median. <span class="cmp-best-key">Marked</span> is the row's best.
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col"><span class="visually-hidden">What</span></th>
+            {% for c in columns %}
+              <th scope="col" data-slot="{{ c.slot }}"{% if c.reference %} class="reference"{% endif %}>
+                <span class="swatch" aria-hidden="true"></span>
+                <a href="{{ c.team_href }}">{{ c.number }}</a>
+                {% if !c.name.is_empty() %}<span class="cmp-name">{{ c.name }}</span>{% endif %}
+                <span class="cmp-matches muted">{{ c.matches }}{% if c.thin %} <span class="badge badge-gray">thin</span>{% endif %}{% if c.reference %} <span class="badge badge-teal">reference</span>{% endif %}</span>
+              </th>
+            {% endfor %}
+          </tr>
+        </thead>
+        {% for group in groups %}
+          <tbody>
+            <tr class="cmp-group"><th scope="rowgroup" colspan="{{ columns.len() + 1 }}">{{ group.label }}</th></tr>
+            {% for row in group.rows %}
+              <tr>
+                <th scope="row">{{ row.label }}{% if !row.hint.is_empty() %}<span class="cmp-hint muted">{{ row.hint }}</span>{% endif %}</th>
+                {% for cell in row.cells %}
+                  <td{% if cell.best %} class="cmp-best"{% endif %}>
+                    <span class="cmp-main">{{ cell.main }}</span>
+                    {% if !cell.delta.is_empty() %}<span class="cmp-delta {{ cell.delta_class }}">{{ cell.delta }}</span>{% endif %}
+                    {% if let Some(p) = cell.plot %}
+                      <svg class="cmp-box" viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true">
+                        <line class="whisker" x1="{{ p.min }}" x2="{{ p.max }}" y1="5" y2="5"></line>
+                        <rect class="box" x="{{ p.q1 }}" width="{{ p.width() }}" y="1.5" height="7"></rect>
+                        <line class="median" x1="{{ p.median }}" x2="{{ p.median }}" y1="0" y2="10"></line>
+                      </svg>
+                    {% endif %}
+                    {% if !cell.detail.is_empty() %}<span class="cmp-detail muted">{{ cell.detail }}</span>{% endif %}
+                  </td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        {% endfor %}
+      </table>
+    </div>
+  </section>
+{% endif %}
+
+{% if unavailable.is_empty() %}<p class="muted graph-source">{{ source }}</p>{% endif %}
+{% endblock %}
+
+{% macro chip_input(chip) %}
+<label class="chip" data-slot="{{ chip.slot }}" title="{{ chip.title }}">
+  <input type="checkbox" name="team" value="{{ chip.value }}"{% if chip.on %} checked{% endif %}>
+  <span class="swatch" aria-hidden="true"></span><span>{{ chip.label }}</span>
+</label>
+{% endmacro %}
+
+{% block scripts %}{% if unavailable.is_empty() %}<script src="/static/js/compare.js" defer></script>{% endif %}{% endblock %}

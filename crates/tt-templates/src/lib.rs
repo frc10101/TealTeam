@@ -21,6 +21,10 @@ mod ask;
 pub use ask::AskPage;
 mod coach;
 pub use coach::{AllianceView, CoachCard, CoachTeam, DriveCoachPage};
+mod compare;
+pub use compare::{
+    BoxPlot, Choice, CompareCell, CompareColumn, CompareGroup, ComparePage, CompareRow,
+};
 mod graph;
 pub use graph::{Chip, GraphPage, TableRow, TeamTable};
 mod notes;

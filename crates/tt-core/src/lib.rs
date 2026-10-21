@@ -12,6 +12,7 @@
 pub mod ask;
 pub mod assignments;
 pub mod coach;
+pub mod compare;
 pub mod connectivity;
 pub mod error;
 pub mod form;
