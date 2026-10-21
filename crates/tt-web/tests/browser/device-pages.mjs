@@ -96,7 +96,7 @@ await go(team, 3000);
 const made = await evaluate(page);
 const took = await evaluate(`Math.round(performance.getEntriesByType('navigation')[0].responseEnd)`);
 check("server gone: the team page is made on the device", made.device && made.h1 === "254 · Poofs" && made.url === "/teams?event=2026demo&team=254", JSON.stringify({ device: made.device, h1: made.h1, url: made.url }));
-check("from the device's copy", /OPR\s*61\.25/.test(made.text) && /From 1 approved observation/.test(made.text) && /Citrus/.test(made.text), made.text.slice(0, 300));
+check("from the device's copy", /OPR\s*61\.25/.test(made.text) && /From 1 approved observation/.test(made.text) && /red with 1678/.test(made.text), made.text.slice(0, 300));
 check("and says so", /made on this device/.test(made.text));
 // The page colour of either theme: the cached stylesheet, not the browser's white.
 check("styled, from the cache", ["rgb(11, 11, 13)", "rgb(255, 252, 245)"].includes(made.bg), made.bg);
@@ -110,8 +110,9 @@ const noise = events.filter((e) => e.method === "Runtime.exceptionThrown" || (e.
   || (e.method === "Log.entryAdded" && e.params.entry.level === "error" && e.params.entry.source !== "network"));
 check("no errors or warnings on the page", noise.length === 0, JSON.stringify(noise.map((e) => e.params?.entry?.text || e.params?.exceptionDetails?.text || e.params?.args?.[0]?.value)));
 
-// 5. Another team, by the page's own form, and a team the copy lacks.
-await evaluate(`(document.getElementById('team-number').value = '1678', document.querySelector('form.keypad').requestSubmit())`);
+// 5. Another team, by the header's team box, and a team the copy lacks.
+// The header's team box (the page has no box of its own once a team is shown).
+await evaluate(`(document.getElementById('team-jump').value = '1678', document.querySelector('form.team-jump').requestSubmit())`);
 await sleep(1500);
 const other = await evaluate(page);
 check("the lookup form works offline", other.device && other.h1 === "1678 · Citrus", JSON.stringify({ url: other.url, h1: other.h1 }));

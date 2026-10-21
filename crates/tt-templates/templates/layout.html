@@ -99,8 +99,9 @@
         {% endif %}
 
         {# The team box (RS 7 Navigation): a number goes straight to that
-           team's page. Signed in only, since team pages are. #}
-        {% if nav.signed_in %}
+           team's page. Signed in, or a page made on the device, which makes team pages
+           with no server. #}
+        {% if nav.signed_in || nav.from_device %}
           <form method="get" action="/teams" class="team-jump" role="search">
             {% if !nav.event.selected.is_empty() %}<input type="hidden" name="event" value="{{ nav.event.selected }}">{% endif %}
             <label class="visually-hidden" for="team-jump">Team number</label>
