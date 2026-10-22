@@ -224,11 +224,13 @@ signup() {
     return 2
 }
 
+# A refused sign-in is a 303 too, back to /sign-in?failed=1: only a 303
+# anywhere else (the home page) is signed in.
 sign_in() {
-    local status
-    status="$(http -o /dev/null -c "$jar" -w '%{http_code}' \
+    local answer
+    answer="$(http -o /dev/null -c "$jar" -w '%{http_code} %{redirect_url}' \
         --data-urlencode "email=$1" --data-urlencode "password=$2" "$url/api/auth/login")"
-    [[ "$status" == 303 ]]
+    [[ "$answer" == "303 "* && "$answer" != *"/sign-in"* ]]
 }
 
 say "signing in as the admin ($admin_email)"

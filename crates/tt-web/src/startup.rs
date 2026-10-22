@@ -1032,29 +1032,20 @@ mod flow_tests {
         let state = migrated_state().await;
         signed_up(&state).await;
 
-        let wrong = text(
-            post(
-                &state,
-                "/api/auth/login",
-                "email=sam%40example.com&password=wrongpassword",
-                None,
-            )
-            .await,
-        )
-        .await;
-        let missing = text(
-            post(
-                &state,
-                "/api/auth/login",
-                "email=nobody%40example.com&password=wrongpassword",
-                None,
-            )
-            .await,
-        )
-        .await;
-
-        assert!(wrong.contains("Invalid email or password"));
-        assert!(missing.contains("Invalid email or password"));
+        // Both go back to the same page (post/redirect/get), with no cookie.
+        for body in [
+            "email=sam%40example.com&password=wrongpassword",
+            "email=nobody%40example.com&password=wrongpassword",
+        ] {
+            let refused = post(&state, "/api/auth/login", body, None).await;
+            assert_eq!(refused.status(), StatusCode::SEE_OTHER);
+            assert_eq!(refused.headers()[header::LOCATION], "/sign-in?failed=1");
+            assert!(refused.headers().get(header::SET_COOKIE).is_none());
+        }
+        let page = text(get(&state, "/sign-in?failed=1", None).await).await;
+        assert!(page.contains("Invalid email or password"));
+        let plain = text(get(&state, "/sign-in", None).await).await;
+        assert!(!plain.contains("Invalid email or password"));
     }
 
     #[tokio::test]

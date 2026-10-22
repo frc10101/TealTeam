@@ -758,8 +758,10 @@ async fn sign_in(h: &mut Harness) {
         "scout2",
         "POST /api/auth/login",
         "a wrong password gets no cookie",
-        bad.headers.get(header::SET_COOKIE).is_none() && bad.status == 200,
-        format!("{}", bad.status),
+        bad.headers.get(header::SET_COOKIE).is_none()
+            && bad.status == 303
+            && bad.location.as_deref() == Some("/sign-in?failed=1"),
+        format!("{} {:?}", bad.status, bad.location),
     );
 
     // Signing out ends the session.

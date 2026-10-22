@@ -184,9 +184,26 @@ pub async fn page<R: LocalRepo>(
     let teams: Vec<i32> = if chosen {
         let (teams, over) = graph::choose(&asked, &offered, MAX_TEAMS);
         if over > 0 {
+            // Name them: from Rankings' ticks, which ones went is otherwise a guess.
+            let mut left: Vec<String> = Vec::new();
+            for t in &asked {
+                let name = t.to_string();
+                if offered.contains(t) && !teams.contains(t) && !left.contains(&name) {
+                    left.push(name);
+                }
+            }
+            let who = if left.is_empty() {
+                format!("{over} more")
+            } else {
+                list(&left)
+            };
             page.notices.push(format!(
-                "Up to {MAX_TEAMS} teams fit side by side, so {over} more {} left off.",
-                if over == 1 { "was" } else { "were" }
+                "Up to {MAX_TEAMS} teams fit side by side, so {who} {} left off.",
+                if left.len().max(over) == 1 {
+                    "was"
+                } else {
+                    "were"
+                }
             ));
         }
         teams
@@ -437,11 +454,9 @@ fn view_row(row: &compare::Row, reference: Option<usize>) -> CompareRow {
                     view.delta = "same".into();
                 } else {
                     let sign = if d > 0.0 { "+" } else { "−" };
-                    view.delta = format!(
-                        "{sign}{}{}",
-                        number(d.abs()),
-                        if rate { " pts" } else { "" }
-                    );
+                    // Percentage points, not "pts", which reads as game points.
+                    view.delta =
+                        format!("{sign}{}{}", number(d.abs()), if rate { " pp" } else { "" });
                     let ahead = match row.better {
                         Better::Higher => Some(d > 0.0),
                         Better::Lower => Some(d < 0.0),
@@ -475,6 +490,15 @@ fn number(v: f64) -> String {
         format!("{rounded:.0}")
     } else {
         format!("{rounded:.1}")
+    }
+}
+
+/// `10012`, `10011 and 10012`, `10010, 10011 and 10012`.
+fn list(items: &[String]) -> String {
+    match items {
+        [] => String::new(),
+        [one] => one.clone(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
     }
 }
 
@@ -549,7 +573,7 @@ mod tests {
     }
 
     #[test]
-    fn a_rate_is_a_percentage_and_its_lead_is_in_points() {
+    fn a_rate_is_a_percentage_and_its_lead_is_in_percentage_points() {
         let row = compare::Row {
             key: "k".into(),
             label: "Parked".into(),
@@ -561,7 +585,18 @@ mod tests {
             (view.cells[1].main.as_str(), view.cells[1].detail.as_str()),
             ("75%", "3 of 4")
         );
-        assert_eq!(view.cells[1].delta, "+25 pts");
+        assert_eq!(view.cells[1].delta, "+25 pp");
         assert_eq!(view.cells[1].delta_class, "ahead");
+    }
+
+    #[test]
+    fn the_teams_left_off_are_named() {
+        let names = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(list(&names(&["10012"])), "10012");
+        assert_eq!(list(&names(&["10011", "10012"])), "10011 and 10012");
+        assert_eq!(
+            list(&names(&["10010", "10011", "10012"])),
+            "10010, 10011 and 10012"
+        );
     }
 }

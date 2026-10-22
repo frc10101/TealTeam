@@ -81,6 +81,9 @@
           one standard deviation) under it. The bar is a box plot on the row's
           own scale: the line is the whole range, the box the middle half, the
           tick the median. <span class="cmp-best-key">Marked</span> is the row's best.
+          {% for r in references %}{% if r.selected && !r.value.is_empty() %}Against
+          a percentage, the lead is in percentage points (pp): 50% against 25%
+          is +25 pp.{% endif %}{% endfor %}
         </caption>
         <thead>
           <tr>
