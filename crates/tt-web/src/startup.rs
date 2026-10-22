@@ -165,9 +165,16 @@ pub async fn run() -> anyhow::Result<()> {
         .with_context(|| format!("binding {addr}"))?;
     info!("listening on http://{addr}");
 
-    axum::serve(listener, router(state))
-        .await
-        .context("server error")?;
+    // 7b. HTTPS beside it (H1), for the secure context the offline client
+    // needs. A failure here is logged, not fatal: plain HTTP still serves.
+    let app = router(state);
+    if let Some((port, source)) = &config.tls
+        && let Err(e) = crate::tls::serve(*port, source, app.clone()).await
+    {
+        warn!("HTTPS is off: {e:#}");
+    }
+
+    axum::serve(listener, app).await.context("server error")?;
 
     Ok(())
 }
@@ -238,6 +245,7 @@ pub fn router(state: AppState) -> Router {
         .route("/sign-up", get(handlers::sign_up_page))
         .route("/account", get(handlers::account))
         .route("/help", get(handlers::help))
+        .route("/ca.crt", get(crate::tls::ca_certificate))
         .route("/submission", get(handlers::submission))
         .route("/submission/download", get(handlers::download_scout_file))
         .route("/teams", get(handlers::team))

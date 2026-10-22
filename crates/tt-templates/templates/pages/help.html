@@ -28,6 +28,9 @@
     <h2>Server out of reach for a while</h2>
     <p>On the Scout page, open <strong>Server out of reach?</strong> and press <strong>Show the code</strong>. A lead scout who can reach the server scans it with <strong>Scan a tablet's forms</strong>, then shows you a receipt; scan it back with <strong>Scan the receipt</strong>. The tablet keeps your forms until the receipt says the server has them.</p>
 
+    <h2>The padlock (HTTPS)</h2>
+    <p>Over <strong>https://</strong> this device keeps working while the server is out of reach: a reload shows the page with what it holds. That needs this server's certificate trusted once: download <a href="/ca.crt">the TealTeam certificate</a>, import it as a certificate authority (on a Chromebook: <code>chrome://certificate-manager</code>, <strong>Local certificates</strong>, <strong>Import</strong>, tick <strong>Trust this certificate for identifying websites</strong>), then open this site with <strong>https://</strong>. Without it, <strong>http://</strong> still works.</p>
+
     <h2>Who to ask</h2>
     <p>Your lead scout, for assignments, records and anything the chip says. An admin, for accounts and roles.</p>
   </div>

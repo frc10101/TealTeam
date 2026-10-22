@@ -407,7 +407,13 @@ fn unlisted_routes() -> Vec<String> {
             .chars()
             .take_while(|c| *c != '"')
             .collect();
-        let handled_elsewhere = ["/api/auth/login", "/api/auth/signup", "/api/auth/logout"];
+        // `/ca.crt` 404s in dev, which has no CA (H1); tls.rs checks it serves.
+        let handled_elsewhere = [
+            "/api/auth/login",
+            "/api/auth/signup",
+            "/api/auth/logout",
+            "/ca.crt",
+        ];
         if !listed.contains(&path) && !handled_elsewhere.contains(&path.as_str()) {
             missing.push(path);
         }

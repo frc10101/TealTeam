@@ -34,6 +34,7 @@ mod startup;
 mod sync;
 mod teams;
 mod tether;
+mod tls;
 mod token;
 mod upstream;
 

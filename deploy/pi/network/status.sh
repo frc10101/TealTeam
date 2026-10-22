@@ -57,6 +57,16 @@ else
     bad "nothing answers http://localhost/health: is tt-web running on 8080?"
 fi
 
+# HTTPS (H1), checked against the server's own CA, as a trusting device would.
+ca="$(mktemp)"
+if curl -fsS -o "$ca" --max-time 3 http://localhost/ca.crt \
+    && curl -fsS -o /dev/null --max-time 3 --cacert "$ca" https://localhost/health; then
+    ok "the app answers https://localhost (port 443) with a certificate its CA vouches for"
+else
+    note "no HTTPS: TLS_PORT=off, or see 'HTTPS is off' in journalctl -u tealteam (http still works)"
+fi
+rm -f "$ca"
+
 leases=/var/lib/misc/dnsmasq.leases
 if [[ -r "$leases" ]]; then
     note "$(wc -l < "$leases") client lease(s) handed out"

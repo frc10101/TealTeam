@@ -77,14 +77,15 @@ One checklist per Chromebook. **Print `deploy/laptop/CHROMEBOOK_CARD.md` as one 
 
 1. Plug a **USB-C Ethernet adapter** into the Chromebook and the flat cable into the switch. Wait for the network icon to say wired.
 2. **Turn Wi-Fi off:** quick settings (bottom right), click Wi-Fi, switch it off.
-3. Open **http://tealteam.local/**. If it does not load, try **http://tealteam/**, then **http://10.101.0.1/** (the Pi's fixed address; it always works). Use `http://`, not `https://`.
-4. **Bookmark** it (Ctrl+D) and **pin it to the shelf**: three-dot menu, Cast, save and share, *Create shortcut*, tick *Open as window*.
+3. Open **http://tealteam.local/**. If it does not load, try **http://tealteam/**, then **http://10.101.0.1/** (the Pi's fixed address; it always works).
+4. **Trust the server once** (HTTPS, [HTTPS_SETUP.md](HTTPS_SETUP.md)): open **http://tealteam.local/ca.crt** (it downloads), then `chrome://certificate-manager`, *Local certificates*, *Import*, pick **tealteam-ca.crt**, tick *Trust this certificate for identifying websites*. Open **https://tealteam.local/**: no warning, a padlock. Skipped, `http://` still works, without offline reloads.
+   **Bookmark** the https address (Ctrl+D) and **pin it to the shelf**: three-dot menu, Cast, save and share, *Create shortcut*, tick *Open as window*.
 5. **Sign in** with the name and temporary password from the sign-in sheet (Part 6); change the password on the Account page.
 6. **Clear old site data from earlier events:** open `chrome://settings/content/all`, search `tealteam`, and delete the entries.
 7. **Keep the screen on:** Settings, Device, Power, set *While charging* to *Keep display on*. Keep the Chromebook plugged in.
 8. Open **Scout**: the page downloads its offline copy once; leave it a moment.
 
-**Done when:** the Chromebook shows your name at the top of http://tealteam.local/.
+**Done when:** the Chromebook shows your name at the top of https://tealteam.local/ with no certificate warning.
 
 **Name lookup.** The Pi's dnsmasq (`dnsmasq-tealteam.conf`) is the DNS server the Chromebooks are given by DHCP, and it answers `tealteam.local` and `tealteam` itself, so they do not depend on mDNS. No network change was needed. The fallback is always the fixed IP.
 
@@ -131,7 +132,8 @@ On the Pi, over SSH, in the repo folder (Chromebooks cannot run it; the server's
 
 - [ ] Cables first, then power: switch, then the Pi (runbook "Set up")
 - [ ] `deploy/pi/network/status.sh` all `ok`; no uplink is fine
-- [ ] One Chromebook opens http://tealteam.local/ (else http://10.101.0.1/)
+- [ ] One Chromebook opens https://tealteam.local/ with no warning (its CA trusted), else http://10.101.0.1/
+- [ ] The CA folder (`/srv/tealteam/data/tls`) is on the backup stick
 - [ ] Lead scout signs in, picks the event, checks the assignments page
 - [ ] Never plug in a phone tether; no Wi-Fi, hotspot or router
 - [ ] Between match blocks: `tt-web backup` to the stick; eject it before pulling

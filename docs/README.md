@@ -56,6 +56,7 @@ One document per larger item, linked from its row in ACTION_ITEMS.
 | [SETUP_GUIDE.md](event/SETUP_GUIDE.md) | A fresh Pi and the team's laptops to event-ready, for someone who is not a developer. |
 | [EVENT_DAY_RUNBOOK.md](event/EVENT_DAY_RUNBOOK.md) | One page for the day itself, to print and tape to the Pi. |
 | [PI_NETWORK.md](event/PI_NETWORK.md) | The wired event LAN the Pi provides. |
+| [HTTPS_SETUP.md](event/HTTPS_SETUP.md) | Getting the app, then HTTPS with the server's own CA, trusted once on each device, so the offline features turn on. |
 | [PI_STORAGE.md](event/PI_STORAGE.md) | The database on the Pi's SSD, and its backups. |
 
 ## Developing and testing — `dev/`

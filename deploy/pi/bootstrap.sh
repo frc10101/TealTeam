@@ -242,4 +242,6 @@ say "status"
 "$HERE/network/status.sh" || echo "    (a FAIL above names its fix; no switch cabled yet is expected at the shop)"
 echo
 say "done. Scouts open http://tealteam.local/ (or http://10.101.0.1/) from a laptop on the switch."
+echo "    HTTPS: once a device trusts http://tealteam.local/ca.crt, https://tealteam.local/ (docs/event/HTTPS_SETUP.md)."
+echo "    Copy the CA folder (/srv/tealteam/data/tls, or TLS_DIR) to the backup stick once: without it, every device trusts a new CA."
 echo "    Next: deploy/event/prep-event.sh $profile, from a laptop."

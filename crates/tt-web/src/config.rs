@@ -39,6 +39,9 @@ pub struct Config {
     /// The interfaces a USB-tethered phone appears as (S6). Empty: do not
     /// watch for one.
     pub tether_interfaces: Vec<String>,
+    /// HTTPS (H1): the port, and where the certificate comes from. `None`
+    /// when `TLS_PORT=off`; plain HTTP on [`Config::port`] serves either way.
+    pub tls: Option<(u16, crate::tls::Source)>,
 }
 
 /// Runtime mode.
@@ -79,11 +82,19 @@ pub enum ConfigError {
     #[error("PORT must be a number between 1 and 65535, got {0:?}")]
     InvalidPort(String),
 
+    #[error("TLS_PORT must be a port number or 'off', got {0:?}")]
+    InvalidTlsPort(String),
+
+    #[error("TLS_CERT and TLS_KEY go together: set both or neither")]
+    TlsHalfSet,
+
     #[error("{name} must be 'true' or 'false', got {value:?}")]
     NotABoolean { name: &'static str, value: String },
 }
 
 pub const DEFAULT_PORT: u16 = 8080;
+/// The Pi forwards 443 here, as it forwards 80 to [`DEFAULT_PORT`].
+pub const DEFAULT_TLS_PORT: u16 = 8443;
 pub const DEFAULT_DATABASE_URL: &str = "sqlite://./tealteam.db";
 
 impl Config {
@@ -113,7 +124,10 @@ impl Config {
             .filter(|v| !v.is_empty())
             .unwrap_or_else(|| DEFAULT_DATABASE_URL.to_string());
 
+        let tls = tls(&get, &database_url)?;
+
         Ok(Self {
+            tls,
             database_url,
             port,
             allow_schema_reset: mode.allows_schema_reset(),
@@ -123,6 +137,53 @@ impl Config {
             tether_interfaces: interfaces(get("TETHER_INTERFACES")),
         })
     }
+}
+
+/// `TLS_PORT` (default 8443, `off` for none), then `TLS_CERT`/`TLS_KEY` for
+/// a certificate from elsewhere, else our own CA in `TLS_DIR` (default: a
+/// `tls` folder beside the database) for the default names plus `TLS_NAMES`.
+fn tls(
+    get: &impl Fn(&str) -> Option<String>,
+    database_url: &str,
+) -> Result<Option<(u16, crate::tls::Source)>, ConfigError> {
+    let port = match get("TLS_PORT").map(|v| v.trim().to_ascii_lowercase()) {
+        None => DEFAULT_TLS_PORT,
+        Some(v) if v.is_empty() => DEFAULT_TLS_PORT,
+        Some(v) if matches!(v.as_str(), "off" | "none" | "false" | "no" | "0") => return Ok(None),
+        Some(v) => v
+            .parse::<u16>()
+            .ok()
+            .filter(|p| *p > 0)
+            .ok_or(ConfigError::InvalidTlsPort(v))?,
+    };
+    let source = match (path(get("TLS_CERT")), path(get("TLS_KEY"))) {
+        (Some(cert), Some(key)) => crate::tls::Source::Files { cert, key },
+        (None, None) => {
+            let dir = path(get("TLS_DIR")).unwrap_or_else(|| beside_database(database_url, "tls"));
+            let mut names: Vec<String> = crate::tls::DEFAULT_NAMES.map(String::from).to_vec();
+            for name in get("TLS_NAMES")
+                .unwrap_or_default()
+                .split(|c: char| c == ',' || c.is_whitespace())
+                .filter(|n| !n.is_empty())
+            {
+                if !names.iter().any(|n| n.eq_ignore_ascii_case(name)) {
+                    names.push(name.to_string());
+                }
+            }
+            crate::tls::Source::OwnCa { dir, names }
+        }
+        _ => return Err(ConfigError::TlsHalfSet),
+    };
+    Ok(Some((port, source)))
+}
+
+/// A folder named `name` beside the SQLite file in `database_url`, as the
+/// backups find theirs, or in the working directory for an in-memory one.
+fn beside_database(database_url: &str, name: &str) -> PathBuf {
+    tt_repo_sqlite::storage::locate(database_url)
+        .and_then(|s| s.path)
+        .and_then(|db| db.parent().map(|p| p.join(name)))
+        .unwrap_or_else(|| PathBuf::from(name))
 }
 
 /// A folder setting: blank is unset.
@@ -238,6 +299,57 @@ mod tests {
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect();
         move |key: &str| map.get(key).cloned()
+    }
+
+    #[test]
+    fn https_is_on_by_default_with_our_own_ca_beside_the_database() {
+        let c = Config::from_lookup(lookup(&[(
+            "DATABASE_URL",
+            "sqlite:///srv/tealteam/data/tealteam.db",
+        )]))
+        .unwrap();
+        let Some((8443, crate::tls::Source::OwnCa { dir, names })) = c.tls else {
+            panic!("{:?}", c.tls);
+        };
+        assert_eq!(dir, PathBuf::from("/srv/tealteam/data/tls"));
+        assert!(names.contains(&"tealteam.local".to_string()));
+        assert!(names.contains(&"10.101.0.1".to_string()));
+    }
+
+    #[test]
+    fn tls_settings_turn_it_off_move_it_or_bring_a_certificate() {
+        let off = Config::from_lookup(lookup(&[("TLS_PORT", "off")])).unwrap();
+        assert_eq!(off.tls, None);
+
+        let named = Config::from_lookup(lookup(&[
+            ("TLS_PORT", "9443"),
+            ("TLS_DIR", "/x/tls"),
+            ("TLS_NAMES", "scouting.lan, 192.168.1.5 tealteam.local"),
+        ]))
+        .unwrap();
+        let Some((9443, crate::tls::Source::OwnCa { dir, names })) = named.tls else {
+            panic!("{:?}", named.tls);
+        };
+        assert_eq!(dir, PathBuf::from("/x/tls"));
+        assert_eq!(names.iter().filter(|n| *n == "tealteam.local").count(), 1);
+        assert!(names.contains(&"scouting.lan".to_string()));
+        assert!(names.contains(&"192.168.1.5".to_string()));
+
+        let files =
+            Config::from_lookup(lookup(&[("TLS_CERT", "/c.pem"), ("TLS_KEY", "/k.pem")])).unwrap();
+        assert!(matches!(
+            files.tls,
+            Some((8443, crate::tls::Source::Files { .. }))
+        ));
+
+        assert_eq!(
+            Config::from_lookup(lookup(&[("TLS_CERT", "/c.pem")])),
+            Err(ConfigError::TlsHalfSet)
+        );
+        assert!(matches!(
+            Config::from_lookup(lookup(&[("TLS_PORT", "https")])),
+            Err(ConfigError::InvalidTlsPort(_))
+        ));
     }
 
     #[test]
