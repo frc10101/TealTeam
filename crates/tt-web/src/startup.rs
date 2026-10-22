@@ -1008,29 +1008,48 @@ mod flow_tests {
         let state = migrated_state().await;
         signed_up(&state).await;
 
-        let wrong = text(
-            post(
-                &state,
-                "/api/auth/login",
-                "email=sam%40example.com&password=wrongpassword",
-                None,
-            )
-            .await,
-        )
-        .await;
-        let missing = text(
-            post(
-                &state,
-                "/api/auth/login",
-                "email=nobody%40example.com&password=wrongpassword",
-                None,
-            )
-            .await,
-        )
-        .await;
+        // Both go back to the same page (post/redirect/get), with no cookie.
+        for body in [
+            "email=sam%40example.com&password=wrongpassword",
+            "email=nobody%40example.com&password=wrongpassword",
+        ] {
+            let refused = post(&state, "/api/auth/login", body, None).await;
+            assert_eq!(refused.status(), StatusCode::SEE_OTHER);
+            assert_eq!(refused.headers()[header::LOCATION], "/sign-in?failed=1");
+            assert!(refused.headers().get(header::SET_COOKIE).is_none());
+        }
+        let page = text(get(&state, "/sign-in?failed=1", None).await).await;
+        assert!(page.contains("Invalid email or password"));
+        let plain = text(get(&state, "/sign-in", None).await).await;
+        assert!(!plain.contains("Invalid email or password"));
+    }
 
-        assert!(wrong.contains("Invalid email or password"));
-        assert!(missing.contains("Invalid email or password"));
+    #[tokio::test]
+    async fn sign_up_refusals_say_what_is_wrong_in_words() {
+        let state = migrated_state().await;
+        signed_up(&state).await;
+        let try_one = |team: &'static str, pw: &'static str| {
+            let state = state.clone();
+            async move {
+                let body = format!(
+                    "name=Ann&email=ann%40example.com&team_number={team}&password={pw}&confirm_password={pw}"
+                );
+                text(post(&state, "/api/auth/signup", &body, None).await).await
+            }
+        };
+        let short = try_one("10101", "short").await;
+        assert!(
+            short.contains("Your password must be at least 8 characters."),
+            "{short}"
+        );
+        assert!(!short.contains("invalid value"));
+        let big = try_one("999999999999", "longenough1").await;
+        assert!(big.contains("That team number is too large."), "{big}");
+        let bad = try_one("abc", "longenough1").await;
+        assert!(
+            bad.contains("Team number must be a whole number, 1 or more"),
+            "{bad}"
+        );
     }
 
     #[tokio::test]

@@ -1437,7 +1437,7 @@ impl<'a> Harness<'a> {
             self.expect(
                 u.key,
                 "signing in with a wrong password does not",
-                bad.status == 200 && !set,
+                bad.status == 303 && bad.location.as_deref() == Some("/sign-in?failed=1") && !set,
                 bad.describe(),
             );
             if let Some(cookie) = cookie {

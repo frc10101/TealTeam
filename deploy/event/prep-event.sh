@@ -98,11 +98,13 @@ echo "    $health"
 
 # ── Sign in ─────────────────────────────────────────────────────────────────
 # 0 when the cookie jar now holds a session.
+# A refused sign-in is a 303 too, back to /sign-in?failed=1: only a 303
+# anywhere else (the home page) is signed in.
 login() {
-    local code
-    code="$(curl -sS --max-time 30 -o /dev/null -w '%{http_code}' -b "$jar" -c "$jar" \
+    local answer
+    answer="$(curl -sS --max-time 30 -o /dev/null -w '%{http_code} %{redirect_url}' -b "$jar" -c "$jar" \
         --data-urlencode "email=$1" --data-urlencode "password=$2" "$url/api/auth/login")"
-    [[ "$code" == 303 ]]
+    [[ "$answer" == "303 "* && "$answer" != *"/sign-in"* ]]
 }
 
 say "sign in as the admin"

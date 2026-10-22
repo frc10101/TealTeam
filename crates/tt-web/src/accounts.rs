@@ -78,7 +78,8 @@ impl Done {
                  Nothing was changed."
             ),
             Self::BadTeam => {
-                "Team number must be a positive whole number. Nothing was changed.".into()
+                "Team number must be a whole number, 1 or more, and not too large. Nothing was changed."
+                    .into()
             }
             Self::ShortPassword => format!(
                 "A password must be at least {} characters. {name}'s was not changed.",

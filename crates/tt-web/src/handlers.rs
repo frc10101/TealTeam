@@ -107,9 +107,33 @@ pub async fn home(
     html(tt_pages::home::page(&*state.repo, &state.season, nav, team, &context).await)
 }
 
+/// Why a team number was refused, in words: "positive" is wrong for one that
+/// is merely too big to store.
+pub(crate) fn team_number_problem(raw: &str) -> &'static str {
+    let raw = raw.trim();
+    let digits = !raw.is_empty() && raw.chars().all(|c| c.is_ascii_digit());
+    if digits && !raw.trim_start_matches('0').is_empty() {
+        "That team number is too large."
+    } else {
+        "Team number must be a whole number, 1 or more, such as 10101."
+    }
+}
+
 // ── Sign in ─────────────────────────────────────────────────────────────────
 
-pub async fn sign_in_page(State(state): State<AppState>, MaybeAuth(user): MaybeAuth) -> Response {
+/// `/sign-in?failed=1`: where a refused sign-in lands. The email is not
+/// carried over: on a shared Chromebook it would sit in the history.
+#[derive(Deserialize, Default)]
+pub struct SignInParams {
+    #[serde(default)]
+    failed: Option<String>,
+}
+
+pub async fn sign_in_page(
+    State(state): State<AppState>,
+    MaybeAuth(user): MaybeAuth,
+    Query(params): Query<SignInParams>,
+) -> Response {
     if user.is_some() {
         return Redirect::to("/").into_response();
     }
@@ -117,7 +141,11 @@ pub async fn sign_in_page(State(state): State<AppState>, MaybeAuth(user): MaybeA
         title: "Sign in".into(),
         nav: nav_for(&state, None).await,
         email: String::new(),
-        error: String::new(),
+        error: if params.failed.is_some() {
+            LOGIN_FAILED.into()
+        } else {
+            String::new()
+        },
     })
 }
 
@@ -134,17 +162,10 @@ pub async fn login(
 ) -> Response {
     let email = user::normalize_email(&form.email);
 
-    let failed = |state: &AppState, nav: Nav| {
-        let _ = state;
-        html(SignInPage {
-            title: "Sign in".into(),
-            nav,
-            email: email.clone(),
-            error: LOGIN_FAILED.into(),
-        })
-    };
-
-    let nav = nav_for(&state, None).await;
+    // Back to the sign-in page (post/redirect/get), not a page rendered at
+    // /api/auth/login, where a reload offers to send the password again.
+    // prep-event.sh tells the two 303s apart by this Location.
+    let failed = || Redirect::to("/sign-in?failed=1").into_response();
 
     let credentials = match state.repo.credentials_by_email(&email).await {
         Ok(Some(c)) => c,
@@ -153,23 +174,23 @@ pub async fn login(
             // measurably faster to reject than a wrong password, which leaks
             // exactly what the generic message is meant to hide.
             let _ = verify_password(&form.password, DUMMY_HASH);
-            return failed(&state, nav);
+            return failed();
         }
         Err(e) => {
             tracing::error!("login lookup failed: {e}");
-            return failed(&state, nav);
+            return failed();
         }
     };
 
     if !verify_password(&form.password, &credentials.password_hash) {
-        return failed(&state, nav);
+        return failed();
     }
 
     let session = new_session(credentials.user.id);
     let now = Utc::now();
     if let Err(e) = state.repo.create_session(&session, now).await {
         tracing::error!("creating session: {e}");
-        return failed(&state, nav);
+        return failed();
     }
     if let Err(e) = state.repo.record_login(credentials.user.id, now).await {
         // Not worth failing a login over.
@@ -244,14 +265,17 @@ pub async fn signup(
 
     let team_number = match user::validate_team_number(&form.team_number) {
         Ok(t) => t,
-        Err(_) => return reject("Team number must be a positive whole number.".into()),
+        Err(_) => return reject(team_number_problem(&form.team_number).into()),
     };
 
     if form.password != form.confirm_password {
         return reject("The two passwords do not match.".into());
     }
-    if let Err(e) = user::validate_password(&form.password) {
-        return reject(e.to_string());
+    if user::validate_password(&form.password).is_err() {
+        return reject(format!(
+            "Your password must be at least {} characters.",
+            user::MIN_PASSWORD_LEN
+        ));
     }
 
     let Ok(password_hash) = hash_password(&form.password) else {
