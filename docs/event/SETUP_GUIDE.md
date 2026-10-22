@@ -117,7 +117,7 @@ On the Pi, `deploy/event/prep-event.sh PROFILE` (the quick start above). It sign
 
 ---
 
-*Printable copies of these checklists and the Chromebook card (two to a page): `docs/event/print/event-checklists.pdf` and `docs/event/print/chromebook-card.pdf`, with .docx versions to edit. Rebuild with `python3 docs/event/print/build.py`.*
+*Printable copies of these checklists and the Chromebook card (two to a page): `docs/event/print/event-checklists.pdf` and `docs/event/print/chromebook-card.pdf`. For using the laptops once they are set up: `scout-card.pdf` (one per scout laptop) and `lead-card.pdf` (the lead's), both below, with .docx versions to edit. Rebuild with `python3 docs/event/print/build.py`.*
 
 ## Night before
 
@@ -152,3 +152,21 @@ On the Pi, `deploy/event/prep-event.sh PROFILE` (the quick start above). It sign
 8. Open your scouting page once so the offline copy loads, then wait for your match.
 
 If the page will not open: check the cable and adapter, that the switch has power, and that Wi-Fi is off. Tell the lead scout.
+
+## Scout card: scouting a match (print one per scout laptop)
+
+1. **Sign in** at **http://tealteam.local/** (or **http://10.101.0.1/**) and press **Start scouting**. Keep this tab open all day.
+2. The page says **You are scouting** and the team number, with **Your next assignment** at the top. Find that robot on the field before the match starts: red or blue, and its number.
+3. **Fill it in while the match runs.** Tap **+** each time it scores. What you type is kept as you go, so a reload loses nothing.
+4. When the match ends, finish the notes and press **Save observation**. Then follow **Your next assignment** at the top.
+5. **Check the chip in the header:** **Synced** means the server has it. **Offline · 2 held** means it is waiting on this laptop: keep the page open, never clear the browser, and tell the lead scout.
+
+If something is off: wrong robot or no assignment, use **Not your robot? Choose another** or **Not in this match? Team number** and tell the lead scout. **Declined**: read why, press **Record it again**. Missed the robot: tell the lead scout, do not guess. Server out of reach for a while: **Server out of reach?** → **Show the code**, the lead scout scans it. App down: paper sheets, one per robot per match.
+
+## Lead card: lead scout during matches (print one for the lead laptop)
+
+**Before the first match.** **Lead Scout → Assignments** should say **N of N robots in upcoming matches have a scout**; if not, **Hand out open robots**. To change who watches a robot, tap the match, pick the scout, save.
+
+**Every few matches.** **Waiting for review**: open the oldest, **Approve and see the next**, or **Why decline it?** + **Decline** (the scout records it again; **Put back to waiting** undoes a mis-tap). **Refused when sent**: record each against the right match, or dismiss. **Rotation**: swap out a scout who has been on too long. Back up to the stick after every qualification round.
+
+**When things change.** Schedule changed: **Match schedule**, import the new CSV (observations are kept), then on **Assignments** open and save each match it lists as changed, then **Hand out open robots**. Fewer scouts: **Hand out open robots** again. A scout's laptop offline: **Scan a tablet**, then they scan the receipt. App down: paper sheets, typed in afterwards with `PAPER` in *Rule incidents*.

@@ -205,9 +205,79 @@ CARD = f"""
 """
 
 
+CUT = '<p align="center" class="small muted">&#9986; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -</p>'
+
+
 def cards():
-    cut = '<p align="center" class="small muted">&#9986; - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -</p>'
-    return page("Chromebook card", CARD + cut + CARD)
+    return page("Chromebook card", CARD + CUT + CARD)
+
+
+# ---------------------------------------------------------------- using the laptops
+
+# What a scout and the lead do once the Chromebook is set up. The button names
+# are the app's own (submission.html, handoff.html, lead_scout.html,
+# assignments.html, review.html); change them here when they change there.
+
+def boxed(body):
+    return (
+        '<table border="1" cellspacing="0" cellpadding="8" width="100%" style="border-collapse: collapse"><tr><td>'
+        + body
+        + "</td></tr></table>"
+    )
+
+
+SCOUT_CARD = boxed("""
+<h1>Scouting a match</h1>
+<p>Laptop: ______________ &nbsp;&nbsp; Scout: ______________________ &nbsp;&nbsp; Every match, in this order.</p>
+<ol>
+<li><b>Sign in</b> at <b>http://tealteam.local/</b> (or <b>http://10.101.0.1/</b>) and press <b>Start scouting</b>. Keep this tab open all day.</li>
+<li>The page says <b>You are scouting</b> and the team number, with <b>Your next assignment</b> at the top. Find that robot on the field before the match starts: red or blue, and its number.</li>
+<li><b>Fill it in while the match runs.</b> Tap <b>+</b> each time it scores. What you type is kept as you go, so a reload loses nothing.</li>
+<li>When the match ends, finish the notes and press <b>Save observation</b>. Then follow <b>Your next assignment</b> at the top.</li>
+<li><b>Check the chip in the header:</b> <b>Synced</b> means the server has it. <b>Offline &#183; 2 held</b> means it is waiting on this laptop: keep the page open, never clear the browser, and tell the lead scout.</li>
+</ol>
+<h2>If something is off</h2>
+<ul>
+<li><b>Wrong robot, or no assignment?</b> <b>Not your robot? Choose another</b>, or type the number in <b>Not in this match? Team number</b>. Tell the lead scout.</li>
+<li><b>Declined</b> by the lead scout: read why, then press <b>Record it again</b>.</li>
+<li><b>Missed the robot?</b> Tell the lead scout. Do not guess.</li>
+<li><b>Server out of reach for a while?</b> Open <b>Server out of reach?</b>, press <b>Show the code</b>, and let the lead scout scan it.</li>
+<li><b>App down?</b> The lead scout hands out paper sheets. Use one per robot per match.</li>
+</ul>
+""")
+
+
+LEAD_CARD = boxed("""
+<h1>Lead scout during matches</h1>
+<p>Lead laptop: ______________ &nbsp;&nbsp; Sign in as the admin, then open <b>Lead Scout</b>.</p>
+<h2>Before the first match</h2>
+<ol>
+<li><b>Lead Scout &#8594; Assignments.</b> Check that it says <b>N of N robots in upcoming matches have a scout</b>. If not, press <b>Hand out open robots</b>.</li>
+<li>To change who watches a robot, tap the match, pick the scout and save. Nobody can have two robots in one match.</li>
+</ol>
+<h2>Every few matches</h2>
+<ol>
+<li><b>Waiting for review</b> (on <b>Lead Scout</b>): open the oldest. Press <b>Approve and see the next</b>, or write <b>Why decline it?</b> and press <b>Decline</b>. The scout sees the reason and records it again. <b>Put back to waiting</b> undoes a mis-tap.</li>
+<li><b>Refused when sent</b>, if it shows: record each one against the right match, or dismiss it.</li>
+<li><b>Assignments &#8594; Rotation:</b> swap out a scout who has been on too long.</li>
+<li>Back up to the USB stick after every qualification round (the runbook on the Pi).</li>
+</ol>
+<h2>When things change</h2>
+<ul>
+<li><b>Schedule changed:</b> <b>Match schedule</b>, import the new CSV (observations are kept), then <b>Assignments</b>. Open each match it lists as changed and save it, then <b>Hand out open robots</b>.</li>
+<li><b>Fewer scouts:</b> <b>Hand out open robots</b> again. Our team's robot is left for last.</li>
+<li><b>A scout's laptop is offline:</b> <b>Scan a tablet</b>, scan their code, then let them scan the receipt.</li>
+<li><b>App down:</b> paper sheets. Note the time in the checklist, and type the sheets in afterwards with <code>PAPER</code> in <i>Rule incidents</i>.</li>
+</ul>
+""")
+
+
+def scout_cards():
+    return page("Scouting a match", SCOUT_CARD + CUT + SCOUT_CARD)
+
+
+def lead_cards():
+    return page("Lead scout card", LEAD_CARD + CUT + LEAD_CARD)
 
 
 # ---------------------------------------------------------------- checklists
@@ -266,6 +336,8 @@ PAPERS = {
     "scouting-sheet": scouting_sheet,
     "event-day-runbook": lambda: page("Event day runbook", RUNBOOK, margin="0.45in"),
     "chromebook-card": cards,
+    "scout-card": scout_cards,
+    "lead-card": lead_cards,
     "event-checklists": lambda: page("Event checklists", CHECKLISTS),
 }
 
@@ -277,7 +349,13 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         profile = f"-env:UserInstallation=file://{tmp}/lo-profile"
-        for name, make in PAPERS.items():
+        # `build.py scout-card lead-card` builds only those; no names, all.
+        wanted = sys.argv[1:] or list(PAPERS)
+        unknown = [n for n in wanted if n not in PAPERS]
+        if unknown:
+            sys.exit(f"build.py: no paper named {', '.join(unknown)}; try {', '.join(PAPERS)}")
+        for name in wanted:
+            make = PAPERS[name]
             src = tmp / f"{name}.html"
             src.write_text(make())
             for fmt in ("docx:MS Word 2007 XML", "pdf:writer_pdf_Export"):
