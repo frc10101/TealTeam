@@ -108,6 +108,18 @@ pub async fn home(
     html(tt_pages::home::page(&*state.repo, &state.season, nav, team, &context).await)
 }
 
+/// Why a team number was refused, in words: "positive" is wrong for one that
+/// is merely too big to store.
+pub(crate) fn team_number_problem(raw: &str) -> &'static str {
+    let raw = raw.trim();
+    let digits = !raw.is_empty() && raw.chars().all(|c| c.is_ascii_digit());
+    if digits && !raw.trim_start_matches('0').is_empty() {
+        "That team number is too large."
+    } else {
+        "Team number must be a whole number, 1 or more, such as 10101."
+    }
+}
+
 // ── Sign in ─────────────────────────────────────────────────────────────────
 
 /// `/sign-in?failed=1`: where a refused sign-in lands. The email is not
@@ -254,14 +266,17 @@ pub async fn signup(
 
     let team_number = match user::validate_team_number(&form.team_number) {
         Ok(t) => t,
-        Err(_) => return reject("Team number must be a positive whole number.".into()),
+        Err(_) => return reject(team_number_problem(&form.team_number).into()),
     };
 
     if form.password != form.confirm_password {
         return reject("The two passwords do not match.".into());
     }
-    if let Err(e) = user::validate_password(&form.password) {
-        return reject(e.to_string());
+    if user::validate_password(&form.password).is_err() {
+        return reject(format!(
+            "Your password must be at least {} characters.",
+            user::MIN_PASSWORD_LEN
+        ));
     }
 
     let Ok(password_hash) = hash_password(&form.password) else {

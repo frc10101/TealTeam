@@ -1049,6 +1049,34 @@ mod flow_tests {
     }
 
     #[tokio::test]
+    async fn sign_up_refusals_say_what_is_wrong_in_words() {
+        let state = migrated_state().await;
+        signed_up(&state).await;
+        let try_one = |team: &'static str, pw: &'static str| {
+            let state = state.clone();
+            async move {
+                let body = format!(
+                    "name=Ann&email=ann%40example.com&team_number={team}&password={pw}&confirm_password={pw}"
+                );
+                text(post(&state, "/api/auth/signup", &body, None).await).await
+            }
+        };
+        let short = try_one("10101", "short").await;
+        assert!(
+            short.contains("Your password must be at least 8 characters."),
+            "{short}"
+        );
+        assert!(!short.contains("invalid value"));
+        let big = try_one("999999999999", "longenough1").await;
+        assert!(big.contains("That team number is too large."), "{big}");
+        let bad = try_one("abc", "longenough1").await;
+        assert!(
+            bad.contains("Team number must be a whole number, 1 or more"),
+            "{bad}"
+        );
+    }
+
+    #[tokio::test]
     async fn signing_out_invalidates_the_session() {
         let state = migrated_state().await;
         let cookie = signed_up(&state).await;
