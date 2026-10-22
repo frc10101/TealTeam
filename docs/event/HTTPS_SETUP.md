@@ -6,7 +6,7 @@
 
 Chrome turns on service workers and private file storage (OPFS) only for a secure context: HTTPS, or `http://localhost`. Over plain `http://tealteam.local` they are off (`static/js/sync.js` checks `window.isSecureContext`). The FTC beta's LAN rehearsal (2026-10-22, on the ftc-biobuzz branch) showed the cost: saved forms are held and sync later, but a reload or a link while the server is unreachable shows Chrome's error page.
 
-Over HTTPS, a reload while the server is out of reach shows the page from the laptop's copy, with what it holds, and phones keep a full offline copy. Over HTTPS the offline client also makes pages from the device's own copy of the data, so in the LAN test a scout opened their **next** assignment while offline too (over plain HTTP that showed Chrome's error page). Check it on a freshly set-up Chromebook before relying on it. Paper stays the fallback. Paper stays the fallback.
+Over HTTPS, a reload while the server is out of reach shows the page from the laptop's copy, with what it holds, and phones keep a full offline copy. Over HTTPS the offline client also makes **Home, Teams, Notes, Graph and the drive coach's schedule** from the device's own copy of the data (`crates/tt-client/src/pages.rs`). It does **not** make a scouting form: a form not already open shows the offline page ("Can't reach the TealTeam server", with the agenda and the QR handoff). In the LAN test a scout's next assignment did open offline, most likely from Chromium's own page cache of a page that profile had already visited (over plain HTTP that showed Chrome's error page). Check it on a freshly set-up Chromebook before relying on it. Paper stays the fallback. Paper stays the fallback.
 
 **What this is not:** a public HTTPS site. Open decision 5 stands: nothing is served to the internet. There is no domain, no Let's Encrypt and no internet at the venue. The server is its own certificate authority (CA), trusted only by our own devices.
 
@@ -93,7 +93,7 @@ At the shop, with the full wired setup:
 Checked so far (2026-10-22, a desktop as the server on the LAN at 10.101.0.1, a second laptop driving Chromium 154 with the CA in its own certificate store):
 
 - without the CA: `ERR_CERT_AUTHORITY_INVALID` on https, and http still works; with it: no warning, `isSecureContext` true, `/sw.js` activated, `/api/sync/stream` over HTTP/2;
-- offline as a scout: save → **Offline · 1 held**; reload, and close and reopen the tab, both come back from the worker still holding it; the **next assignment opened offline**; back online, **Synced** within 2 s and the lead's queue has it once;
+- offline as a scout: save → **Offline · 1 held**; reload, and close and reopen the tab, both come back from the worker still holding it; the next assignment opened offline (likely the browser's page cache; the worker does not make forms, see Why); back online, **Synced** within 2 s and the lead's queue has it once;
 - sign-in, a full save, approve, Compare, Graph and Help over https with no console errors and no 4xx/5xx;
 - race tests over https: one record sent 12 times at once stored once, two scouts at once, 40 posts under constant sync pulls (20 of 20 stored once, 0 errors), 20 sign-ins at once;
 - `curl --cacert ca.crt` verified `10.101.0.1`, `localhost` and `tealteam.local` over TLS 1.3 with HTTP/2; a restart kept the CA and certificate.
