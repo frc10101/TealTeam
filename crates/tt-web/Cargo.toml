@@ -33,6 +33,10 @@ tracing-subscriber = { workspace = true }
 thiserror = { workspace = true }
 # `tt-web dev` drives the router in-process with `oneshot` (F13); the tests do too.
 tower = { version = "0.5", features = ["util"] }
+rcgen = { version = "0.13", default-features = false, features = ["ring", "pem", "x509-parser"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12", "logging"] }
+hyper-util = { version = "0.1.21", features = ["server", "server-auto", "tokio", "service", "http1", "http2"] }
 
 [dev-dependencies]
 form_urlencoded = { workspace = true }

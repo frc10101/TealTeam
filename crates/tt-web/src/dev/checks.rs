@@ -265,6 +265,11 @@ const ROUTES: &[(&str, &str, Access)] = &[
     ("GET", "/sign-up", Own("the sign-up page")),
     ("GET", "/account", Auth),
     ("GET", "/help", Open),
+    (
+        "GET",
+        "/ca.crt",
+        Own("the CA certificate: tls.rs; dev has no CA, so 404"),
+    ),
     ("GET", "/submission", Auth),
     ("GET", "/submission/download", Auth),
     ("GET", "/teams", Auth),

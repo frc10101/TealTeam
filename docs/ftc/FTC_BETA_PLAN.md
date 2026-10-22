@@ -1,6 +1,6 @@
 # FTC BIOBUZZ beta-test plan
 
-Status: **built, and frozen since 2026-10-21**: F1–F17 are done, and only fixes found in setup or rehearsal go in. What is left is §5's hardware rehearsal and F6's tag. Setting up the Pi and laptops: [`docs/event/SETUP_GUIDE.md`](../event/SETUP_GUIDE.md).
+Status: **built, and frozen since 2026-10-21**: F1–F17 are done, and only fixes found in setup or rehearsal go in. One exception, asked for after the 2026-10-22 LAN rehearsal: HTTPS with the server's own CA (H1 in `ACTION_ITEMS.md`, `docs/event/HTTPS_SETUP.md`). What is left is §5's hardware rehearsal and F6's tag. Setting up the Pi and laptops: [`docs/event/SETUP_GUIDE.md`](../event/SETUP_GUIDE.md).
 
 **Scope decision (2026-10-15): a separate, FTC-only branch, `ftc-biobuzz`, for one
 test event: **Alabama Athens Qualifier 1, Saturday 2026-10-24.** It is never merged back into `rebuild`.** The migration doc

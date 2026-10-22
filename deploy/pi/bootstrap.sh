@@ -250,6 +250,9 @@ fi
 cat <<EOF
 
 The server is at http://tealteam.local/  (or http://tealteam, or http://10.101.0.1/)
+and, once a device trusts http://tealteam.local/ca.crt, https://tealteam.local/
+(docs/event/HTTPS_SETUP.md). Copy the CA folder (/srv/tealteam/data/tls, or
+TLS_DIR) to the backup stick once: without it, every device must trust a new CA.
 Next: deploy/event/prep-event.sh on this Pi (over SSH), then each Chromebook's
 checklist (docs/event/SETUP_GUIDE.md).
 EOF

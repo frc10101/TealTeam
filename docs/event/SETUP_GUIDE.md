@@ -144,18 +144,19 @@ On the Pi, `deploy/event/prep-event.sh PROFILE` (the quick start above). It sign
 
 1. Plug the USB-C Ethernet adapter into the Chromebook and the cable into the switch.
 2. Turn **Wi-Fi off**: click the clock, click the Wi-Fi tile so it is grey. No hotspot, no Bluetooth tether.
-3. Open Chrome and go to **http://tealteam.local/**. If it does not open, try **http://tealteam/**, then **http://10.101.0.1/**. Type `http://`, not `https://`.
-4. Press Ctrl+D to bookmark it. Click the three dots, **Cast, save and share**, **Create shortcut**, tick **Open as window** if you like; right-click its icon and **Pin to shelf**.
-5. **Clear old data from earlier events:** go to `chrome://settings/content/all`, search `tealteam`, and delete the data for it (also any `10.101.0.1`).
-6. **Sign in** with your name and the temporary password from the sign-in sheet, then change it at **Account**.
-7. **Keep the screen on:** Settings, **Device**, **Power**, set **While charging** to **Keep display on**. Leave the charger plugged in.
-8. Open your scouting page once so the offline copy loads, then wait for your match.
+3. Open Chrome and go to **http://tealteam.local/**. If it does not open, try **http://tealteam/**, then **http://10.101.0.1/**.
+4. **Trust the server once** (HTTPS, `docs/event/HTTPS_SETUP.md`): open **http://tealteam.local/ca.crt** (it downloads). Go to `chrome://certificate-manager`, **Local certificates**, **Import**, pick **tealteam-ca.crt**, and tick **Trust this certificate for identifying websites**. Then open **https://tealteam.local/**: no warning, a padlock.
+5. Press Ctrl+D to bookmark the **https** address. Click the three dots, **Cast, save and share**, **Create shortcut**, tick **Open as window** if you like; right-click its icon and **Pin to shelf**.
+6. **Clear old data from earlier events:** go to `chrome://settings/content/all`, search `tealteam`, and delete the data for it (also any `10.101.0.1`).
+7. **Sign in** with your name and the temporary password from the sign-in sheet, then change it at **Account**.
+8. **Keep the screen on:** Settings, **Device**, **Power**, set **While charging** to **Keep display on**. Leave the charger plugged in.
+9. Open your scouting page once so the offline copy loads, then wait for your match.
 
 If the page will not open: check the cable and adapter, that the switch has power, and that Wi-Fi is off. Tell the lead scout.
 
 ## Scout card: scouting a match (print one per scout laptop)
 
-1. **Sign in** at **http://tealteam.local/** (or **http://10.101.0.1/**) and press **Start scouting**. Keep this tab open all day.
+1. **Sign in** at **https://tealteam.local/** (a certificate warning: use **http://tealteam.local/** and tell the lead) and press **Start scouting**. Keep this tab open all day.
 2. The page says **You are scouting** and the team number, with **Your next assignment** at the top. Find that robot on the field before the match starts: red or blue, and its number.
 3. **Fill it in while the match runs.** Tap **+** each time it scores. What you type is kept as you go, so a reload loses nothing.
 4. When the match ends, finish the notes and press **Save observation**. Then follow **Your next assignment** at the top.

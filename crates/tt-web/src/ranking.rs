@@ -330,10 +330,7 @@ pub async fn page(
                 rank: row.rank.map(|r| r.to_string()).unwrap_or_default(),
                 team: row.team_number,
                 name: row.name,
-                score: row
-                    .score
-                    .map(|s| tenths(s.average))
-                    .unwrap_or_default(),
+                score: row.score.map(|s| tenths(s.average)).unwrap_or_default(),
                 n,
                 thin: n < THIN_BELOW,
                 metrics,

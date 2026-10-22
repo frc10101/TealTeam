@@ -193,8 +193,9 @@ CARD = f"""
 <ol>
 <li>Plug the USB-C Ethernet adapter into the Chromebook and the cable into the switch.</li>
 <li>Turn <b>Wi-Fi off</b>: click the clock, click the Wi-Fi tile so it is grey. No hotspot, no Bluetooth tether.</li>
-<li>Open Chrome and go to <b>http://tealteam.local/</b>. If it does not open, try <b>http://tealteam/</b>, then <b>http://10.101.0.1/</b>. Type <code>http://</code>, not <code>https://</code>.</li>
-<li>Press Ctrl+D to bookmark it. Three dots &#8594; <b>Cast, save and share</b> &#8594; <b>Create shortcut</b> (tick <b>Open as window</b> if you like); right-click its icon &#8594; <b>Pin to shelf</b>.</li>
+<li>Open Chrome and go to <b>http://tealteam.local/</b>. If it does not open, try <b>http://tealteam/</b>, then <b>http://10.101.0.1/</b>.</li>
+<li><b>Trust the server once:</b> open <b>http://tealteam.local/ca.crt</b> (it downloads). Go to <code>chrome://certificate-manager</code> &#8594; <b>Local certificates</b> &#8594; <b>Import</b>, pick <b>tealteam-ca.crt</b>, tick <b>Trust this certificate for identifying websites</b>. Then open <b>https://tealteam.local/</b>: no warning, a padlock.</li>
+<li>Press Ctrl+D to bookmark the <b>https</b> address. Three dots &#8594; <b>Cast, save and share</b> &#8594; <b>Create shortcut</b> (tick <b>Open as window</b> if you like); right-click its icon &#8594; <b>Pin to shelf</b>.</li>
 <li><b>Clear old data from earlier events:</b> go to <code>chrome://settings/content/all</code>, search <code>tealteam</code>, delete its data (and any <code>10.101.0.1</code>).</li>
 <li><b>Sign in</b> with your name and the temporary password from the sign-in sheet, then change it at <b>Account</b>.</li>
 <li><b>Keep the screen on:</b> Settings &#8594; <b>Device</b> &#8594; <b>Power</b> &#8594; <b>While charging</b>: <b>Keep display on</b>. Leave the charger plugged in.</li>
@@ -230,7 +231,7 @@ SCOUT_CARD = boxed("""
 <h1>Scouting a match</h1>
 <p>Laptop: ______________ &nbsp;&nbsp; Scout: ______________________ &nbsp;&nbsp; Every match, in this order.</p>
 <ol>
-<li><b>Sign in</b> at <b>http://tealteam.local/</b> (or <b>http://10.101.0.1/</b>) and press <b>Start scouting</b>. Keep this tab open all day.</li>
+<li><b>Sign in</b> at <b>https://tealteam.local/</b> (a certificate warning: use <b>http://tealteam.local/</b> and tell the lead) and press <b>Start scouting</b>. Keep this tab open all day.</li>
 <li>The page says <b>You are scouting</b> and the team number, with <b>Your next assignment</b> at the top. Find that robot on the field before the match starts: red or blue, and its number.</li>
 <li><b>Fill it in while the match runs.</b> Tap <b>+</b> each time it scores. What you type is kept as you go, so a reload loses nothing.</li>
 <li>When the match ends, finish the notes and press <b>Save observation</b>. Then follow <b>Your next assignment</b> at the top.</li>
@@ -310,7 +311,8 @@ CHECKLISTS = (
     + checklist([
         "Cable before power; switch first, then the Pi; wait for the green light.",
         "<code>deploy/pi/network/status.sh</code> has no <code>FAIL</code>. Pi clock (<code>date</code>) is right.",
-        "One Chromebook opens <code>http://tealteam.local/</code>; then all of them, per the card.",
+        "One Chromebook opens <code>https://tealteam.local/</code> with no warning (its CA trusted, per the card); then all of them.",
+        "The CA folder (<code>/srv/tealteam/data/tls</code>) is on the backup stick.",
         "Schedule posted (save as <code>athens.csv</code>, header <code>match,red1,red2,blue1,blue2</code>, <code>*</code> = surrogate): run <code>prep-event.sh &#8230; --roster roster.csv --csv athens.csv</code>.",
         "Every match checked against the printed schedule.",
         "Print <code>signin-sheet-*.txt</code>, hand it out; shred it after the event.",
