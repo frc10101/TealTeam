@@ -19,7 +19,7 @@ use tt_core::records::MatchRecord;
 use tt_core::review::{self, Decision, ReviewState};
 use tt_core::user::User;
 use tt_repo::{Repo, StoredObservation};
-use tt_templates::{DeclinedNotice, Nav, QueueItem, ReviewPage, ReviewQueue, scout_href};
+use tt_templates::{Nav, QueueItem, ReviewPage, ReviewQueue};
 
 use crate::events::EventContext;
 use crate::startup::AppState;
@@ -384,43 +384,4 @@ pub async fn reopen(state: &AppState, user: &User, id: i64) -> Result<String, Re
         detail_href(id, &o.event_key),
         ReviewState::Pending.as_str()
     ))
-}
-
-/// What the scouting page tells a scout about their declined records (L10).
-pub async fn declined_notices(
-    state: &AppState,
-    user: &User,
-    context: &EventContext,
-    matches: &[MatchRecord],
-) -> Vec<DeclinedNotice> {
-    let Some(event) = &context.selected else {
-        return Vec::new();
-    };
-    let declined = state
-        .repo
-        .declined_for(&event.key, user.id)
-        .await
-        .unwrap_or_else(|e| {
-            warn!("declined observations for {}: {e}", user.id);
-            Vec::new()
-        });
-    declined
-        .iter()
-        .map(|o| {
-            let label = matches
-                .iter()
-                .find(|m| m.key == o.match_key)
-                .map(MatchRecord::label)
-                .unwrap_or_else(|| o.match_key.clone());
-            DeclinedNotice {
-                what: format!("team {} in {label}", o.team_number),
-                reason: o.review_note.clone().unwrap_or_default(),
-                reviewer: o
-                    .reviewer_name
-                    .clone()
-                    .unwrap_or_else(|| "The lead scout".into()),
-                href: scout_href(&o.event_key, &o.match_key, Some(o.team_number)),
-            }
-        })
-        .collect()
 }

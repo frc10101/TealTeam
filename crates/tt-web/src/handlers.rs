@@ -40,7 +40,7 @@ use crate::ranking::{self, RankingParams};
 use crate::refused::{self, ResolvedParam};
 use crate::review::{self, ReviewedParam};
 use crate::schedule;
-use crate::scouting::{self, ScoutParams};
+use crate::scouting::{self, ScoutQuery};
 use crate::standings;
 use crate::startup::AppState;
 use crate::teams::{self, TeamParam};
@@ -1235,7 +1235,7 @@ pub async fn submission(
     State(state): State<AppState>,
     Auth(user): Auth,
     EventParam(requested): EventParam,
-    params: ScoutParams,
+    ScoutQuery(params): ScoutQuery,
     headers: HeaderMap,
 ) -> Response {
     let (nav, context) = event_page(&state, Some(&user), requested.as_deref()).await;
