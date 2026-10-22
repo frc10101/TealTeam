@@ -508,7 +508,7 @@ Per-owning-team, per-event ordered list of picked teams with a color tag, a cros
 
 ## 6. Upstream integrations
 
-Detailed endpoint catalogs and payload examples are in [FRC_API_Calls.md](FRC_API_Calls.md) and [TBA_SCHEMA_FIX_SUMMARY.md](TBA_SCHEMA_FIX_SUMMARY.md). What follows is the behavior around them.
+Detailed endpoint catalogs and payload examples are in [FRC_API_CALLS.md](reference/FRC_API_CALLS.md) and [TBA_SCHEMA_FIX_SUMMARY.md](reference/TBA_SCHEMA_FIX_SUMMARY.md). What follows is the behavior around them.
 
 ### 6.1 FIRST Events API
 
@@ -560,7 +560,7 @@ Event keys are normalized to `"{season}{code}"` if not already prefixed. Team ke
 - `red1..blue3` are parsed from TBA team keys by stripping the `frc` prefix.
 - Unix timestamps of `0` or less become `NULL`, not epoch.
 
-**TBA schema variance is real and recurring.** Ranking and points fields move between seasons; the retired code carried fallback extraction (`effective_qual_average`, `effective_total_points`, `effective_qual_points`, `effective_avg_match_points`) that tried several field shapes. Read `TBA_SCHEMA_FIX_SUMMARY.md` before writing the deserializers — that document exists because this cost real debugging time.
+**TBA schema variance is real and recurring.** Ranking and points fields move between seasons; the retired code carried fallback extraction (`effective_qual_average`, `effective_total_points`, `effective_qual_points`, `effective_avg_match_points`) that tried several field shapes. Read `reference/TBA_SCHEMA_FIX_SUMMARY.md` before writing the deserializers — that document exists because this cost real debugging time.
 
 ### 6.3 HTTP client conventions (both APIs)
 
@@ -763,14 +763,14 @@ That is true for 24 hours after someone closes the tab, so auto-distribute happi
 
 | Document | Why it survived |
 | --- | --- |
-| [FRC_API_Calls.md](FRC_API_Calls.md) | Endpoint catalog and payload examples for FIRST and TBA. Upstream, not ours — still true. |
-| [TBA_SCHEMA_FIX_SUMMARY.md](TBA_SCHEMA_FIX_SUMMARY.md) | Hard-won knowledge about TBA schema variance across seasons. Read before writing deserializers. |
-| [TIMEZONE_HANDLING.md](TIMEZONE_HANDLING.md) | Event-timezone rules. Store UTC, render in the event's IANA zone. |
-| [DataPoints.md](DataPoints.md) | What gets collected and what gets derived, in domain terms. |
-| [TEAM_STATS_DISPLAY.md](TEAM_STATS_DISPLAY.md) | What the team page shows and why each number matters to a scout. |
-| [MATCH_DETECTION.md](MATCH_DETECTION.md) | Match-source flow sketch. |
-| [PREDICTIONS_REIMPLEMENTATION.md](PREDICTIONS_REIMPLEMENTATION.md) | The removed OPR/DPR score-prediction feature and its formulas, kept for reimplementation. File paths in it refer to deleted code; the math does not. |
-| [TEALTEAM_DETAILED_OVERVIEW_SOURCE.md](TEALTEAM_DETAILED_OVERVIEW_SOURCE.md) | Dense domain synthesis — purpose, users, outcomes. Its stack and deployment sections describe the retired implementation; ignore those. |
+| [FRC_API_CALLS.md](reference/FRC_API_CALLS.md) | Endpoint catalog and payload examples for FIRST and TBA. Upstream, not ours — still true. |
+| [TBA_SCHEMA_FIX_SUMMARY.md](reference/TBA_SCHEMA_FIX_SUMMARY.md) | Hard-won knowledge about TBA schema variance across seasons. Read before writing deserializers. |
+| [TIMEZONE_HANDLING.md](reference/TIMEZONE_HANDLING.md) | Event-timezone rules. Store UTC, render in the event's IANA zone. |
+| [DATA_POINTS.md](legacy/DATA_POINTS.md) | What gets collected and what gets derived, in domain terms. |
+| [TEAM_STATS_DISPLAY.md](legacy/TEAM_STATS_DISPLAY.md) | What the team page shows and why each number matters to a scout. |
+| [MATCH_DETECTION.md](legacy/MATCH_DETECTION.md) | Match-source flow sketch. |
+| [PREDICTIONS_REIMPLEMENTATION.md](legacy/PREDICTIONS_REIMPLEMENTATION.md) | The removed OPR/DPR score-prediction feature and its formulas, kept for reimplementation. File paths in it refer to deleted code; the math does not. |
+| [TEALTEAM_OVERVIEW_SOURCE.md](legacy/TEALTEAM_OVERVIEW_SOURCE.md) | Dense domain synthesis — purpose, users, outcomes. Its stack and deployment sections describe the retired implementation; ignore those. |
 
 Deleted as server-architecture-specific or as descriptions of code that no longer exists: `ARCHITECTURE.md`, `ARCHITECTURE_DIAGRAM.md`, `PI_EVENT_BOOT.md`, `SIGNUP_DATA_SYNC.md`, `TEAM_PAGE_ANALYSIS.md`, `TEAM_STATS_SYNC.md`, `AUTO_PATH_REMOVAL_RECORD.md`. Their surviving content — sync cadence, upsert rules, the auth-time team sync, the team-page flow — is in §5 and §6 above.
 

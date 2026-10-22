@@ -148,7 +148,7 @@ pub fn is_stale(synced_at: Option<DateTime<Utc>>, now: DateTime<Utc>) -> bool {
 /// "just now", "5 minutes ago", "2 hours ago", "3 days ago".
 ///
 /// Relative rather than a clock time, so it needs no timezone: neither the Pi's
-/// zone nor the event's enters into it (TIMEZONE_HANDLING.md). A negative age
+/// zone nor the event's enters into it (docs/reference/TIMEZONE_HANDLING.md). A negative age
 /// -- a clock stepped backwards -- reads as "just now" rather than nonsense.
 pub fn describe_age(age: TimeDelta) -> String {
     let minutes = age.num_minutes();
