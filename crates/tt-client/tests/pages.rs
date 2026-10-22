@@ -29,6 +29,11 @@ fn at(minute: u32) -> DateTime<Utc> {
 }
 
 /// During 2026here.
+/// A record id for a form the device makes (OF1).
+fn fresh() -> String {
+    "01890000-0000-7000-8000-000000000001".into()
+}
+
 fn now() -> DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 3, 14, 18, 0, 0).unwrap()
 }
@@ -357,6 +362,7 @@ async fn the_worker_answers_the_addresses_it_knows_and_no_others() {
         "/teams",
         "event=2026HERE&team=+254+",
         now(),
+        &fresh,
     )
     .await
     .expect("the team page is made here");
@@ -383,16 +389,20 @@ async fn the_worker_answers_the_addresses_it_knows_and_no_others() {
     assert!(page.contains(r#"href="/notes?event=2026here""#));
     assert!(!page.contains("/lead-scout"));
 
-    let roster = render(&device, &season, "/teams", "", now()).await.unwrap();
+    let roster = render(&device, &season, "/teams", "", now(), &fresh)
+        .await
+        .unwrap();
     assert!(roster.contains("Citrus"), "the roster at the default event");
 
-    let home = render(&device, &season, "/", "", now()).await.unwrap();
+    let home = render(&device, &season, "/", "", now(), &fresh)
+        .await
+        .unwrap();
     assert!(home.contains("copy of team 10101's data") && home.contains(r#"id="offline-agenda""#));
     assert!(
         !home.contains("/sign-in"),
         "no sign-in the device cannot do"
     );
-    let notes = render(&device, &season, "/notes", "team=254", now())
+    let notes = render(&device, &season, "/notes", "team=254", now(), &fresh)
         .await
         .unwrap();
     assert!(notes.contains("10101&#39;s notes"));
@@ -403,6 +413,7 @@ async fn the_worker_answers_the_addresses_it_knows_and_no_others() {
         "/graph",
         "chosen=1&team=254&metric=points&metric=opr",
         now(),
+        &fresh,
     )
     .await
     .unwrap();
@@ -415,12 +426,13 @@ async fn the_worker_answers_the_addresses_it_knows_and_no_others() {
     }
 
     // The coach's schedule, for the copy's team, though the tab is not offered.
-    let coach = render(&device, &season, "/drive-coach", "", now())
+    let coach = render(&device, &season, "/drive-coach", "", now(), &fresh)
         .await
         .unwrap();
     assert!(coach.contains(r#"id="device-page""#) && coach.contains(r#"id="coach-schedule""#));
     assert!(!page.contains(r#"href="/drive-coach"#));
 
+    // With no scout named yet (OF1), there is no scouting page to make.
     for elsewhere in [
         "/lead-scout",
         "/submission",
@@ -429,10 +441,105 @@ async fn the_worker_answers_the_addresses_it_knows_and_no_others() {
         "/api/sync/pull",
     ] {
         assert!(
-            render(&device, &season, elsewhere, "event=2026here", now())
+            render(&device, &season, elsewhere, "event=2026here", now(), &fresh)
                 .await
                 .is_none(),
             "{elsewhere} is the server's to answer"
         );
     }
+}
+
+/// OF1: with no server, a scout scouts on. The scouting page is made here for
+/// whoever the last signed-in page named, a save is checked as the server
+/// checks it and queued, and the one-per-robot rule holds on the device too.
+#[tokio::test]
+async fn the_device_scouts_and_queues_with_no_server() {
+    use tt_client::pages::{SaveOutcome, save};
+
+    let dir = Dir::new("scouting");
+    let season = current_season().unwrap();
+    let (pi, device) = fixture(&dir, &season).await;
+    let sam = pi
+        .credentials_by_email("sam@x")
+        .await
+        .unwrap()
+        .expect("sam")
+        .user;
+    let claims = tt_core::token::Claims::new(&sam, "tablet-uuid", 0, now());
+    device.remember_viewer(&claims, now()).await.unwrap();
+    assert_eq!(device.viewer().unwrap(), Some(claims.clone()), "kept");
+
+    // Sam's form for 10101 in Q2, made here.
+    let form = render(
+        &device,
+        &season,
+        "/submission",
+        "event=2026here&match=2026here_qm2&team=10101",
+        now(),
+        &fresh,
+    )
+    .await
+    .expect("the scouting page is made here");
+    assert!(
+        form.contains(r#"id="device-page""#),
+        "says where it came from"
+    );
+    assert!(form.contains(r#"id="scout-form""#), "{form}");
+    assert!(form.contains(&fresh()), "a new form gets a new record id");
+
+    // Saved here, and queued for the Pi.
+    let id = "01890000-0000-7000-8000-0000000000aa";
+    let body = format!(
+        "event=2026here&match=2026here_qm2&team=10101&record_id={id}&f.robot_status=played&f.notes=held"
+    );
+    let saved = save(&device, &season, &body, now(), &fresh).await;
+    let Some(SaveOutcome::Saved(next)) = saved else {
+        panic!("{saved:?}");
+    };
+    assert_eq!(
+        next,
+        "/submission?event=2026here&match=2026here_qm2&saved=10101"
+    );
+    assert_eq!(device.waiting_count().unwrap(), 1);
+    assert!(device.is_queued(id).unwrap());
+
+    // The confirmation says it is held, and the robot is recorded.
+    let query = next.split_once('?').unwrap().1;
+    let confirmed = render(&device, &season, "/submission", query, now(), &fresh)
+        .await
+        .unwrap();
+    assert!(confirmed.contains("on this tablet"), "{confirmed}");
+
+    // The same form again is the same entry; another form for that robot is
+    // the one-per-robot rule, as on the server.
+    let again = save(&device, &season, &body, now(), &fresh).await;
+    assert!(matches!(again, Some(SaveOutcome::Saved(_))));
+    assert_eq!(device.waiting_count().unwrap(), 1, "not queued twice");
+    let second = body.replace(id, "01890000-0000-7000-8000-0000000000bb");
+    let Some(SaveOutcome::Page(refused)) = save(&device, &season, &second, now(), &fresh).await
+    else {
+        panic!("refused");
+    };
+    assert!(
+        refused.contains("one observation per robot per match"),
+        "{refused}"
+    );
+    assert_eq!(device.waiting_count().unwrap(), 1);
+
+    // A form missing an answer comes back with its answers and why.
+    let missing = "event=2026here&match=2026here_qm2&team=5&record_id=01890000-0000-7000-8000-0000000000cc&f.notes=kept";
+    let Some(SaveOutcome::Page(again)) = save(&device, &season, missing, now(), &fresh).await
+    else {
+        panic!("a form to fix");
+    };
+    assert!(
+        again.contains("kept") && again.contains(r#"id="scout-form""#),
+        "{again}"
+    );
+
+    // Help is made here too.
+    let help = render(&device, &season, "/help", "", now(), &fresh)
+        .await
+        .unwrap();
+    assert!(help.contains(r#"id="device-page""#));
 }

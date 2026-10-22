@@ -664,3 +664,33 @@ async fn sync_with_an_empty_outbox_is_the_pull_alone() {
     let file: JsonValue = serde_json::from_str(&device.export_outbox(at(12)).unwrap()).unwrap();
     assert_eq!(file["observations"][0]["client_record_id"], MINE);
 }
+
+/// OF1: the Pi records a push as whoever sends it, so on a shared tablet a
+/// sync pushes only the asking scout's forms; another scout's wait for their
+/// own page.
+#[tokio::test]
+async fn a_sync_pushes_only_the_asking_scouts_forms() {
+    let device = device("shared").await;
+    let schema = device.schema().unwrap().unwrap();
+    device
+        .queue_observation(&observation(MINE, 254, 7), at(5))
+        .await
+        .unwrap();
+    device
+        .queue_observation(&observation(OTHER, 1678, 8), at(6))
+        .await
+        .unwrap();
+
+    let pi = Pi::answers([recorded(schema, &[MINE]), pulled(schema, json!([]), 0)]);
+    let report = SyncClient::new(&pi, vec![])
+        .pushing_for(Some(7))
+        .sync(&device, at(10))
+        .await
+        .unwrap();
+    assert_eq!(report.sent, 1);
+    let asked = pi.asked.borrow();
+    let pushed: Push = serde_json::from_str(asked[0].1.as_deref().unwrap()).unwrap();
+    assert_eq!(pushed.observations.len(), 1);
+    assert_eq!(pushed.observations[0].client_record_id, MINE);
+    assert!(device.is_queued(OTHER).unwrap(), "scout 8's waits");
+}

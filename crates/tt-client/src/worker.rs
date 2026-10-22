@@ -24,6 +24,14 @@
 //! schema, which only the wasm module can read. `wasm_bindgen.exportOutbox()`
 //! is the outbox as a file ([`crate::ClientRepo::export_outbox`]), for when
 //! it cannot be pushed: a device whose build the Pi has moved past (S11).
+//!
+//! OF1: `wasm_bindgen.remember(bearer)` keeps who scouts here
+//! ([`crate::viewer`]), from a signed-in page's token; `sync` does too.
+//! `wasm_bindgen.save(body)` is a scouting form posted with no server
+//! ([`crate::pages::save`]): `{"saved": url}` when it is queued, `{"page":
+//! html}` when it is not and the page says why, or `null` for the page's own
+//! outbox (C13) to hold it. `wasm_bindgen.queued()` is how many forms wait
+//! in the outbox, for the chip on every page.
 
 use std::sync::OnceLock;
 
@@ -54,6 +62,18 @@ fn season() -> Option<&'static SeasonSchema> {
         .as_ref()
 }
 
+/// A record id for a new form (D7): a UUIDv7 from the device's clock and
+/// `Math.random`, as the courier makes its log ids.
+fn fresh_id() -> String {
+    let now = js_sys::Date::now() as u64;
+    let random: [u8; 10] = std::array::from_fn(|_| (js_sys::Math::random() * 256.0) as u8);
+    tt_core::record_id::uuid_v7(now, random)
+}
+
+fn now() -> chrono::DateTime<chrono::Utc> {
+    DateTime::from_timestamp_millis(js_sys::Date::now() as i64).unwrap_or_default()
+}
+
 /// The page at `path?query`, made from this device's copy, or `null`.
 ///
 /// `null` too when there is no copy to make it from: over plain http, or
@@ -71,10 +91,72 @@ pub async fn render(path: String, query: String) -> JsValue {
             return JsValue::NULL;
         }
     };
-    let now = DateTime::from_timestamp_millis(js_sys::Date::now() as i64).unwrap_or_default();
-    match crate::pages::render(&repo, season, &path, &query, now).await {
+    match crate::pages::render(&repo, season, &path, &query, now(), &fresh_id).await {
         Some(html) => html.into(),
         None => JsValue::NULL,
+    }
+}
+
+/// Keep who scouts here, from a signed-in page's credential (OF1). `true`
+/// when it was kept: there is a copy and the token reads.
+#[wasm_bindgen]
+pub async fn remember(bearer: Option<String>) -> bool {
+    let Some(claims) = bearer.as_deref().and_then(crate::viewer::claims_of) else {
+        return false;
+    };
+    let repo = match opfs::open().await {
+        Ok(repo) => repo,
+        Err(RepoError::Unavailable(_)) => return false,
+        Err(e) => {
+            warn(&format!("TealTeam: opening this device's copy: {e}"));
+            return false;
+        }
+    };
+    repo.remember_viewer(&claims, now())
+        .await
+        .inspect_err(|e| warn(&format!("TealTeam: keeping who scouts here: {e}")))
+        .is_ok()
+}
+
+/// What [`save`] answers, as JSON.
+#[derive(Serialize)]
+#[serde(rename_all = "lowercase")]
+enum SaveJson {
+    Saved(String),
+    Page(String),
+}
+
+/// A scouting form posted with no server (OF1), as its urlencoded body.
+#[wasm_bindgen]
+pub async fn save(body: String) -> JsValue {
+    let Some(season) = season() else {
+        return JsValue::NULL;
+    };
+    let repo = match opfs::open().await {
+        Ok(repo) => repo,
+        Err(RepoError::Unavailable(_)) => return JsValue::NULL,
+        Err(e) => {
+            warn(&format!("TealTeam: opening this device's copy: {e}"));
+            return JsValue::NULL;
+        }
+    };
+    let answer = match crate::pages::save(&repo, season, &body, now(), &fresh_id).await {
+        Some(crate::pages::SaveOutcome::Saved(url)) => SaveJson::Saved(url),
+        Some(crate::pages::SaveOutcome::Page(html)) => SaveJson::Page(html),
+        None => return JsValue::NULL,
+    };
+    serde_json::to_string(&answer)
+        .map(JsValue::from)
+        .unwrap_or(JsValue::NULL)
+}
+
+/// How many forms this device's outbox still has to send, for the chip
+/// (OF1); 0 with no copy.
+#[wasm_bindgen]
+pub async fn queued() -> u32 {
+    match opfs::open().await {
+        Ok(repo) => repo.waiting_count().unwrap_or(0) as u32,
+        Err(_) => 0,
     }
 }
 
@@ -181,12 +263,24 @@ pub async fn sync(bearer: Option<String>) -> JsValue {
         }
     };
     let events = opfs::snapshot_events().await;
-    let now = DateTime::from_timestamp_millis(js_sys::Date::now() as i64).unwrap_or_default();
+    let now = now();
+    let bearer = bearer.filter(|t| !t.is_empty());
+    // Whose page asked: theirs are the forms to push (OF1). Without a token,
+    // the scout the last page named.
+    let claims = bearer.as_deref().and_then(crate::viewer::claims_of);
+    if let Some(claims) = &claims
+        && let Err(e) = repo.remember_viewer(claims, now).await
+    {
+        warn(&format!("TealTeam: keeping who scouts here: {e}"));
+    }
+    let scouter = claims
+        .or_else(|| repo.viewer().ok().flatten())
+        .map(|c| c.user_id);
     let transport = Fetch {
-        bearer: bearer.filter(|t| !t.is_empty()),
+        bearer,
         timeout_ms: Some(15_000),
     };
-    let client = SyncClient::new(transport, events);
+    let client = SyncClient::new(transport, events).pushing_for(scouter);
     let report = match client.sync(&repo, now).await {
         Ok(report) => report,
         Err(e) => {

@@ -47,6 +47,7 @@ mod sql;
 pub mod sync;
 mod upstream;
 mod users;
+pub mod viewer;
 #[cfg(target_arch = "wasm32")]
 mod worker;
 
