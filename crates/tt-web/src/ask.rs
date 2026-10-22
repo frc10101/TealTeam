@@ -2,7 +2,7 @@
 //!
 //! Off unless `ASK_BACKEND` is set. A question is answered by a language model
 //! from the data sheet `tt_core::ask` builds, and nothing else; the page shows
-//! the sheet under the answer. See `docs/SCOUTING_ASSISTANT.md`.
+//! the sheet under the answer. See `docs/design/SCOUTING_ASSISTANT.md`.
 //!
 //! - `ASK_BACKEND=local`: any OpenAI-compatible chat endpoint at `ASK_URL`,
 //!   such as `llama-server` on the Pi (the team's laptops are Chromebooks,
@@ -344,7 +344,7 @@ pub async fn page(
     let mut page = AskPage::new(nav);
     let Some(assistant) = assistant else {
         page.unavailable = "The assistant is not set up on this server. An admin can turn it \
-            on with ASK_BACKEND in the server's settings: docs/SCOUTING_ASSISTANT.md."
+            on with ASK_BACKEND in the server's settings: docs/design/SCOUTING_ASSISTANT.md."
             .into();
         return page;
     };

@@ -7,7 +7,7 @@
     "The 2026-2027 FTC game is BIOBUZZ presented by RTX. These are the stats",
     "scouts record for it, built against the Competition Manual version TU05.",
     "Rules change through Team Updates: re-check manual sections 10.5 and 13.6",
-    "before each event. See docs/FTC_BETA_PLAN.md section 3.",
+    "before each event. See docs/ftc/FTC_BETA_PLAN.md section 3.",
     "",
     "Point values are given only where one robot directly earns them under",
     "Table 10-2 (LEAVE 3, PARK 5, GARDEN 1 each). Everything else starts at 0;",
@@ -21,7 +21,7 @@
     "ownership (whose NECTAR is on top at the buzzer) is an alliance result read",
     "off the score sheet, so it is not asked. Counter caps are ceilings no robot",
     "should reach, not expected values. Rationale per field:",
-    "docs/FTC_BETA_SCHEMA_REVIEW.md.",
+    "docs/ftc/FTC_BETA_SCHEMA_REVIEW.md.",
     "",
     "This file is the single source of truth for three things at once: the",
     "scouting form's fields, the validation applied to submitted payloads, and",
@@ -30,7 +30,7 @@
     "Field keys are payload keys. Renaming one breaks existing data -- add a new",
     "field and bump 'version' instead. crates/tt-core/src/season.rs validates this",
     "file on every test run, so a typo here is a red build, not an event-day",
-    "surprise. See docs/ACTION_ITEMS.md D4."
+    "surprise. See docs/plan/ACTION_ITEMS.md D4."
   ],
 
   "sections": [

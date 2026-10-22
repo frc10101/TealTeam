@@ -1,9 +1,9 @@
 # FTC BIOBUZZ beta: schema review
 
 This is the schema review for `crates/tt-core/seasons/2026.json` on the
-`ftc-biobuzz` branch (step F2 of `docs/FTC_BETA_PLAN.md`, revised in the F8
+`ftc-biobuzz` branch (step F2 of `docs/ftc/FTC_BETA_PLAN.md`, revised in the F8
 accuracy pass). The columns answer
-the checklist in `docs/FTC_BIOBUZZ_MIGRATION.md` ("Schema review checklist").
+the checklist in `docs/ftc/FTC_BIOBUZZ_MIGRATION.md` ("Schema review checklist").
 It was built against the *2026-2027 FTC Competition Manual, BIOBUZZ, TU05*.
 
 How unknown answers are stored, for every field kind:

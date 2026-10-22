@@ -1,4 +1,4 @@
-//! Teams side by side (DR1, `docs/DATA_REVIEW.md`): the numbers a lead reads
+//! Teams side by side (DR1, `docs/design/DATA_REVIEW.md`): the numbers a lead reads
 //! before alliance selection, one column per team, one row per thing scouts
 //! record.
 //!

@@ -63,7 +63,7 @@ commands:
               ./dev-data, with the access checks run on it. --fresh wipes the
               data first; --check seeds, checks, reports and exits (0 or 1).
               Never reads DATABASE_URL or .env; refuses TEALTEAM_ENV=prod.
-              docs/DEV_ENVIRONMENT.md
+              docs/dev/DEV_ENVIRONMENT.md
   help        show this message
 
 Configuration comes from the environment and .env files; see .env.example.";

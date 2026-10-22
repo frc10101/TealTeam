@@ -6,7 +6,7 @@ The server keeps everything in one SQLite file. On the Pi it belongs on an NVMe 
 
 ## What the server already does
 
-- **WAL mode, one writer, every commit on the disk.** The database runs in WAL mode, so readers never wait for the writer, with `synchronous=FULL`: each commit is flushed to the SSD before the scout is told "saved", so a power cut cannot take back a save. Under `NORMAL` it could (found in Q3, changed in Q3b). The flush is an fsync per commit, well under a millisecond on an NVMe drive; see [LOAD_TEST.md](LOAD_TEST.md#synchronousfull-q3b). The server holds **one** connection, so its writes queue up one at a time; a second write waits up to 5 seconds rather than failing. Tests in `tt-repo-sqlite` check both on a real file.
+- **WAL mode, one writer, every commit on the disk.** The database runs in WAL mode, so readers never wait for the writer, with `synchronous=FULL`: each commit is flushed to the SSD before the scout is told "saved", so a power cut cannot take back a save. Under `NORMAL` it could (found in Q3, changed in Q3b). The flush is an fsync per commit, well under a millisecond on an NVMe drive; see [LOAD_TEST.md](../dev/LOAD_TEST.md#synchronousfull-q3b). The server holds **one** connection, so its writes queue up one at a time; a second write waits up to 5 seconds rather than failing. Tests in `tt-repo-sqlite` check both on a real file.
 - **Says where the database is.** At startup it logs the full path and the device under it:
 
   ```

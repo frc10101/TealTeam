@@ -1,6 +1,6 @@
 //! FTC Events API payloads for the one optional pull (FTC_BETA_PLAN.md, F7).
 //!
-//! One event, `USALATQ`, season 2026; `docs/FTC_BETA_API.md` has the mapping.
+//! One event, `USALATQ`, season 2026; `docs/ftc/FTC_BETA_API.md` has the mapping.
 //! Events and teams have FRC's field names, so they reuse
 //! [`FirstEvent`](crate::upstream::FirstEvent) and
 //! [`FirstTeam`](crate::upstream::FirstTeam) inside FTC's lowercase

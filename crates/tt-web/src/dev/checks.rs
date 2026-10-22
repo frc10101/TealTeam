@@ -4,7 +4,7 @@
 //! Each check drives `startup::router` (the same app `serve` runs) with
 //! `tower::ServiceExt::oneshot`, as one seeded user, and prints PASS or FAIL
 //! with the user and the route. The rules come from the code and from
-//! `docs/REBUILD_SPEC.md` and `docs/ACTION_ITEMS.md`; where a check cites a
+//! `docs/plan/REBUILD_SPEC.md` and `docs/plan/ACTION_ITEMS.md`; where a check cites a
 //! rule, the comment says where it is stated. A FAIL is either a real hole or
 //! a wrong expectation: find out which.
 //!

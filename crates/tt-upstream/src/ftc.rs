@@ -1,7 +1,7 @@
 //! The optional FTC Events API pull (FTC_BETA_PLAN.md, F7).
 //!
 //! One event, `USALATQ` in season 2026, over HTTP basic auth to
-//! `https://ftc-api.firstinspires.org/v2.0`. `docs/FTC_BETA_API.md` has the
+//! `https://ftc-api.firstinspires.org/v2.0`. `docs/ftc/FTC_BETA_API.md` has the
 //! mapping. A pull fetches the event, its teams, the qualification hybrid
 //! schedule, the rankings, and the qualification score sheets, and stores
 //! them the way the CSV import (F3) does:

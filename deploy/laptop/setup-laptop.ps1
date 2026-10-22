@@ -1,5 +1,5 @@
 # Windows laptop for an event (F12). OPTIONAL: the team's Chromebooks use the
-# ChromeOS checklist in docs/SETUP_GUIDE.md instead.
+# ChromeOS checklist in docs/event/SETUP_GUIDE.md instead.
 #
 #   powershell -ExecutionPolicy Bypass -File deploy\laptop\setup-laptop.ps1 [-PiIp 10.101.0.1] [-DryRun] [-Undo]
 #

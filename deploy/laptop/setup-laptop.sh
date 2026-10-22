@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Get a Linux or macOS laptop ready for an event (F12). OPTIONAL: the team's
 # Lenovo Chromebooks cannot run this; they use the ChromeOS checklist in
-# docs/SETUP_GUIDE.md. This is for a Linux/Mac laptop if you have one.
+# docs/event/SETUP_GUIDE.md. This is for a Linux/Mac laptop if you have one.
 #
 #   deploy/laptop/setup-laptop.sh [--pi-ip 10.101.0.1] [--dry-run] [--undo]
 #

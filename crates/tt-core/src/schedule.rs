@@ -394,7 +394,7 @@ pub fn format(matches: &[(i32, Alliance, Alliance)]) -> String {
 mod tests {
     use super::*;
 
-    const REHEARSAL: &str = include_str!("../../../docs/FTC_BETA_REHEARSAL_SCHEDULE.csv");
+    const REHEARSAL: &str = include_str!("../../../docs/ftc/FTC_BETA_REHEARSAL_SCHEDULE.csv");
 
     #[test]
     fn the_header_follows_the_alliance_size() {

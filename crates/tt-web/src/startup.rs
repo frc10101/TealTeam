@@ -208,7 +208,7 @@ fn log_storage(url: &str) {
     match tt_repo_sqlite::storage::locate(url) {
         Some(at) if at.on_sd_card() => warn!(
             "database is at {} -- an SD card wears out under a database's writes \
-             and fails mid-event. Move it to the SSD: docs/PI_STORAGE.md",
+             and fails mid-event. Move it to the SSD: docs/event/PI_STORAGE.md",
             at.describe()
         ),
         Some(at) => info!("database is at {}", at.describe()),
@@ -5936,7 +5936,7 @@ mod flow_tests {
 
     // ── Seeding the schedule by hand (F3) ────────────────────────────────────
 
-    const REHEARSAL: &str = include_str!("../../../docs/FTC_BETA_REHEARSAL_SCHEDULE.csv");
+    const REHEARSAL: &str = include_str!("../../../docs/ftc/FTC_BETA_REHEARSAL_SCHEDULE.csv");
 
     fn schedule_form(code: &str, schedule: &str, roster: &str) -> String {
         form_urlencoded::Serializer::new(String::new())

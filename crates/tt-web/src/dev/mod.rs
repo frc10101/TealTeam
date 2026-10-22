@@ -1,6 +1,6 @@
 //! `tt-web dev` (F13): a local server on a throwaway database full of fake
 //! data, and the access-control checks run against it. See
-//! `docs/DEV_ENVIRONMENT.md`.
+//! `docs/dev/DEV_ENVIRONMENT.md`.
 //!
 //! Safety first: dev mode has its own data folder (`./dev-data/`), never
 //! reads `DATABASE_URL` or any `.env`, refuses to run when `TEALTEAM_ENV` is

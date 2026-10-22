@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the printable event papers as .docx (to edit) and .pdf (to print).
 
-    python3 docs/print/build.py
+    python3 docs/event/print/build.py
 
 Needs LibreOffice (`soffice`) and nothing else. Each paper is written here
 as simple HTML that LibreOffice imports as a Writer document, then saved as
@@ -23,7 +23,7 @@ import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parent.parent
+ROOT = HERE.parents[2]
 SCHEMA = ROOT / "crates/tt-core/seasons/2026.json"
 
 STYLE = """
@@ -286,7 +286,7 @@ def main():
                      "--convert-to", fmt, "--outdir", str(HERE), str(src)],
                     check=True, stdout=subprocess.DEVNULL,
                 )
-            print(f"wrote docs/print/{name}.docx and .pdf")
+            print(f"wrote docs/event/print/{name}.docx and .pdf")
 
 
 if __name__ == "__main__":

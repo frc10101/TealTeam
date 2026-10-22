@@ -74,7 +74,7 @@ fn describe(dir: &Path) {
         warn!(
             "backing up every 10 minutes to {} -- the SD card, which is what the \
              backups are meant to survive. Set BACKUP_DIR to a folder on the SSD: \
-             docs/PI_STORAGE.md",
+             docs/event/PI_STORAGE.md",
             at.describe()
         );
     } else {
@@ -95,7 +95,7 @@ pub async fn copy(
     let Some(dir) = to.or_else(|| config.backup_copy_to.clone()) else {
         bail!(
             "say where to copy it: tt-web backup /media/usb, or set BACKUP_COPY_TO. \
-             Where the off-site copy goes is open decision 6 in docs/ACTION_ITEMS.md"
+             Where the off-site copy goes is open decision 6 in docs/plan/ACTION_ITEMS.md"
         );
     };
     if storage::locate(&config.database_url).is_none_or(|at| at.path.is_none()) {

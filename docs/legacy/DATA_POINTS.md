@@ -2,7 +2,7 @@
 
 > **Historical.** Describes the implementation retired on 2026-08-26, not the code in this repository. Kept for the domain knowledge in it.
 >
-> What is collected is now season-driven: see `crates/tt-core/seasons/2026.json` and [REBUILD_SPEC §2.4](../REBUILD_SPEC.md#2-data-model).
+> What is collected is now season-driven: see `crates/tt-core/seasons/2026.json` and [REBUILD_SPEC §2.4](../plan/REBUILD_SPEC.md#2-data-model).
 
 ```mermaid
 flowchart LR

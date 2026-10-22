@@ -1,3 +1,3 @@
 [alias]
-# `cargo dev` = `cargo run -- dev`: the local server on fake data (docs/DEV_ENVIRONMENT.md)
+# `cargo dev` = `cargo run -- dev`: the local server on fake data (docs/dev/DEV_ENVIRONMENT.md)
 dev = "run -- dev"

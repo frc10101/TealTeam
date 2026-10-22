@@ -2,7 +2,7 @@
 # Is the event-day network right? Read-only; safe to run any time, no sudo
 # needed (P4, P6). One line per check, and a non-zero exit if any failed.
 #
-# UNTESTED on a Pi: checked with ShellCheck, never run. See docs/PI_NETWORK.md.
+# UNTESTED on a Pi: checked with ShellCheck, never run. See docs/event/PI_NETWORK.md.
 
 set -uo pipefail
 

@@ -43,7 +43,7 @@ const local = `http://127.0.0.1:${PORT}`;
 // back to local, where the device-made pages need the service worker.
 let site = `http://scout.lan:${PORT}`;
 const FIXTURES = fileURLToPath(new URL("../../../tt-upstream/tests/fixtures/ftc/", import.meta.url));
-const REHEARSAL = fileURLToPath(new URL("../../../../docs/FTC_BETA_REHEARSAL_SCHEDULE.csv", import.meta.url));
+const REHEARSAL = fileURLToPath(new URL("../../../../docs/ftc/FTC_BETA_REHEARSAL_SCHEDULE.csv", import.meta.url));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 rmSync(`${D}/chr`, { recursive: true, force: true });
 for (const f of ["t.db", "t.db-wal", "t.db-shm"]) rmSync(`${D}/${f}`, { force: true });

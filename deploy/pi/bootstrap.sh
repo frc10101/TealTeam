@@ -13,7 +13,7 @@
 #   2. curl, the only package the steps below need that setup.sh does not
 #      install itself;
 #   3. the SSD must be mounted at /srv/tealteam, or it stops and points at
-#      docs/PI_STORAGE.md. It never partitions a disk;
+#      docs/event/PI_STORAGE.md. It never partitions a disk;
 #   4. deploy/pi/network/setup.sh (hostname, eth0 10.101.0.1, DHCP/DNS, port 80);
 #   5. /opt/tealteam/.env: the example plus the profile's values, mode 600,
 #      owned by the service user. Secrets the profile leaves empty are asked
@@ -25,7 +25,7 @@
 #   9. deploy/pi/network/status.sh, and the address to open.
 #
 # Not done here: flashing the OS, attaching and formatting the SSD
-# (docs/PI_STORAGE.md), cabling. docs/SETUP_GUIDE.md has those.
+# (docs/event/PI_STORAGE.md), cabling. docs/event/SETUP_GUIDE.md has those.
 #
 # UNTESTED on a Pi: --dry-run was run on a development machine, and the env
 # file merge was run against a scratch directory. Nothing else has run for
@@ -105,11 +105,11 @@ say "checking the SSD at $DATA_ROOT"
 if findmnt --mountpoint "$DATA_ROOT" >/dev/null 2>&1; then
     src="$(findmnt -n -o SOURCE --mountpoint "$DATA_ROOT")"
     case "$src" in
-        /dev/mmcblk*) problem "$DATA_ROOT is on the SD card ($src): an SD card wears out under the database. See docs/PI_STORAGE.md" ;;
+        /dev/mmcblk*) problem "$DATA_ROOT is on the SD card ($src): an SD card wears out under the database. See docs/event/PI_STORAGE.md" ;;
         *) note "mounted from $src" ;;
     esac
 else
-    problem "$DATA_ROOT is not a mounted SSD. Attach, format and mount it by UUID as docs/PI_STORAGE.md steps 1-4 say, then run this again. (It does not partition disks.)"
+    problem "$DATA_ROOT is not a mounted SSD. Attach, format and mount it by UUID as docs/event/PI_STORAGE.md steps 1-4 say, then run this again. (It does not partition disks.)"
 fi
 
 # ── 4. The network ──────────────────────────────────────────────────────────
@@ -251,5 +251,5 @@ cat <<EOF
 
 The server is at http://tealteam.local/  (or http://tealteam, or http://10.101.0.1/)
 Next: deploy/event/prep-event.sh on this Pi (over SSH), then each Chromebook's
-checklist (docs/SETUP_GUIDE.md).
+checklist (docs/event/SETUP_GUIDE.md).
 EOF

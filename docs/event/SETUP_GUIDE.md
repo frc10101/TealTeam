@@ -1,6 +1,6 @@
 # Setup guide: a fresh Pi and the team's laptops, event-ready
 
-For someone who is not a developer. Plain steps, each part ends with a **Done when** line. Reference: `docs/PI_STORAGE.md` (SSD, backups), `docs/PI_NETWORK.md` (network), `docs/EVENT_DAY_RUNBOOK.md` (the day).
+For someone who is not a developer. Plain steps, each part ends with a **Done when** line. Reference: `docs/event/PI_STORAGE.md` (SSD, backups), `docs/event/PI_NETWORK.md` (network), `docs/event/EVENT_DAY_RUNBOOK.md` (the day).
 
 > **Untested on real hardware.** The scripts were checked with `bash -n`, `--dry-run` on a development machine, and (prep-event.sh) a real run against a local server. `bootstrap.sh`, the Chromebook steps and the Pi itself have not been run on the team's gear. Do the whole guide once at the shop and fix this page where it is wrong.
 
@@ -44,7 +44,7 @@ With both FTC Events keys set on the Pi, drop `--csv`: the script pulls the sche
 
 **Each Chromebook (scout and lead):** the card at the end of this page, one printed copy each. **Phones:** open `http://tealteam.local/` once on the wired network if you can, or just look at the read-only pages; they keep an offline copy and sync later (Part 5).
 
-Then the runbook: `docs/EVENT_DAY_RUNBOOK.md`.
+Then the runbook: `docs/event/EVENT_DAY_RUNBOOK.md`.
 
 ---
 
@@ -61,10 +61,10 @@ The release binary must carry the offline client, and `install.sh` refuses one t
 ## Part 2. The Pi
 
 1. Flash **Raspberry Pi OS Lite, 64-bit (Bookworm)** with Raspberry Pi Imager. In its settings: hostname `tealteam`, a user (the guide says `pi`), a password, SSH on, **no Wi-Fi**. Wi-Fi may be used at the shop only for the build; turn it off before the event (`sudo nmcli radio wifi off`).
-2. Attach the SSD (a USB 3 SSD in a blue port; the official 27 W supply). Partition, format and mount it at `/srv/tealteam` by UUID: `docs/PI_STORAGE.md` steps 1-4. This is the one step the scripts will not do for you, because it erases a disk.
+2. Attach the SSD (a USB 3 SSD in a blue port; the official 27 W supply). Partition, format and mount it at `/srv/tealteam` by UUID: `docs/event/PI_STORAGE.md` steps 1-4. This is the one step the scripts will not do for you, because it erases a disk.
 3. Run `sudo deploy/pi/bootstrap.sh PROFILE target/release/tt-web --dry-run` first, then without `--dry-run`. It checks the OS and SSD, runs `deploy/pi/network/setup.sh`, writes `/opt/tealteam/.env` from the profile, runs `deploy/pi/service/install.sh`, waits for `/health`, takes one backup and restores it to check, and prints `status.sh`.
 4. Verify: `deploy/pi/network/status.sh` shows no `FAIL` (`no uplink` is fine), and `systemctl status tealteam` says `active (running)`.
-5. **Backups.** Every 10 minutes the server snapshots to `/srv/tealteam/backups` and keeps 24 hours. Between match blocks copy to a USB stick: `sudo /opt/tealteam/tt-web backup /media/$USER/STICK` (the runbook has the full line). Restore drill: `tt-web check-backup`, and `docs/PI_STORAGE.md` "Putting a backup back".
+5. **Backups.** Every 10 minutes the server snapshots to `/srv/tealteam/backups` and keeps 24 hours. Between match blocks copy to a USB stick: `sudo /opt/tealteam/tt-web backup /media/$USER/STICK` (the runbook has the full line). Restore drill: `tt-web check-backup`, and `docs/event/PI_STORAGE.md` "Putting a backup back".
 6. **Power cut.** Every save is flushed to the SSD before the scout sees "saved", so pulling the plug loses nothing that was confirmed. The service restarts at boot. Waiting for the green light, then `status.sh`, is the whole recovery.
 7. **Upgrading to a new tag:** take a backup first (step 5), `git fetch --tags && git checkout <tag>`, `deploy/build-release.sh`, `sudo deploy/pi/service/install.sh target/release/tt-web` (or run `bootstrap.sh` again: it changes only what differs), then `status.sh`.
 
@@ -117,7 +117,7 @@ On the Pi, `deploy/event/prep-event.sh PROFILE` (the quick start above). It sign
 
 ---
 
-*Printable copies of these checklists and the Chromebook card (two to a page): `docs/print/event-checklists.pdf` and `docs/print/chromebook-card.pdf`, with .docx versions to edit. Rebuild with `python3 docs/print/build.py`.*
+*Printable copies of these checklists and the Chromebook card (two to a page): `docs/event/print/event-checklists.pdf` and `docs/event/print/chromebook-card.pdf`, with .docx versions to edit. Rebuild with `python3 docs/event/print/build.py`.*
 
 ## Night before
 

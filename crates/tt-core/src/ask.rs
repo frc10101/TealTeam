@@ -1,4 +1,4 @@
-//! The scouting assistant's data sheet (AI1, `docs/SCOUTING_ASSISTANT.md`).
+//! The scouting assistant's data sheet (AI1, `docs/design/SCOUTING_ASSISTANT.md`).
 //!
 //! A language model answers a lead's question from this sheet and nothing
 //! else. So the sheet carries what the team, rankings and pick list pages
