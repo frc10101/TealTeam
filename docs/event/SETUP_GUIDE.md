@@ -160,9 +160,9 @@ If the page will not open: check the cable and adapter, that the switch has powe
 2. The page says **You are scouting** and the team number, with **Your next assignment** at the top. Find that robot on the field before the match starts: red or blue, and its number.
 3. **Fill it in while the match runs.** Tap **+** each time it scores. What you type is kept as you go, so a reload loses nothing.
 4. When the match ends, finish the notes and press **Save observation**. Then follow **Your next assignment** at the top.
-5. **Check the chip in the header:** **Synced** means the server has it. **Offline · 1 held** means it is waiting on this laptop: **do not reload, click a link or close the tab** (the page will not come back until the server does), never clear the browser, tell the lead scout, and switch to paper.
+5. **Check the chip in the header:** **Synced** means the server has it. **Offline · 1 held** means it is waiting on this laptop, and goes by itself when the server is back. Never clear the browser. **With the padlock (https):** keep scouting; **Your next assignment** and every saved form work with no server, each save held here until it answers (OF1). **Without it (http):** do not reload, click a link or close the tab; tell the lead scout and switch to paper.
 
-If something is off: wrong robot or no assignment, use **Not your robot? Choose another** or **Not in this match? Team number** and tell the lead scout. **Declined**: read why, press **Record it again**. Missed the robot: tell the lead scout, do not guess. Server out of reach for a while: **Server out of reach?** → **Show the code**, the lead scout scans it. App down: paper sheets, one per robot per match.
+If something is off: wrong robot or no assignment, use **Not your robot? Choose another** or **Not in this match? Team number** and tell the lead scout. **Declined**: read why, press **Record it again**. Missed the robot: tell the lead scout, do not guess. Server out of reach for a while: **Server out of reach?** → **Show the code**, the lead scout scans it. The laptop itself fails, or http with no server: paper sheets, one per robot per match.
 
 ## Lead card: lead scout during matches (print one for the lead laptop)
 

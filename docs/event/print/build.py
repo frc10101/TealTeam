@@ -235,7 +235,7 @@ SCOUT_CARD = boxed("""
 <li>The page says <b>You are scouting</b> and the team number, with <b>Your next assignment</b> at the top. Find that robot on the field before the match starts: red or blue, and its number.</li>
 <li><b>Fill it in while the match runs.</b> Tap <b>+</b> each time it scores. What you type is kept as you go, so a reload loses nothing.</li>
 <li>When the match ends, finish the notes and press <b>Save observation</b>. Then follow <b>Your next assignment</b> at the top.</li>
-<li><b>Check the chip in the header:</b> <b>Synced</b> means the server has it. <b>Offline &#183; 1 held</b> means it is waiting on this laptop: <b>do not reload, click a link or close the tab</b> (the page will not come back until the server does), never clear the browser, tell the lead scout, and switch to paper.</li>
+<li><b>Check the chip:</b> <b>Synced</b>: the server has it. <b>Offline &#183; 1 held</b>: kept on this laptop, sent when the server is back; never clear the browser. <b>Padlock (https):</b> keep scouting, each save is held. <b>No padlock:</b> do not reload or leave the page; tell the lead, switch to paper.</li>
 </ol>
 <h2>If something is off</h2>
 <ul>
@@ -243,7 +243,7 @@ SCOUT_CARD = boxed("""
 <li><b>Declined</b> by the lead scout: read why, then press <b>Record it again</b>.</li>
 <li><b>Missed the robot?</b> Tell the lead scout. Do not guess.</li>
 <li><b>Server out of reach for a while?</b> Open <b>Server out of reach?</b>, press <b>Show the code</b>, and let the lead scout scan it.</li>
-<li><b>App down?</b> The lead scout hands out paper sheets. Use one per robot per match.</li>
+<li><b>The laptop itself fails, or http with no server?</b> The lead scout hands out paper sheets. Use one per robot per match.</li>
 </ul>
 """)
 
