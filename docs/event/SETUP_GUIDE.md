@@ -83,7 +83,7 @@ One checklist per Chromebook. **Print `deploy/laptop/CHROMEBOOK_CARD.md` as one 
 5. **Sign in** with the name and temporary password from the sign-in sheet (Part 6); change the password on the Account page.
 6. **Clear old site data from earlier events:** open `chrome://settings/content/all`, search `tealteam`, and delete the entries.
 7. **Keep the screen on:** Settings, Device, Power, set *While charging* to *Keep display on*. Keep the Chromebook plugged in.
-8. Open **Scout**: the page downloads its offline copy once; leave it a moment.
+8. Open **Scout**: the page downloads its offline copy once; leave it a moment. With the padlock (https), scouting then carries on with no server: each save is held on the Chromebook and sent when the server is back (OF1, [HTTPS_SETUP.md](HTTPS_SETUP.md)). Without it, a scout whose server drops stays on the page and switches to paper.
 
 **Done when:** the Chromebook shows your name at the top of https://tealteam.local/ with no certificate warning.
 

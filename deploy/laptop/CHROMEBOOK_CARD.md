@@ -11,5 +11,6 @@
 6. Clear old event data: type `chrome://settings/content/all` in the address bar, search `tealteam`, delete.
 7. Keep the screen on: Settings, Device, Power, *While charging*: Keep display on. Stay plugged in.
 8. Open **Scout** once and wait a moment so it saves a copy for offline.
+   If the chip says **Offline**: with the padlock (https), keep scouting; each save is held on this Chromebook and sent when the server is back. Without it (http), do not reload or leave the page; tell the lead scout and use paper.
 
 Stuck? Find the lead scout. Do not use Wi-Fi, a hotspot, or a phone.
