@@ -1,6 +1,6 @@
 {#
   A tablet's forms, read off its screen (S13). A scout whose tablet cannot
-  reach the Pi opens "Pi out of reach?" on their scouting page, and it shows
+  reach the Pi opens "Server out of reach?" on their scouting page, and it shows
   their unsent forms as QR codes, in turn. This page reads them with the
   camera, or from photos where there is no camera to stream (plain http),
   and posts what it read. The Pi records each form as the scout who saved it
@@ -57,7 +57,7 @@
   <section class="card" id="scan">
     <div class="card-header"><h1>Scan a tablet's forms</h1></div>
     <div class="card-body stack">
-      <p>For a scout whose tablet cannot reach the server. On their scouting page they open <strong>Pi out of reach?</strong> and show the code. Hold this camera to it until every part is read; the parts can come in any order.</p>
+      <p>For a scout whose tablet cannot reach the server. On their scouting page they open <strong>Server out of reach?</strong> and show the code. Hold this camera to it until every part is read; the parts can come in any order.</p>
       <noscript><p class="alert alert-warning">Scanning needs JavaScript.</p></noscript>
       <div class="scanner" data-scanner hidden>
         <video class="scanner-video" playsinline muted hidden></video>
@@ -90,7 +90,7 @@
           <input type="file" accept=".json,application/json" data-forms-file>
         </label></p>
       </form>
-      <p><a class="back" href="{{ back_href }}">Back to the lead-scout page</a></p>
+      <p><a class="back" href="{{ back_href }}">Back to Lead Scout</a></p>
     </div>
   </section>
 {% endif %}
