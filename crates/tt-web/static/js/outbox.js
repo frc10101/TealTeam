@@ -121,7 +121,7 @@
   function render() {
     var list = load();
     var held = waiting(list);
-    if (window.ttLink) window.ttLink.held(held.length);
+    if (window.ttLink) window.ttLink.recount();
     if (!box) return;
     box.textContent = "";
 
@@ -354,6 +354,13 @@
       })
         .then(
           function (response) {
+            // OF1: no server, and the service worker saved it into the
+            // device's outbox instead. Its confirmation is made there too.
+            var saved = response.headers.get("x-tealteam-saved");
+            if (saved) {
+              away = true;
+              return window.location.assign(saved);
+            }
             var path = new URL(response.url, window.location.href).pathname;
             if (response.redirected && path === "/sign-in") return hold(entry, "signin");
             if (response.status >= 502 && response.status <= 504) return hold(entry);

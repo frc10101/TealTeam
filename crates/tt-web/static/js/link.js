@@ -4,9 +4,12 @@
 // picks which. The words and the rule live in tt_core::link -- this is the
 // same order as Link::classify: unreachable, then sending, then what needs
 // review, then synced. The review count is the server's, as of this page
-// (C10b); only a page that has it renders that state. What the page's outbox
-// holds (C13, outbox.js) is the device's: window.ttLink.held(n) says how
-// many, and the chip reads "Offline · n held" while the server is gone, or
+// (C10b); only a page that has it renders that state. What is held is the
+// device's, counted from where it is kept, on every page -- the server's,
+// one the worker made, and the offline shell alike (OF1): the page outboxes
+// in localStorage (C13, outbox.js; every scout's, since the shell knows no
+// one), and the device's outbox in its copy (C7), which only the worker can
+// read. The chip reads "Offline · n held" while the server is gone, or
 // Syncing while it is there and they are on their way.
 //
 // Offline is observed, never a mode. Nothing here can be switched on or off.
@@ -38,10 +41,54 @@
   var sending = false;
   var review = !!chip.querySelector('[data-link="review"]');
   var held = 0;
+  // What each queue holds: "local" is localStorage's, "device" the worker's.
+  var counts = { local: 0, device: 0 };
   var timer = null;
   var checking = false;
 
+  // Every scout's waiting entries in the page outboxes (outbox.js's format).
+  function localHeld() {
+    var n = 0;
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var name = localStorage.key(i);
+        if (!name || name.indexOf("tt-outbox:v1:") !== 0) continue;
+        var kept = JSON.parse(localStorage.getItem(name) || "null");
+        if (!kept || !Array.isArray(kept.observations)) continue;
+        kept.observations.forEach(function (entry) {
+          if (!entry.refused) n++;
+        });
+      }
+    } catch (e) {}
+    return n;
+  }
+
+  // The device's outbox, which only the worker reads. 0 without one.
+  function deviceHeld() {
+    var worker = navigator.serviceWorker && navigator.serviceWorker.controller;
+    if (!worker) return Promise.resolve(0);
+    return new Promise(function (resolve) {
+      var channel = new MessageChannel();
+      var late = setTimeout(function () { resolve(counts.device); }, 3000);
+      channel.port1.onmessage = function (event) {
+        clearTimeout(late);
+        resolve(Number(event.data) || 0);
+      };
+      worker.postMessage({ type: "tt-queued" }, [channel.port2]);
+    });
+  }
+
+  function recount() {
+    counts.local = localHeld();
+    show();
+    return deviceHeld().then(function (n) {
+      counts.device = n;
+      show();
+    });
+  }
+
   function show() {
+    held = counts.local + counts.device;
     var key = !reachable
       ? held ? "held" : "offline"
       : sending || held ? "syncing" : review ? "review" : "synced";
@@ -75,7 +122,7 @@
     fetch("/health", { cache: "no-store", credentials: "same-origin", signal: abort && abort.signal })
       .then(function (response) {
         reachable = true;
-        // Back: what the outbox holds can go now.
+        // Back: what the outboxes hold can go now.
         if (!was) document.dispatchEvent(new Event("tt:reachable"));
         if (shell) return location.reload();
         return response.json().then(compare, function () {});
@@ -84,7 +131,7 @@
       .then(function () {
         clearTimeout(giveUp);
         checking = false;
-        show();
+        recount();
         schedule();
       });
   }
@@ -161,12 +208,14 @@
     check();
   });
 
-  // For the outbox (C13): how many it holds, a save it is sending itself
-  // (its submit is prevented, so the listener above does not see it), and a
-  // save that got no answer, which is worth a look at once.
+  // For the outboxes (C13, C7): count again after a change, how many the
+  // device's holds as a sync just found, a save sending itself (its submit is
+  // prevented, so the listener above does not see it), and a save that got
+  // no answer, which is worth a look at once.
   window.ttLink = {
-    held: function (n) {
-      held = n;
+    recount: recount,
+    held: function (n, source) {
+      counts[source || "device"] = Number(n) || 0;
       show();
     },
     sending: function (on) {
@@ -176,8 +225,18 @@
     check: check,
   };
 
+  // Another tab changed a page outbox; the worker saved a form (OF1).
+  window.addEventListener("storage", function (event) {
+    if (!event.key || event.key.indexOf("tt-outbox:v1:") === 0) recount();
+  });
+  if (navigator.serviceWorker) {
+    navigator.serviceWorker.addEventListener("message", function (event) {
+      if (event.data && event.data.type === "tt-queued") recount();
+    });
+  }
+
   if (navigator.onLine === false) reachable = false;
-  show();
+  recount();
   if (shell) check();
   else schedule();
 })();

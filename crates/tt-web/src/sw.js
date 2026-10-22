@@ -18,8 +18,17 @@
 //     server answers. A page made here says so, and reloads the same way.
 //   * Static files: the network first, so a page and its stylesheet always
 //     come from the same build; the cache only when the network fails.
-//   * Everything else passes straight through: POSTs, /health, /api, and the
-//     live regions' fetches. Nothing a person sees is ever cached for them,
+//   * A scouting form's save (POST /api/submission) goes to the network
+//     first, like everything. Only when the network fails, the device saves
+//     it (OF1): the wasm module checks it as the server would and queues it
+//     in the device's outbox, which the sync pushes once the server answers.
+//     A navigation (the form posted the plain way) gets a 303 to the made
+//     confirmation; outbox.js's fetch gets the same address in a header. A
+//     form the device will not save comes back as the page saying why; one
+//     it cannot (no copy, nobody named) fails as before, and the page's own
+//     outbox (C13) holds it.
+//   * Everything else passes straight through: other POSTs, /health, /api,
+//     and the live regions' fetches. Nothing a person sees is ever cached for them,
 //     and nothing is written to the cache after install. A live region is
 //     not made on the device: what it shows came from the server, and the
 //     device's copy is no newer until the sync client (C7) keeps it current.
@@ -33,6 +42,9 @@
 //     ask where to open the live stream (S8) for this device's own cursors,
 //     which only the wasm module can read, and for the outbox as a file to
 //     hand to the lead scout when it cannot be pushed.
+//   * A signed-in page hands over its offline token (OF1, "tt-remember"), so
+//     the device knows whose scouting page to make; and any page may ask how
+//     many forms the device's outbox holds ("tt-queued"), for the chip.
 //
 // Registered by static/js/shell.js, and only in a secure context.
 
@@ -156,6 +168,53 @@ function exportOutbox() {
   });
 }
 
+// Who scouts here (OF1), from a signed-in page's token. Writes, so in turn.
+function remember(bearer) {
+  if (typeof wasm_bindgen === "undefined" || !bearer) return Promise.resolve(false);
+  return inTurn(() => client().then(() => wasm_bindgen.remember(bearer))).catch((e) => {
+    console.warn("TealTeam: keeping who scouts here:", e);
+    return false;
+  });
+}
+
+// How many forms the device's outbox holds; 0 without the wasm module.
+function queued() {
+  if (typeof wasm_bindgen === "undefined") return Promise.resolve(0);
+  return inTurn(() => client().then(() => wasm_bindgen.queued())).catch(() => 0);
+}
+
+// POST /api/submission (OF1): the server's answer while there is one; with
+// none, the device's. `failed` is the network's error, which stands when the
+// device cannot hold the form either, so the page's own outbox (C13) does.
+function saveForm(request) {
+  const body = request.clone().text();
+  return fetch(request).catch((failed) => {
+    // The page gave up on it (outbox.js's timeout): it holds the form itself.
+    if (request.signal && request.signal.aborted) throw failed;
+    if (typeof wasm_bindgen === "undefined") throw failed;
+    return body
+      .then((text) => inTurn(() => client().then(() => wasm_bindgen.save(text))))
+      .catch((e) => {
+        console.warn("TealTeam: saving a form on this device:", e);
+        return null;
+      })
+      .then((answer) => {
+        if (answer === null || answer === undefined) throw failed;
+        const done = JSON.parse(answer);
+        if (done.saved) {
+          tell({ type: "tt-queued" });
+          if (request.mode === "navigate") {
+            return Response.redirect(new URL(done.saved, self.location.origin).href, 303);
+          }
+          return new Response(null, { status: 204, headers: { "x-tealteam-saved": done.saved } });
+        }
+        return new Response(done.page, {
+          headers: { "content-type": "text/html; charset=utf-8", "x-tealteam-source": "device" },
+        });
+      });
+  });
+}
+
 function streamUrl() {
   if (typeof wasm_bindgen === "undefined") return Promise.resolve(null);
   return client()
@@ -185,6 +244,18 @@ self.addEventListener("message", (event) => {
     event.waitUntil(
       exportOutbox().then((file) => {
         if (port) port.postMessage(file);
+      }),
+    );
+  } else if (data.type === "tt-remember") {
+    event.waitUntil(
+      remember(data.bearer).then((kept) => {
+        if (port) port.postMessage(kept);
+      }),
+    );
+  } else if (data.type === "tt-queued") {
+    event.waitUntil(
+      queued().then((n) => {
+        if (port) port.postMessage(n);
       }),
     );
   } else if (data.type === "tt-stream-url") {
@@ -255,9 +326,13 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const request = event.request;
-  if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+  if (request.method === "POST" && url.pathname === "/api/submission") {
+    event.respondWith(saveForm(request));
+    return;
+  }
+  if (request.method !== "GET") return;
 
   if (request.mode === "navigate") {
     event.respondWith(

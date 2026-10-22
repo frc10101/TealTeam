@@ -97,6 +97,9 @@ pub struct SyncClient<T> {
     transport: T,
     /// The events subscribed to (S3); none is every event.
     events: Vec<String>,
+    /// Push only this scout's outbox entries (OF1): see
+    /// [`ClientRepo::waiting`]. `None` pushes them all.
+    scouter: Option<i64>,
 }
 
 impl<T: Transport> SyncClient<T> {
@@ -106,7 +109,17 @@ impl<T: Transport> SyncClient<T> {
             .map(|e| e.trim().to_ascii_lowercase())
             .filter(|e| !e.is_empty() && e.bytes().all(|b| b.is_ascii_alphanumeric()))
             .collect();
-        Self { transport, events }
+        Self {
+            transport,
+            events,
+            scouter: None,
+        }
+    }
+
+    /// Push only `scouter`'s entries: the scout whose page asked.
+    pub fn pushing_for(mut self, scouter: Option<i64>) -> Self {
+        self.scouter = scouter;
+        self
     }
 
     /// Push the outbox, then pull until caught up, saving as it goes.
@@ -142,7 +155,7 @@ impl<T: Transport> SyncClient<T> {
         let path = format!("/api/sync/push?{}", self.schema_query(repo)?);
         let mut after: Option<String> = None;
         loop {
-            let observations = repo.waiting(after.as_deref(), MAX_PER_PUSH)?;
+            let observations = repo.waiting(after.as_deref(), MAX_PER_PUSH, self.scouter)?;
             let Some(last) = observations.last() else {
                 return Ok(None);
             };

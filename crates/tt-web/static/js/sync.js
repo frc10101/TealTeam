@@ -25,6 +25,12 @@
 // that would lose it. Then the outbox is offered as a file instead, to hand
 // to the lead scout, once per page, and the copy is kept as it is.
 //
+// OF1: the page also hands the worker its offline token at once, so the
+// device knows whose scouting page to make if the server goes before the
+// first sync; it tells the chip what the device's outbox still holds after
+// each sync; and while anything does, it tries again when link.js sees the
+// server and every 10 s.
+//
 // Only where a service worker runs, which needs https (open decision 9); this
 // script and snapshot.js each check that for themselves. Each sync's report
 // is dispatched on document as "tt:sync", for anything that wants to show it.
@@ -34,6 +40,7 @@
 
   var FIRST_MS = 3 * 1000;
   var DEBOUNCE_MS = 500;
+  var RETRY_MS = 10 * 1000;
 
   if (!window.isSecureContext || !("serviceWorker" in navigator)) return;
 
@@ -99,6 +106,7 @@
   }
 
   var running = null;
+  var retry = null;
   function sync() {
     if (running) return running;
     running = bootstrapIfNeeded()
@@ -108,6 +116,11 @@
       })
       .then(function (report) {
         if (!report) return report;
+        if (window.ttLink) window.ttLink.held(report.queued, "device");
+        if (report.queued > 0) {
+          window.clearTimeout(retry);
+          retry = window.setTimeout(sync, RETRY_MS);
+        }
         document.dispatchEvent(new CustomEvent("tt:sync", { detail: report }));
         if (report.stopped && report.stopped.kind === "reload") {
           return behind(report).then(function () { return report; });
@@ -160,6 +173,13 @@
   });
 
   window.ttSync = { sync: sync, saveOutbox: saveOutbox };
+
+  if (window.ttToken && window.ttToken.token()) {
+    ask({ type: "tt-remember", bearer: window.ttToken.token() });
+  }
+  document.addEventListener("tt:reachable", function () {
+    sync().then(openStream);
+  });
 
   window.setTimeout(function () {
     sync().then(openStream);

@@ -186,16 +186,24 @@ impl ClientRepo {
     }
 
     /// Up to `limit` entries still to send, after `after` in id order.
+    ///
+    /// With `scouter`, only that scout's (OF1): the Pi records a push as
+    /// whoever sends it, so on a shared tablet one scout's page must not
+    /// push another's forms. The rest wait for their own scout's page.
     pub(crate) fn waiting(
         &self,
         after: Option<&str>,
         limit: usize,
+        scouter: Option<i64>,
     ) -> Result<Vec<QueuedObservation>> {
         self.ensure_outbox()?;
         let bodies = self.all(
-            "SELECT body FROM outbox WHERE refused IS NULL AND record_id > ? \
-             ORDER BY record_id LIMIT ?",
-            params![after.unwrap_or(""), limit as i64],
+            "SELECT q.body FROM outbox q \
+             LEFT JOIN observations o ON o.client_record_id = q.record_id \
+             WHERE q.refused IS NULL AND q.record_id > ?1 \
+               AND (?3 IS NULL OR o.scouter_id = ?3) \
+             ORDER BY q.record_id LIMIT ?2",
+            params![after.unwrap_or(""), limit as i64, scouter],
             |row| row.get::<_, String>(0),
             "reading the outbox",
         )?;
