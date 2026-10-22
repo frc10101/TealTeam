@@ -1,6 +1,6 @@
 # FTC BIOBUZZ beta-test plan
 
-Status: **plan only — nothing implemented.**
+Status: **built on `ftc-biobuzz` and frozen there since 2026-10-21** (F1–F17). This copy is the plan as written; the branch's copy has the build table and the rehearsal as done. Work to bring back to `rebuild` after Athens is in `docs/ACTION_ITEMS.md` (DR1, BR1, PK1, LS1).
 
 **Scope decision (2026-10-15): a separate, FTC-only branch, `ftc-biobuzz`, for one
 test event: **Alabama Athens Qualifier 1, Saturday 2026-10-24.** It is never merged back into `rebuild`.** The migration doc

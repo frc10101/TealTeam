@@ -137,8 +137,8 @@ It copies the backup into a fresh database in a temporary folder and opens it th
 2. Move the old database **and its `-wal` and `-shm` files** out of the way together. A leftover `-wal` belongs to the old database and would be replayed into the restored one:
 
    ```sh
-   mkdir /srv/tealteam/replaced-$(date +%H%M)
-   mv /srv/tealteam/data/tealteam.db* /srv/tealteam/replaced-$(date +%H%M)/
+   old=/srv/tealteam/replaced-$(date +%H%M)
+   mkdir "$old" && mv /srv/tealteam/data/tealteam.db* "$old"/
    ```
 
 3. Copy the backup in under the database's name. A snapshot is a whole database with no `-wal` of its own, so a plain copy is right here, unlike for the live file:
