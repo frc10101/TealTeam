@@ -449,6 +449,25 @@ async fn the_worker_answers_the_addresses_it_knows_and_no_others() {
     }
 }
 
+/// Every required answer in `season`'s form, the plainest way, as a post's
+/// `&f.key=value` pairs: whichever season this build carries.
+fn required_answers(season: &SeasonSchema) -> String {
+    use tt_core::season::FieldKind;
+    season
+        .fields()
+        .filter(|f| f.required && f.key != "notes")
+        .map(|f| {
+            let value = match &f.kind {
+                FieldKind::Select { options } => options[0].key.clone(),
+                FieldKind::Counter { min, .. } => min.to_string(),
+                FieldKind::Toggle { .. } => "on".into(),
+                FieldKind::Text { .. } => "x".into(),
+            };
+            format!("&f.{}={value}", f.key)
+        })
+        .collect()
+}
+
 /// OF1: with no server, a scout scouts on. The scouting page is made here for
 /// whoever the last signed-in page named, a save is checked as the server
 /// checks it and queued, and the one-per-robot rule holds on the device too.
@@ -490,7 +509,8 @@ async fn the_device_scouts_and_queues_with_no_server() {
     // Saved here, and queued for the Pi.
     let id = "01890000-0000-7000-8000-0000000000aa";
     let body = format!(
-        "event=2026here&match=2026here_qm2&team=10101&record_id={id}&f.robot_status=played&f.notes=held"
+        "event=2026here&match=2026here_qm2&team=10101&record_id={id}{}&f.notes=held",
+        required_answers(&season)
     );
     let saved = save(&device, &season, &body, now(), &fresh).await;
     let Some(SaveOutcome::Saved(next)) = saved else {
