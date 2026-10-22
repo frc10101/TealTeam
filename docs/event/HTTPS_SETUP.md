@@ -69,7 +69,7 @@ Do this at the shop. On the wired network, open **http://tealteam.local/ca.crt**
 1. Open `http://tealteam.local/ca.crt`. It saves `tealteam-ca.crt` to **Downloads**.
 2. Open `chrome://certificate-manager` (older ChromeOS: Settings → Privacy and security → Security → Manage certificates).
 3. Under **Local certificates** (older: the **Authorities** tab), **Import**, and pick `tealteam-ca.crt`.
-4. Tick **Trust this certificate for identifying websites**, then OK.
+4. Tick **Trust this certificate for identifying websites** (without it the import does nothing), then OK. **Restart Chrome fully** (sign out and back in): on the real Chromebook in the LAN test the warning only went away after both.
 5. Open **https://tealteam.local/**: no warning, a padlock. Bookmark that address in place of the http one.
 
 **Managed Chromebooks (all at once):** in the Google Admin console, Devices → Networks → Certificates, add `tealteam-ca.crt` with **Chromebook** and **Use this certificate as an HTTPS certificate authority** ticked. The school's admin does this.
