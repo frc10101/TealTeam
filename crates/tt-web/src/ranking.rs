@@ -308,8 +308,10 @@ pub async fn page(
         })
         .collect();
     let metric_text = |cell: &Cell| match cell {
-        Cell::Spread(Some(s)) => format!("{:.1}", s.mean),
-        Cell::Rate { yes, of } if *of > 0 => format!("{:.0}%", 100.0 * *yes as f64 / *of as f64),
+        Cell::Spread(Some(s)) => tenths(s.mean),
+        Cell::Rate { yes, of } if *of > 0 => {
+            format!("{}%", (100.0 * *yes as f64 / *of as f64).round())
+        }
         _ => String::new(),
     };
     let metric_cells: Vec<Vec<String>> = (0..rows.len())
@@ -330,7 +332,7 @@ pub async fn page(
                 name: row.name,
                 score: row
                     .score
-                    .map(|s| format!("{:.1}", s.average))
+                    .map(|s| tenths(s.average))
                     .unwrap_or_default(),
                 n,
                 thin: n < THIN_BELOW,
@@ -354,6 +356,12 @@ pub async fn page(
     })
     .collect();
     page
+}
+
+/// One decimal, a half rounded up, as Compare shows it: `format!("{:.1}")`
+/// rounds an exact half to even, so 6.25 read 6.2 here and 6.3 there.
+fn tenths(v: f64) -> String {
+    format!("{:.1}", (v * 10.0).round() / 10.0)
 }
 
 /// The point-values form. `returned` is a refused post: what was typed, and
@@ -453,5 +461,17 @@ pub async fn reset_weights(state: &AppState, user: &User) -> bool {
             warn!("resetting point weights: {e}");
             false
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::tenths;
+
+    #[test]
+    fn a_half_rounds_up_as_compare_shows_it() {
+        assert_eq!(tenths(6.25), "6.3");
+        assert_eq!(tenths(6.0), "6.0");
+        assert_eq!(tenths(0.04), "0.0");
     }
 }
