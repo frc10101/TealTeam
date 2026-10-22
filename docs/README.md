@@ -22,6 +22,7 @@ is the only file at the top: start here.
 | Set up a fresh Pi or the Chromebooks | [event/SETUP_GUIDE.md](event/SETUP_GUIDE.md) |
 | Run the server on the day | [event/EVENT_DAY_RUNBOOK.md](event/EVENT_DAY_RUNBOOK.md) |
 | Fix the network, the SSD or a backup | [event/PI_NETWORK.md](event/PI_NETWORK.md), [event/PI_STORAGE.md](event/PI_STORAGE.md) |
+| Turn on HTTPS (offline mode on the Chromebooks) | [event/HTTPS_SETUP.md](event/HTTPS_SETUP.md) |
 | Print the runbook, checklists or scouting sheet | [event/print/](event/print/) |
 | Click around on fake data | [dev/DEV_ENVIRONMENT.md](dev/DEV_ENVIRONMENT.md) |
 | Call the FIRST or TBA API | [reference/FRC_API_CALLS.md](reference/FRC_API_CALLS.md), then [reference/TBA_SCHEMA_FIX_SUMMARY.md](reference/TBA_SCHEMA_FIX_SUMMARY.md) |
@@ -58,6 +59,7 @@ One document per larger item, linked from its row in ACTION_ITEMS.
 | [SETUP_GUIDE.md](event/SETUP_GUIDE.md) | A fresh Pi and the team's laptops to event-ready, for someone who is not a developer. |
 | [EVENT_DAY_RUNBOOK.md](event/EVENT_DAY_RUNBOOK.md) | One page for the day itself. Printed from `event/print/`. |
 | [PI_NETWORK.md](event/PI_NETWORK.md) | The wired event LAN the Pi provides. |
+| [HTTPS_SETUP.md](event/HTTPS_SETUP.md) | Getting the app, then HTTPS with our own CA (Caddy `tls internal`) and trusting it on each device, so the offline features turn on. |
 | [PI_STORAGE.md](event/PI_STORAGE.md) | The database on the Pi's SSD, and its backups. |
 | [print/](event/print/) | The event papers (runbook, checklists, Chromebook card, scouting sheet) as .docx to edit and .pdf to print; `python3 docs/event/print/build.py` rebuilds them from the docs above. |
 
