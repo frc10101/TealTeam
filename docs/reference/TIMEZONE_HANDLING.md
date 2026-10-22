@@ -2,7 +2,7 @@
 
 > **Reference.** Event timezone rules, independent of any one implementation. Still current.
 >
-> The rule — store UTC, render in the event zone — is `Q5` in [ACTION_ITEMS](../ACTION_ITEMS.md); see `tt_core::records`.
+> The rule — store UTC, render in the event zone — is `Q5` in [ACTION_ITEMS](../plan/ACTION_ITEMS.md); see `tt_core::records`.
 
 ## Overview
 

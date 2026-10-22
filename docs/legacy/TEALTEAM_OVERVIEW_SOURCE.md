@@ -2,7 +2,7 @@
 
 > **Historical.** A dense synthesis of the documentation corpus as it stood before the rebuild. Its stack, deployment, and architecture sections describe the retired implementation.
 >
-> Its source manifest at the end lists files — `ARCHITECTURE.md`, `TEAM_STATS_SYNC.md`, and others — that were deleted with the ports. Their surviving content is in [REBUILD_SPEC](../REBUILD_SPEC.md) §5 and §6.
+> Its source manifest at the end lists files — `ARCHITECTURE.md`, `TEAM_STATS_SYNC.md`, and others — that were deleted with the ports. Their surviving content is in [REBUILD_SPEC](../plan/REBUILD_SPEC.md) §5 and §6.
 
 ## Document Intent
 

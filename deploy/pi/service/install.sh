@@ -10,7 +10,7 @@
 # worker's wasm module and devices can make pages offline (C5). This refuses
 # a binary without it (C14).
 #
-# Idempotent: rerun it with each new build. Do the SSD (docs/PI_STORAGE.md)
+# Idempotent: rerun it with each new build. Do the SSD (docs/event/PI_STORAGE.md)
 # first; the service will not start until /srv/tealteam is mounted.
 #
 # UNTESTED on a Pi: checked with ShellCheck and systemd-analyze, never run.
@@ -94,7 +94,7 @@ if findmnt --mountpoint "$DATA_ROOT" >/dev/null 2>&1; then
         fi
     done
 else
-    say "$DATA_ROOT is not mounted: set up the SSD (docs/PI_STORAGE.md), then rerun this"
+    say "$DATA_ROOT is not mounted: set up the SSD (docs/event/PI_STORAGE.md), then rerun this"
 fi
 
 if place "$HERE/tealteam.service" /etc/systemd/system/tealteam.service 0644; then

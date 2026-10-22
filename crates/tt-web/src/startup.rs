@@ -206,7 +206,7 @@ fn log_storage(url: &str) {
     match tt_repo_sqlite::storage::locate(url) {
         Some(at) if at.on_sd_card() => warn!(
             "database is at {} -- an SD card wears out under a database's writes \
-             and fails mid-event. Move it to the SSD: docs/PI_STORAGE.md",
+             and fails mid-event. Move it to the SSD: docs/event/PI_STORAGE.md",
             at.describe()
         ),
         Some(at) => info!("database is at {}", at.describe()),

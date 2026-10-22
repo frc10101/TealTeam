@@ -15,8 +15,8 @@ Full FTC upstream synchronization is a separate phase.
 Before changing code, read:
 
 1. `README.md`
-2. `docs/ACTION_ITEMS.md`
-3. `docs/REBUILD_SPEC.md`
+2. `docs/plan/ACTION_ITEMS.md`
+3. `docs/plan/REBUILD_SPEC.md`
 4. `crates/tt-core/src/season.rs`
 5. `crates/tt-core/src/records.rs`
 6. `crates/tt-core/src/upstream.rs`

@@ -1,6 +1,6 @@
 # The scouting server, started at boot (P10). Installed to
-# /etc/systemd/system/tealteam.service by install.sh. See docs/PI_STORAGE.md
-# for the SSD and docs/PI_NETWORK.md for the network.
+# /etc/systemd/system/tealteam.service by install.sh. See docs/event/PI_STORAGE.md
+# for the SSD and docs/event/PI_NETWORK.md for the network.
 [Unit]
 Description=TealTeam scouting server
 # The database lives on the SSD: never start against the empty folder the SD

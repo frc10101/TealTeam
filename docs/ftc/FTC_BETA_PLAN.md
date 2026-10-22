@@ -1,10 +1,10 @@
 # FTC BIOBUZZ beta-test plan
 
-Status: **built on `ftc-biobuzz` and frozen there since 2026-10-21** (F1–F17). This copy is the plan as written; the branch's copy has the build table and the rehearsal as done. Work to bring back to `rebuild` after Athens is in `docs/ACTION_ITEMS.md` (DR1, BR1, PK1, LS1).
+Status: **built on `ftc-biobuzz` and frozen there since 2026-10-21** (F1–F17). This copy is the plan as written; the branch's copy has the build table and the rehearsal as done. Work to bring back to `rebuild` after Athens is in `docs/plan/ACTION_ITEMS.md` (DR1, BR1, PK1, LS1).
 
 **Scope decision (2026-10-15): a separate, FTC-only branch, `ftc-biobuzz`, for one
 test event: **Alabama Athens Qualifier 1, Saturday 2026-10-24.** It is never merged back into `rebuild`.** The migration doc
-(`docs/FTC_BIOBUZZ_MIGRATION.md`) describes the long-term dual-program design.
+(`docs/ftc/FTC_BIOBUZZ_MIGRATION.md`) describes the long-term dual-program design.
 This plan deliberately takes the short path the migration doc allows: "an
 FTC-only build". Anything learned at the event goes back into that design as
 notes, not as code.
@@ -180,7 +180,7 @@ If F1 is not green by **Saturday night (10-17)**, stop and fall back to paper fo
 - If launch agreement is poor, swap in a `launch_volume` select (none/few/many) **before** the freeze.
 
 ### B1 — dress rehearsal (Wed 10-21)
-- Use the real Pi and wired setup (`docs/EVENT_DAY_RUNBOOK.md`), the real laptops for scouting and the lead's pages, real phones for viewing data and offline sync (D7), and the scouts who will actually go.
+- Use the real Pi and wired setup (`docs/event/EVENT_DAY_RUNBOOK.md`), the real laptops for scouting and the lead's pages, real phones for viewing data and offline sync (D7), and the scouts who will actually go.
 - Seed a fake 12-team schedule through F3. Run it once with 2 scouts and once with 4, to exercise F1b.
 - Walk through every failure path once:
   - offline draft recovery;
@@ -200,7 +200,7 @@ If F1 is not green by **Saturday night (10-17)**, stop and fall back to paper fo
 ### After the event
 - Export the observations and the final pick list.
 - Run a 20-minute debrief with the scouts and lead scout.
-- Write `docs/FTC_BETA_FINDINGS.md` **on `rebuild`**, covering:
+- Write `docs/ftc/FTC_BETA_FINDINGS.md` **on `rebuild`**, covering:
   - what worked;
   - fields scouts misunderstood;
   - app bugs versus scouting-strategy issues;

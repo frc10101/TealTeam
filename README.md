@@ -6,7 +6,7 @@ An FRC scouting and analytics application for team 10101 — manual scouting obs
 
 The current implementation is Rust-based and is organized as a Cargo workspace. The retired Go, .NET, and Render ports are no longer part of this repository.
 
-The application is functional end to end: the server, SQLite repository, season-driven scouting forms, upstream sync, offline client pieces, QR handoff, and browser-side read-only pages are implemented and covered by Rust and browser tests. The remaining software work is tracked at the top of [docs/ACTION_ITEMS.md](docs/ACTION_ITEMS.md).
+The application is functional end to end: the server, SQLite repository, season-driven scouting forms, upstream sync, offline client pieces, QR handoff, and browser-side read-only pages are implemented and covered by Rust and browser tests. The remaining software work is tracked at the top of [docs/plan/ACTION_ITEMS.md](docs/plan/ACTION_ITEMS.md).
 
 ### Quick start
 
@@ -17,7 +17,7 @@ cp .env.example .env
 cargo run -p tt-web
 ```
 
-To click around with fake data instead (every role, two teams, a schedule, the access rules checked first): `cargo run -- dev`. See [docs/DEV_ENVIRONMENT.md](docs/DEV_ENVIRONMENT.md).
+To click around with fake data instead (every role, two teams, a schedule, the access rules checked first): `cargo run -- dev`. See [docs/dev/DEV_ENVIRONMENT.md](docs/dev/DEV_ENVIRONMENT.md).
 
 The server listens on `http://127.0.0.1:8080` by default. Check it with:
 
@@ -42,8 +42,8 @@ deploy/build-release.sh    # the bundle, then target/release/tt-web
 
 | Document | What it is |
 | --- | --- |
-| **[docs/ACTION_ITEMS.md](docs/ACTION_ITEMS.md)** | Current status, remaining work, implementation history, and resolved decisions. |
-| [docs/REBUILD_SPEC.md](docs/REBUILD_SPEC.md) | Domain, data model, route surface, business rules, upstream API behavior, front-end conventions, configuration, and deployment constraints. |
+| **[docs/plan/ACTION_ITEMS.md](docs/plan/ACTION_ITEMS.md)** | Current status, remaining work, implementation history, and resolved decisions. |
+| [docs/plan/REBUILD_SPEC.md](docs/plan/REBUILD_SPEC.md) | Domain, data model, route surface, business rules, upstream API behavior, front-end conventions, configuration, and deployment constraints. |
 | [RefurbishInstructions.md](RefurbishInstructions.md) | The rationale for the offline-first client, season-driven schemas, and sync design. |
 
 Work from the action items. Read the rebuild spec for what the app *did*, and the refurbish plan for why the target design is what it is. Where the two disagree, the refurbish plan wins — it was written knowing this system's flaws.
@@ -56,9 +56,9 @@ Work from the action items. Read the rebuild spec for what the app *did*, and th
 
 Rust + axum + Askama + sqlx, over SQLite, on a Raspberry Pi 5 at the event. One server, and it lives at the event — no cloud tier.
 
-Pages are server-rendered HTML that works without JavaScript, styled by one hand-written stylesheet. A few small scripts in `crates/tt-web/static/js/` add to them, with no build step. The retired app's Unpoly and Tailwind are deliberately gone; [ACTION_ITEMS.md](docs/ACTION_ITEMS.md) (U8, and the Phase 1 notes) says why.
+Pages are server-rendered HTML that works without JavaScript, styled by one hand-written stylesheet. A few small scripts in `crates/tt-web/static/js/` add to them, with no build step. The retired app's Unpoly and Tailwind are deliberately gone; [ACTION_ITEMS.md](docs/plan/ACTION_ITEMS.md) (U8, and the Phase 1 notes) says why.
 
-The one structural rule to get right on the first commit: split the workspace into a pure `tt-core` / `tt-templates` layer that compiles to `wasm32`, behind a `Repo` trait, with a CI job enforcing it. See [REBUILD_SPEC.md §9](docs/REBUILD_SPEC.md#9-crate-layout-for-the-rebuild). Retrofitting that split was the single largest item in the refurbish plan; building it in costs almost nothing.
+The one structural rule to get right on the first commit: split the workspace into a pure `tt-core` / `tt-templates` layer that compiles to `wasm32`, behind a `Repo` trait, with a CI job enforcing it. See [REBUILD_SPEC.md §9](docs/plan/REBUILD_SPEC.md#9-crate-layout-for-the-rebuild). Retrofitting that split was the single largest item in the refurbish plan; building it in costs almost nothing.
 
 ## Rust toolchain
 

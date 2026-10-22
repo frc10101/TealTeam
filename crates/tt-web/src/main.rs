@@ -58,7 +58,7 @@ commands:
   dev [--fresh] [--check] [--port N]
               a throwaway server on fake data in ./dev-data: every role, two
               teams, a schedule, and the access rules checked first. --fresh
-              wipes the data, --check only seeds and checks. docs/DEV_ENVIRONMENT.md
+              wipes the data, --check only seeds and checks. docs/dev/DEV_ENVIRONMENT.md
   help        show this message
 
 Configuration comes from the environment and .env files; see .env.example.";

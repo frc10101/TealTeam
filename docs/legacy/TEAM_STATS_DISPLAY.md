@@ -2,7 +2,7 @@
 
 > **Historical.** Describes the team page of the implementation retired on 2026-08-26, whose data display the refurbish plan judged a failure.
 >
-> Kept because it records which numbers mattered and why. The replacement is `U11`–`U20` in [ACTION_ITEMS](../ACTION_ITEMS.md).
+> Kept because it records which numbers mattered and why. The replacement is `U11`–`U20` in [ACTION_ITEMS](../plan/ACTION_ITEMS.md).
 
 ```mermaid
 flowchart LR

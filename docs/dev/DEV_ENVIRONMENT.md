@@ -98,7 +98,7 @@ router (`startup::router`, through tower `oneshot`) as each user.
 
 Known and not asserted: the lead's queue lists every team's waiting
 observations, and a decline reason is not redacted in a pull or snapshot
-([ACTION_ITEMS.md](ACTION_ITEMS.md), R1 findings; open decision 4 makes both
+([ACTION_ITEMS.md](../plan/ACTION_ITEMS.md), R1 findings; open decision 4 makes both
 moot while TealTeam is Team 10101 only).
 
 ## Adding a check

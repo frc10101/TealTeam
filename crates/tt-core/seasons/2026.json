@@ -17,7 +17,7 @@
     "Field keys are payload keys. Renaming one breaks existing data -- add a new",
     "field and bump 'version' instead. crates/tt-core/src/season.rs validates this",
     "file on every test run, so a typo here is a red build, not an event-day",
-    "surprise. See docs/ACTION_ITEMS.md D4."
+    "surprise. See docs/plan/ACTION_ITEMS.md D4."
   ],
 
   "sections": [

@@ -2,7 +2,7 @@
 //!
 //! An SD card wears out under a database's small, constant writes, and the
 //! time it fails is mid-event: the Pi's database belongs on an NVMe or USB SSD
-//! (REBUILD_SPEC.md 10, docs/PI_STORAGE.md). The server cannot move it there,
+//! (REBUILD_SPEC.md 10, docs/event/PI_STORAGE.md). The server cannot move it there,
 //! but it can say where it is, so a database left on the SD card is a warning
 //! at startup and not a surprise on Saturday afternoon.
 //!

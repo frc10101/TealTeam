@@ -240,7 +240,7 @@ if [[ "$schedule" == sync ]]; then
         sleep 3
     done
 fi
-has_matches || die "$event_key has no matches on the server. Load them with 'tt-web bulk-load' at the shop or over a wired uplink, then run this again (docs/SETUP_GUIDE.md)"
+has_matches || die "$event_key has no matches on the server. Load them with 'tt-web bulk-load' at the shop or over a wired uplink, then run this again (docs/event/SETUP_GUIDE.md)"
 echo "    matches are loaded"
 
 # ── Assignments ─────────────────────────────────────────────────────────────

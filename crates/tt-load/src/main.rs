@@ -10,7 +10,7 @@
 //! Filling a phone's storage is a browser's fault, not a server's: that is
 //! `crates/tt-web/tests/browser/storage-full.mjs`.
 //!
-//! How to run it, on this machine or against the Pi: docs/LOAD_TEST.md.
+//! How to run it, on this machine or against the Pi: docs/dev/LOAD_TEST.md.
 
 mod faults;
 mod report;

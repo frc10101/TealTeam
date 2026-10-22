@@ -1,6 +1,6 @@
 # Event day: set up the scouting server
 
-*One page. Print it, laminate it, tape it to the Pi's case. Detail: `docs/PI_NETWORK.md` (network), `docs/PI_STORAGE.md` (SSD, backups).*
+*One page. Print it, laminate it, tape it to the Pi's case. Detail: `docs/event/PI_NETWORK.md` (network), `docs/event/PI_STORAGE.md` (SSD, backups).*
 
 > **[ PHOTO GOES HERE: the Pi, the switch, and every cable plugged in correctly. Label each cable. ]**
 

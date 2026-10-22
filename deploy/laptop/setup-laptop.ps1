@@ -1,5 +1,5 @@
 # Get a Windows laptop (the lead's or the admin's) ready for the event LAN (SK1).
-# The scouts' Chromebooks cannot run this: see docs/SETUP_GUIDE.md.
+# The scouts' Chromebooks cannot run this: see docs/event/SETUP_GUIDE.md.
 #
 #   powershell -ExecutionPolicy Bypass -File deploy\laptop\setup-laptop.ps1 [-Url http://tealteam.local] [-PiIp 10.101.0.1] [-DryRun]
 #   ... -Undo        put Wi-Fi, sleep and the hosts entry back

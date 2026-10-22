@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Get a Linux or macOS laptop (the lead's or the admin's) ready for the event
-# LAN (SK1). The scouts' Chromebooks cannot run this: see docs/SETUP_GUIDE.md.
+# LAN (SK1). The scouts' Chromebooks cannot run this: see docs/event/SETUP_GUIDE.md.
 #
 #   deploy/laptop/setup-laptop.sh [--url http://tealteam.local] [--dry-run]
 #   deploy/laptop/setup-laptop.sh --undo     put Wi-Fi and sleep back

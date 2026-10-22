@@ -14,7 +14,7 @@
 # for the server, take a backup and restore-check it, and print the status.
 #
 # Safe to run again: a value already in the env file is kept, not asked for.
-# Build tt-web with deploy/build-release.sh (see docs/SETUP_GUIDE.md).
+# Build tt-web with deploy/build-release.sh (see docs/event/SETUP_GUIDE.md).
 #
 # Needs internet only for apt, so run it at the shop. The network step moves
 # eth0 to the event LAN (10.101.0.1, no internet): do not run it over SSH on
@@ -110,7 +110,7 @@ command -v apt-get >/dev/null || refuse "no apt-get: this script is for Raspberr
 [[ $DRY_RUN -eq 1 || $EUID -eq 0 ]] || refuse "run as root: sudo $0 $*"
 # An ELF file's machine number is the 16-bit value at offset 18: 183 is aarch64.
 if [[ "$(od -An -t u1 -j18 -N1 "$binary" 2>/dev/null | tr -d ' ')" != 183 ]]; then
-    refuse "$binary is not an aarch64 build: build it on the Pi, or cross-compile (docs/SETUP_GUIDE.md)"
+    refuse "$binary is not an aarch64 build: build it on the Pi, or cross-compile (docs/event/SETUP_GUIDE.md)"
 fi
 # eth0 is about to become the event LAN.
 if [[ -n "${SSH_CONNECTION:-}" ]]; then
@@ -135,11 +135,11 @@ fi
 # ── The SSD ─────────────────────────────────────────────────────────────────
 say "checking the SSD at $DATA_ROOT"
 if ! findmnt --mountpoint "$DATA_ROOT" >/dev/null 2>&1; then
-    refuse "$DATA_ROOT is not a mounted drive. Set up the SSD first: docs/PI_STORAGE.md steps 1-4 (this script never partitions a disk)"
+    refuse "$DATA_ROOT is not a mounted drive. Set up the SSD first: docs/event/PI_STORAGE.md steps 1-4 (this script never partitions a disk)"
 else
     source_dev="$(findmnt -n -o SOURCE --mountpoint "$DATA_ROOT")"
     case "$source_dev" in
-        /dev/mmcblk*) refuse "$DATA_ROOT is on the SD card ($source_dev), not the SSD: docs/PI_STORAGE.md" ;;
+        /dev/mmcblk*) refuse "$DATA_ROOT is on the SD card ($source_dev), not the SSD: docs/event/PI_STORAGE.md" ;;
         *) echo "    $DATA_ROOT is on $source_dev" ;;
     esac
 fi

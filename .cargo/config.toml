@@ -1,4 +1,4 @@
 [alias]
 # `cargo dev` is `cargo run -p tt-web -- dev`: a throwaway server full of fake
-# data (docs/DEV_ENVIRONMENT.md). Flags pass through: `cargo dev --check`.
+# data (docs/dev/DEV_ENVIRONMENT.md). Flags pass through: `cargo dev --check`.
 dev = "run -p tt-web -- dev"

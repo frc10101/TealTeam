@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The event-day network on the Pi (P4, P6). See docs/PI_NETWORK.md.
+# The event-day network on the Pi (P4, P6). See docs/event/PI_NETWORK.md.
 #
 #   sudo ./setup.sh             apply
 #   sudo ./setup.sh --dry-run   say what it would change, change nothing
@@ -8,7 +8,7 @@
 # only ever writes the files it owns and restarts what they changed.
 #
 # UNTESTED on a Pi: written for Raspberry Pi OS Bookworm (NetworkManager),
-# checked with ShellCheck, never run. docs/PI_NETWORK.md lists what to verify.
+# checked with ShellCheck, never run. docs/event/PI_NETWORK.md lists what to verify.
 
 set -euo pipefail
 
