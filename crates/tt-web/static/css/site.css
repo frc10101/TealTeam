@@ -16,7 +16,9 @@
  */
 
 :root {
-  --radius: 0.5rem;
+  /* The team site's corners: 12px on controls, 18px on cards. */
+  --radius: 0.75rem;
+  --radius-card: 1.125rem;
   --tap: 44px; /* Minimum touch target. Non-negotiable on a phone. */
   --tap-match: 56px; /* Anything tapped while a match is running (RI 2F). */
 }
@@ -62,6 +64,9 @@
   --on-blue: #bfdbfe;
 
   --shadow: 0 8px 24px rgb(0 0 0 / 0.4);
+  --shadow-soft: 0 6px 18px rgb(0 0 0 / 0.35);
+  /* The team site's red, yellow, cyan, in hard thirds. */
+  --stripe: linear-gradient(90deg, var(--brand-red) 0 33.33%, var(--brand-yellow) 33.33% 66.66%, var(--brand-cyan) 66.66%);
 }
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
@@ -73,6 +78,7 @@
     --amber-500: #c99a00; --amber-900: #ffeaa0; --blue-500: #2563eb; --blue-900: #cbdcff;
     --on-red: #8a0000; --on-green: #14532d; --on-amber: #5c4300; --on-blue: #1e3a8a;
     --shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+    --shadow-soft: 0 6px 18px rgb(0 0 0 / 0.07);
     --series-4: #a86f00; /* the graph's amber, darker to keep 3:1 on white */
   }
 }
@@ -86,6 +92,7 @@
   --amber-500: #c99a00; --amber-900: #ffeaa0; --blue-500: #2563eb; --blue-900: #cbdcff;
   --on-red: #8a0000; --on-green: #14532d; --on-amber: #5c4300; --on-blue: #1e3a8a;
   --shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+  --shadow-soft: 0 6px 18px rgb(0 0 0 / 0.07);
   --series-4: #a86f00;
 }
 
@@ -117,12 +124,14 @@ body {
 a { color: var(--accent-300); }
 /* A page has one title; sections under it read as sections, not as more
    titles, so the eye goes to the page's task first. */
-h1, h2 { margin: 0; line-height: 1.3; }
-h1, .brand, .update-card h2 {
+h1, h2, h3 { margin: 0; line-height: 1.3; }
+/* Every heading in Bangers, as on the team site. */
+h1, h2, h3, .brand {
   font-family: Bangers, Roboto, system-ui, sans-serif; font-weight: 400; letter-spacing: 0.04em;
 }
 h1 { font-size: 1.5rem; }
-h2 { font-size: 1.0625rem; }
+h2 { font-size: 1.25rem; }
+h3 { font-size: 1.125rem; }
 
 /* Keyboard users land here first; visible only when focused. */
 .skip-link {
@@ -141,7 +150,7 @@ h2 { font-size: 1.0625rem; }
 /* Under the header, the team site's stripe: red, yellow, cyan. */
 .nav {
   background: var(--gray-900); border-bottom: 3px solid;
-  border-image: linear-gradient(90deg, var(--brand-red) 0 33.33%, var(--brand-yellow) 33.33% 66.66%, var(--brand-cyan) 66.66%) 1;
+  border-image: var(--stripe) 1;
 }
 .nav-inner {
   max-width: 70rem; margin: 0 auto; padding: 0.375rem 1rem;
@@ -200,7 +209,7 @@ h2 { font-size: 1.0625rem; }
   color: var(--gray-300); text-decoration: none;
 }
 .nav-links a[aria-current="page"] {
-  color: var(--accent-300); background: var(--gray-800); box-shadow: inset 0 3px 0 var(--accent-500);
+  color: var(--accent-300); background: var(--stripe) top / 100% 3px no-repeat, var(--gray-800);
 }
 body.has-tabs { padding-bottom: calc(var(--tap-match) + env(safe-area-inset-bottom)); }
 .inline { display: inline; }
@@ -225,7 +234,7 @@ body.has-tabs { padding-bottom: calc(var(--tap-match) + env(safe-area-inset-bott
     flex: none; min-height: 2.5rem; padding: 0 0.4375rem;
     font-size: 0.9375rem; border-radius: var(--radius);
   }
-  .nav-links a[aria-current="page"] { box-shadow: inset 0 -3px 0 var(--accent-500); }
+  .nav-links a[aria-current="page"] { background: var(--stripe) bottom / 100% 3px no-repeat, var(--gray-800); }
   .nav-links a:hover, .nav-account > a:hover { background: var(--gray-800); color: var(--accent-300); }
   body.has-tabs { padding-bottom: 0; }
   .nav-tools { order: 0; flex: 0 1 auto; }
@@ -260,7 +269,7 @@ body.has-tabs { padding-bottom: calc(var(--tap-match) + env(safe-area-inset-bott
 
 .card {
   background: var(--gray-900); border: 1px solid var(--gray-700);
-  border-radius: var(--radius); overflow: hidden;
+  border-radius: var(--radius-card); overflow: hidden; box-shadow: var(--shadow-soft);
 }
 .card.narrow { max-width: 32rem; width: 100%; }
 .card-header {
@@ -335,8 +344,13 @@ body.has-tabs { padding-bottom: calc(var(--tap-match) + env(safe-area-inset-bott
   border: 1px solid transparent; border-radius: var(--radius); cursor: pointer;
 }
 .btn:focus-visible { outline: 2px solid var(--accent-300); outline-offset: 2px; }
-.btn-primary { background: var(--accent-600); color: var(--on-accent); font-weight: 600; }
-.btn-primary:hover { background: var(--accent-700); }
+/* The team site's main button: red, yellow and cyan on the diagonal. Its
+   white text is too faint on yellow, so ours is black, which reads on all three. */
+.btn-primary {
+  background: linear-gradient(135deg, var(--brand-red) 0 33.33%, var(--brand-yellow) 33.33% 66.66%, var(--brand-cyan) 66.66%);
+  background-origin: border-box; color: #000; font-weight: 700; box-shadow: var(--shadow-soft);
+}
+.btn-primary:hover { box-shadow: var(--shadow); filter: brightness(1.05); }
 .btn-secondary { background: var(--gray-700); color: var(--gray-100); }
 .btn-secondary:hover { background: var(--gray-800); }
 .btn-danger { background: var(--red-900); color: var(--on-red); border-color: var(--red-500); }
