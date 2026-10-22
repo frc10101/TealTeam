@@ -46,16 +46,9 @@ deploy/build-release.sh    # the bundle, then target/release/tt-web
 
 Work from the action items. Read the rebuild spec for what the app *did*, and the refurbish plan for why the target design is what it is. Where the two disagree, the refurbish plan wins — it was written knowing this system's flaws.
 
-### Supporting reference
+### Everything else
 
-- [docs/FRC_API_Calls.md](docs/FRC_API_Calls.md) — FIRST and TBA endpoint catalog with payload examples
-- [docs/TBA_SCHEMA_FIX_SUMMARY.md](docs/TBA_SCHEMA_FIX_SUMMARY.md) — TBA schema variance across seasons; read before writing deserializers
-- [docs/TIMEZONE_HANDLING.md](docs/TIMEZONE_HANDLING.md) — event timezone rules
-- [docs/DataPoints.md](docs/DataPoints.md) — what is collected and what is derived
-- [docs/FTC_BIOBUZZ_MIGRATION.md](docs/FTC_BIOBUZZ_MIGRATION.md) — FTC BIOBUZZ migration and qualifier-beta playbook
-- [docs/TEAM_STATS_DISPLAY.md](docs/TEAM_STATS_DISPLAY.md) — what the team page shows and why it matters
-- [docs/PREDICTIONS_REIMPLEMENTATION.md](docs/PREDICTIONS_REIMPLEMENTATION.md) — the removed OPR/DPR prediction feature and its formulas
-- [docs/TEALTEAM_DETAILED_OVERVIEW_SOURCE.md](docs/TEALTEAM_DETAILED_OVERVIEW_SOURCE.md) — dense domain synthesis (its stack and deployment sections describe the retired implementation)
+[docs/README.md](docs/README.md) indexes every document: feature designs, setting up and running the Pi at an event, the dev environment and load test, upstream API reference (FIRST, TBA, timezones), and the historical notes on the retired implementation.
 
 ## Target stack
 

@@ -1197,7 +1197,7 @@ Restating C2 because a timestamp-based design lives or dies on it:
 
 - The Pi needs a **DS3231 RTC module** (~$5). Without it, a power cycle at an offline venue gives you a server whose clock is wrong by hours or days, which silently corrupts every watermark and every hybrid logical clock in this design.
 - Clients should compute an offset against the server clock on each sync and record it, so device-clock skew is measurable rather than mysterious.
-- Store everything in UTC. The repo already has timezone handling documented in [docs/TIMEZONE_HANDLING.md](docs/TIMEZONE_HANDLING.md) — keep to it.
+- Store everything in UTC. The repo already has timezone handling documented in [docs/reference/TIMEZONE_HANDLING.md](docs/reference/TIMEZONE_HANDLING.md) — keep to it.
 
 ### Load Testing
 
@@ -1316,4 +1316,4 @@ Decisions that need a human before Phase 2 starts.
 - [Leptos vs Yew vs Dioxus: Rust Frontend Framework Comparison 2026](https://reintech.io/blog/leptos-vs-yew-vs-dioxus-rust-frontend-framework-comparison-2026) — surveyed and not adopted; see "Explicitly deferred"
 - [`trait-variant`](https://crates.io/crates/trait-variant) — generating `Send` and non-`Send` variants of one async trait
 - [Go Wiki: WebAssembly](https://go.dev/wiki/WebAssembly) — background on wasm binary size, retained for comparison
-- Internal: [rust/tealteam-web/README.md](rust/tealteam-web/README.md), [ARCHITECTURE.md](ARCHITECTURE.md), [docs/PI_EVENT_BOOT.md](docs/PI_EVENT_BOOT.md), [docs/TIMEZONE_HANDLING.md](docs/TIMEZONE_HANDLING.md)
+- Internal: [rust/tealteam-web/README.md](rust/tealteam-web/README.md), [ARCHITECTURE.md](ARCHITECTURE.md), [docs/PI_EVENT_BOOT.md](docs/PI_EVENT_BOOT.md), [docs/reference/TIMEZONE_HANDLING.md](docs/reference/TIMEZONE_HANDLING.md)

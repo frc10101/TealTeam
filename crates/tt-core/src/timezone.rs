@@ -2,7 +2,7 @@
 //!
 //! Everything is stored in UTC. An event's own zone decides two things: what
 //! "today" is there, and how a match time reads on its schedule. The server's
-//! zone never enters into it (docs/TIMEZONE_HANDLING.md).
+//! zone never enters into it (docs/reference/TIMEZONE_HANDLING.md).
 //!
 //! FIRST does not send IANA names. It sends Windows ones -- `"Central Standard
 //! Time"` -- and not always the right one: in 2026 it gave Perth, Sanya, and

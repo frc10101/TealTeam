@@ -8,7 +8,7 @@
 //! # Why the fallbacks exist
 //!
 //! TBA's response shape drifts between seasons, and the retired implementation
-//! lost real data to it (see `docs/TBA_SCHEMA_FIX_SUMMARY.md`):
+//! lost real data to it (see `docs/reference/TBA_SCHEMA_FIX_SUMMARY.md`):
 //!
 //!   * `/coprs` returns **dynamically named** components — `totalAutoPoints`,
 //!     `totalTeleopPoints` and friends — not fixed `auto_oprs` fields. Code that

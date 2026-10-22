@@ -19,7 +19,7 @@ pub struct Event {
     pub name: String,
     pub location: Option<String>,
     /// IANA identifier. Match times are rendered in the event's zone, never the
-    /// server's — see docs/TIMEZONE_HANDLING.md.
+    /// server's — see docs/reference/TIMEZONE_HANDLING.md.
     pub timezone: Option<String>,
     pub start_date: Option<NaiveDate>,
     pub end_date: Option<NaiveDate>,
