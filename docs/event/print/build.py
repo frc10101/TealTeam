@@ -234,7 +234,7 @@ SCOUT_CARD = boxed("""
 <li>The page says <b>You are scouting</b> and the team number, with <b>Your next assignment</b> at the top. Find that robot on the field before the match starts: red or blue, and its number.</li>
 <li><b>Fill it in while the match runs.</b> Tap <b>+</b> each time it scores. What you type is kept as you go, so a reload loses nothing.</li>
 <li>When the match ends, finish the notes and press <b>Save observation</b>. Then follow <b>Your next assignment</b> at the top.</li>
-<li><b>Check the chip in the header:</b> <b>Synced</b> means the server has it. <b>Offline &#183; 2 held</b> means it is waiting on this laptop: keep the page open, never clear the browser, and tell the lead scout.</li>
+<li><b>Check the chip in the header:</b> <b>Synced</b> means the server has it. <b>Offline &#183; 1 held</b> means it is waiting on this laptop: <b>do not reload, click a link or close the tab</b> (the page will not come back until the server does), never clear the browser, tell the lead scout, and switch to paper.</li>
 </ol>
 <h2>If something is off</h2>
 <ul>

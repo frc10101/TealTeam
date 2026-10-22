@@ -219,6 +219,15 @@ If F1 is not green by **Saturday night (10-17)**, stop and fall back to paper fo
 
 Still to do on the real hardware: the Pi (bootstrap, clock, wired network, `tealteam.local`), the Chromebooks, and the scouts who will go.
 
+**Run 2026-10-22 on a wired LAN, a desktop as the server.** The release build on 10.101.0.1:8080 (NetworkManager shared mode for DHCP and DNS, Avahi announcing `tealteam.local`), a real Chromebook, and a second laptop driving Chromium 154 through puppeteer, beside race tests from the server:
+- sign-in, the form (every field type, a reload mid-form keeps all 18 answers), saving, approve and decline with **Record it again**, Compare (medians, ranges, box plots, best, reference deltas, last 3/5, entry from Rankings, the team page and the pick list), Graph (8-team and 3-metric limits, right-hand axis, reload keeps the choice) and the Assignments page updating itself (27 s) all pass, with no console errors and no 4xx/5xx;
+- races: one record sent 12 times at once is stored once; two scouts saving one match at once are both stored; 40 posts (20 records, each twice) under constant sync pulls store 20 of 20 once; a second tab recording the same robot is refused by name;
+- the FTC Events pull works with the real key (10 teams for USALATQ; the schedule is not posted yet);
+- **ChromeOS sends `*.local` only to mDNS**: the Chromebook could not open `tealteam.local` from dnsmasq's DNS answer alone, and could once Avahi announced it. The Pi runs Avahi as hostname `tealteam`; a laptop server needs `avahi-publish -a -R tealteam.local <ip>`;
+- **offline on plain HTTP is limited, as decided (open decision 5: plain HTTP on the event LAN)**: no service worker, so a reload or link while the server is unreachable shows Chrome's error page. What was saved is held and syncs once with no duplicate, but a scout cannot move on to the next match offline. The scout card now says to stay on the page and switch to paper;
+- **fixed:** Rankings rounded a mean of 6.25 to 6.2 and Compare to 6.3 (5103197);
+- deferred to after Athens (RH1 in ACTION_ITEMS): Graph drops quick taps; a failed sign-in or refused second save stays on the `/api/…` URL; a counter over its maximum gets only the browser's message; Rankings lets 7 be ticked for Compare's 6 without naming the one left off; percentage deltas say "pts"; a decline shows on Scout, not Home.
+
 ### Event day (Sat 10-24)
 - Seed from the official schedule as soon as it is posted (no later than 15 min before quals, §13.6.1). Check every match against the printed sheet.
 - Re-run auto-assign whenever the number of scouts on duty changes.
