@@ -107,7 +107,9 @@
   var bypass = false;
   document.addEventListener("submit", function (event) {
     var form = event.target;
-    if (bypass || !form.matches || !form.matches("form[data-inplace]")) return;
+    // Element's own matches: Auto-distribute's field named "matches" hides
+    // form.matches behind itself.
+    if (bypass || !(form instanceof Element) || !Element.prototype.matches.call(form, "form[data-inplace]")) return;
     event.preventDefault();
     var button = event.submitter;
     var data = new URLSearchParams(new FormData(form));
