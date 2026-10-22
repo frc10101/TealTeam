@@ -11,8 +11,9 @@
 //! stay with each side. A page moves here when it is wanted offline (C6), one
 //! at a time; the rest stay in `tt-web`. So far: what a scout reads at an
 //! event, which is home, a team, the notes, and the graph, and the drive
-//! coach's schedule (C6b). Lead scout pages, the pick list, and anything that
-//! writes stay with the server.
+//! coach's schedule (C6b), and the scouting page with the check behind its
+//! save (OF1), which the device records into its outbox. Lead scout pages,
+//! the pick list, and the rest of what writes stay with the server.
 //!
 //! [`LocalRepo`]: tt_repo::LocalRepo
 
@@ -21,6 +22,7 @@ pub mod events;
 pub mod graph;
 pub mod home;
 pub mod notes;
+pub mod scouting;
 pub mod teams;
 
 /// `/notes` for `event_key`, filtered to `team` (U22).
