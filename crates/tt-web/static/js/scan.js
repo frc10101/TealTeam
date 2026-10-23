@@ -33,6 +33,13 @@
 
   function loadScript() {
     if (window.ZXingWASM) return Promise.resolve();
+    // The downloaded scouting page (C15) carries the reader inside it.
+    if (window.ttZxing && window.ttZxing.js) {
+      var inline = document.createElement("script");
+      inline.textContent = window.ttZxing.js;
+      document.head.appendChild(inline);
+      return window.ZXingWASM ? Promise.resolve() : Promise.reject(new Error("The code reader in this file did not start."));
+    }
     if (!script) {
       script = new Promise(function (resolve, reject) {
         var el = document.createElement("script");
@@ -51,6 +58,12 @@
   }
 
   function loadWasm() {
+    if (!wasm && window.ttZxing && window.ttZxing.wasm) {
+      var raw = atob(window.ttZxing.wasm);
+      var bytes = new Uint8Array(raw.length);
+      for (var i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+      wasm = Promise.resolve(bytes.buffer);
+    }
     if (!wasm) {
       wasm = fetch(BASE + "zxing_reader.wasm", { credentials: "same-origin" })
         .then(function (response) {
