@@ -63,6 +63,11 @@ pub enum Source {
     Files { cert: PathBuf, key: PathBuf },
 }
 
+/// Marks a request that came in over HTTPS, for the handlers that write the
+/// server's own address into what they hand out (the scout file, C15).
+#[derive(Debug, Clone, Copy)]
+pub struct OverTls;
+
 /// What [`load`] hands the listener: the chain and key in PEM, and our CA's
 /// certificate when there is one, for `/ca.crt`.
 pub struct Material {
@@ -295,6 +300,7 @@ pub async fn serve(port: u16, source: &Source, app: Router) -> Result<()> {
         let _ = CA_PEM.set(ca);
     }
     let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(config));
+    let app = app.layer(axum::Extension(OverTls));
     let addr = format!("0.0.0.0:{port}");
     let listener = tokio::net::TcpListener::bind(&addr)
         .await

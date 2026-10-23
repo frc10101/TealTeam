@@ -55,12 +55,21 @@ fn refuse(status: StatusCode, why: &str) -> Response {
 }
 
 /// The file for `user` at `context`'s event, as an attachment.
+/// How the browser reached the server, for the address the file posts to.
+pub struct Reached<'a> {
+    pub uri: &'a axum::http::Uri,
+    pub headers: &'a HeaderMap,
+    /// Over HTTPS (H1).
+    pub tls: bool,
+}
+
 pub async fn download(
     state: &AppState,
     user: &User,
     context: &EventContext,
-    headers: &HeaderMap,
+    reached: &Reached<'_>,
 ) -> Response {
+    let headers = reached.headers;
     let Some(device) = device_uuid(headers) else {
         return refuse(
             StatusCode::BAD_REQUEST,
@@ -134,9 +143,9 @@ pub async fn download(
     let now = Utc::now();
     let slots = |teams: &[Option<i32>]| teams.to_vec();
     let data = json!({
-        // Where the file posts. The Pi as this browser reached it: over the
-        // event LAN that is plain http.
-        "pi": pi_origin(headers),
+        // Where the file posts: the Pi as this browser reached it, by the
+        // same scheme, host and port.
+        "pi": pi_origin(reached),
         "user": user.id,
         "scout": user.name,
         "event": event.key,
@@ -210,19 +219,32 @@ pub async fn download(
         .into_response()
 }
 
-/// `http://` and the `Host` the browser asked for: the address that
-/// reached the Pi from this tablet, so the file posts to the same one.
-fn pi_origin(headers: &HeaderMap) -> String {
-    let host = headers
-        .get(header::HOST)
-        .and_then(|h| h.to_str().ok())
-        .filter(|h| {
-            !h.is_empty()
-                && h.chars()
-                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':' | '[' | ']'))
+/// The address that reached the Pi from this tablet, so the file posts to
+/// the same one. HTTP/2 (every HTTPS request from Chrome) names the host in
+/// the request's authority and sends no `Host`, so that comes first; and
+/// the scheme is the one the request came by, or a file downloaded over
+/// HTTPS would post to `http://` on the HTTPS port.
+fn pi_origin(reached: &Reached<'_>) -> String {
+    let plain = |h: &str| {
+        !h.is_empty()
+            && h.chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':' | '[' | ']'))
+    };
+    let host = reached
+        .uri
+        .authority()
+        .map(|a| a.as_str())
+        .filter(|h| plain(h))
+        .or_else(|| {
+            reached
+                .headers
+                .get(header::HOST)
+                .and_then(|h| h.to_str().ok())
+                .filter(|h| plain(h))
         })
         .unwrap_or("localhost");
-    format!("http://{host}")
+    let scheme = if reached.tls { "https" } else { "http" };
+    format!("{scheme}://{host}")
 }
 
 /// A name as part of a file name: letters and digits, lower case.
@@ -237,5 +259,50 @@ fn file_word(name: &str) -> String {
         "scout".into()
     } else {
         word
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_file_posts_back_the_way_the_browser_came() {
+        use axum::http::{HeaderValue, Uri};
+        let origin = |uri: &str, host: Option<&str>, tls: bool| {
+            let uri: Uri = uri.parse().unwrap();
+            let mut headers = HeaderMap::new();
+            if let Some(h) = host {
+                headers.insert(header::HOST, HeaderValue::from_str(h).unwrap());
+            }
+            pi_origin(&Reached {
+                uri: &uri,
+                headers: &headers,
+                tls,
+            })
+        };
+        // HTTP/2 over HTTPS: the authority, and no Host.
+        assert_eq!(
+            origin("https://10.101.0.1:8443/submission/download", None, true),
+            "https://10.101.0.1:8443"
+        );
+        // HTTP/1.1: the Host, and the scheme it came by.
+        assert_eq!(
+            origin("/submission/download", Some("tealteam.local"), false),
+            "http://tealteam.local"
+        );
+        assert_eq!(
+            origin("/submission/download", Some("10.101.0.1:8443"), true),
+            "https://10.101.0.1:8443"
+        );
+        // Nothing to go on, or something odd: this machine.
+        assert_eq!(
+            origin("/submission/download", None, false),
+            "http://localhost"
+        );
+        assert_eq!(
+            origin("/submission/download", Some("evil\"x"), false),
+            "http://localhost"
+        );
     }
 }
