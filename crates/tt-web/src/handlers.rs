@@ -1135,9 +1135,16 @@ pub async fn download_scout_file(
     Auth(user): Auth,
     EventParam(requested): EventParam,
     headers: HeaderMap,
+    uri: axum::http::Uri,
+    tls: Option<axum::Extension<crate::tls::OverTls>>,
 ) -> Response {
     let (_, context) = event_page(&state, Some(&user), requested.as_deref()).await;
-    crate::scout_file::download(&state, &user, &context, &headers).await
+    let reached = crate::scout_file::Reached {
+        uri: &uri,
+        headers: &headers,
+        tls: tls.is_some(),
+    };
+    crate::scout_file::download(&state, &user, &context, &reached).await
 }
 
 pub async fn submission(
