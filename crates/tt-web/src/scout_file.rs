@@ -50,6 +50,23 @@ fn asset_text(path: &str) -> String {
     String::from_utf8_lossy(asset.bytes).into_owned()
 }
 
+/// The QR reader (zxing-wasm) inside the file, for scanning the lead's
+/// receipt: a `file://` page cannot fetch `/static/vendor/zxing/`, and is no
+/// secure context, so it has no `BarcodeDetector` either. `scan.js` takes it
+/// from `window.ttZxing` when it is there. About a megabyte, most of it the
+/// wasm as base64.
+fn zxing_inline() -> String {
+    use base64::Engine;
+    let wasm = crate::assets::find("vendor/zxing/zxing_reader.wasm")
+        .expect("vendor/zxing/zxing_reader.wasm is compiled in");
+    let js = serde_json::to_string(&asset_text("vendor/zxing/zxing-reader.js"))
+        .expect("a string serialises");
+    script_safe(&format!(
+        "window.ttZxing = {{ js: {js}, wasm: \"{}\" }};",
+        base64::engine::general_purpose::STANDARD.encode(wasm.bytes)
+    ))
+}
+
 fn refuse(status: StatusCode, why: &str) -> Response {
     (status, why.to_string()).into_response()
 }
@@ -184,9 +201,8 @@ pub async fn download(
         notes_unshared: user.team_number.is_none(),
         css: asset_text("css/site.css"),
         data: json_in_script(&data.to_string()),
-        scripts: SCRIPTS
-            .iter()
-            .map(|path| script_safe(&asset_text(path)))
+        scripts: std::iter::once(zxing_inline())
+            .chain(SCRIPTS.iter().map(|path| script_safe(&asset_text(path))))
             .collect(),
     };
     let html = match page.render_html() {
