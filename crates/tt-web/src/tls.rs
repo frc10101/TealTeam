@@ -53,6 +53,12 @@ const RENEW_WITHIN_DAYS: i64 = 30;
 /// A connection that has not finished its handshake by then is dropped, so
 /// a stalled client cannot hold a task open.
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
+/// The first byte of every TLS connection (a handshake record). Anything
+/// else on the HTTPS port is plain HTTP: `tealteam.local:8443` typed without
+/// `https://`, which Chrome sends as `http://`.
+const TLS_HANDSHAKE: u8 = 0x16;
+/// Most of a plain request read before answering it with the redirect.
+const PLAIN_HEAD_MAX: usize = 8 * 1024;
 
 /// Where the server's certificate comes from.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -320,6 +326,15 @@ pub async fn serve(port: u16, source: &Source, app: Router) -> Result<()> {
             };
             let (acceptor, app) = (acceptor.clone(), app.clone());
             tokio::spawn(async move {
+                let mut first = [0u8; 1];
+                match tokio::time::timeout(HANDSHAKE_TIMEOUT, tcp.peek(&mut first)).await {
+                    Ok(Ok(1)) if first[0] != TLS_HANDSHAKE => {
+                        return redirect_plain(tcp, port).await;
+                    }
+                    Ok(Ok(_)) => {}
+                    Ok(Err(e)) => return tracing::debug!("https peek: {e}"),
+                    Err(_) => return tracing::debug!("https handshake timed out"),
+                }
                 let tls = match tokio::time::timeout(HANDSHAKE_TIMEOUT, acceptor.accept(tcp)).await
                 {
                     Ok(Ok(tls)) => tls,
@@ -343,9 +358,101 @@ pub async fn serve(port: u16, source: &Source, app: Router) -> Result<()> {
     Ok(())
 }
 
+/// Answer plain HTTP on the HTTPS port with a redirect to the same address
+/// over `https://`, then hang up.
+async fn redirect_plain(mut tcp: tokio::net::TcpStream, port: u16) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let mut head = Vec::with_capacity(1024);
+    let read = async {
+        let mut buf = [0u8; 1024];
+        while head.len() < PLAIN_HEAD_MAX && !head.windows(4).any(|w| w == b"\r\n\r\n") {
+            match tcp.read(&mut buf).await {
+                Ok(0) | Err(_) => break,
+                Ok(n) => head.extend_from_slice(&buf[..n]),
+            }
+        }
+    };
+    if tokio::time::timeout(HANDSHAKE_TIMEOUT, read).await.is_err() {
+        return tracing::debug!("plain http on the https port timed out");
+    }
+    let location = plain_redirect_location(&head, port);
+    tracing::debug!("plain http on the https port: redirecting to {location}");
+    let answer = format!(
+        "HTTP/1.1 301 Moved Permanently\r\nLocation: {location}\r\n\
+         Content-Length: 0\r\nConnection: close\r\n\r\n"
+    );
+    let _ = tcp.write_all(answer.as_bytes()).await;
+    let _ = tcp.shutdown().await;
+}
+
+/// Where a plain request's head should go over HTTPS: its Host (or
+/// `tealteam.local`) on `port`, and its path. A Host or path with anything a
+/// header cannot carry falls back to `https://tealteam.local:{port}/`.
+fn plain_redirect_location(head: &[u8], port: u16) -> String {
+    let text = String::from_utf8_lossy(head);
+    let mut lines = text.split("\r\n");
+    let path = lines
+        .next()
+        .and_then(|l| l.split(' ').nth(1))
+        .filter(|p| p.starts_with('/'))
+        .unwrap_or("/");
+    let host = lines
+        .take_while(|l| !l.is_empty())
+        .find_map(|l| {
+            let (name, value) = l.split_once(':')?;
+            name.trim()
+                .eq_ignore_ascii_case("host")
+                .then(|| value.trim())
+        })
+        .map(|h| {
+            h.rsplit_once(':')
+                .filter(|(_, p)| p.parse::<u16>().is_ok())
+                .map_or(h, |(h, _)| h)
+        })
+        .unwrap_or("tealteam.local");
+    let safe = |s: &str, extra: &str| {
+        !s.is_empty()
+            && s.chars()
+                .all(|c| c.is_ascii_alphanumeric() || "-._~".contains(c) || extra.contains(c))
+    };
+    if safe(host, "[]:") && safe(path, "/?&=%+,;@!$'()*:#") {
+        format!("https://{host}:{port}{path}")
+    } else {
+        format!("https://tealteam.local:{port}/")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn plain_http_on_the_https_port_goes_to_https() {
+        let head =
+            b"GET /scout?match=3 HTTP/1.1\r\nHost: tealteam.local:8443\r\nAccept: */*\r\n\r\n";
+        assert_eq!(
+            plain_redirect_location(head, 8443),
+            "https://tealteam.local:8443/scout?match=3"
+        );
+        let by_ip = b"GET / HTTP/1.1\r\nhost: 10.101.0.1:8443\r\n\r\n";
+        assert_eq!(
+            plain_redirect_location(by_ip, 8443),
+            "https://10.101.0.1:8443/"
+        );
+        // No Host, or one that could break the header: the Pi's name.
+        assert_eq!(
+            plain_redirect_location(b"GET /x HTTP/1.0\r\n\r\n", 8443),
+            "https://tealteam.local:8443/x"
+        );
+        let bad = b"GET / HTTP/1.1\r\nHost: evil\r\nSet-Cookie: x\r\n\r\n";
+        assert_eq!(plain_redirect_location(bad, 8443), "https://evil:8443/");
+        let crlf = b"GET /a\rb HTTP/1.1\r\nHost: x y\r\n\r\n";
+        assert_eq!(
+            plain_redirect_location(crlf, 8443),
+            "https://tealteam.local:8443/"
+        );
+    }
 
     fn names() -> Vec<String> {
         DEFAULT_NAMES.map(String::from).to_vec()
