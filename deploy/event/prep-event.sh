@@ -18,7 +18,9 @@
 #      FTC Events" when the server has both keys; check every match has
 #      PREP_ROBOTS_PER_MATCH robots;
 #   4. auto-assign the PREP_SCOUTS scouts, then read the coverage back;
-#   5. write a sign-in sheet (names and temporary passwords) to a local file.
+#   5. write a sign-in sheet (names and temporary passwords) to a local file;
+#      the example roster's @tealteam.local accounts get their role as the
+#      password, padded to 8 (scout123, lead1234, coach123).
 #
 # Safe to rerun: an account that exists keeps its password; an import replaces
 # matches and keeps observations; assignments already made are left alone.
@@ -202,9 +204,17 @@ chmod 600 "$sheet"
     printf '%-24s %-34s %-7s %s\n' NAME "SIGN-IN (email)" ROLE PASSWORD
 } >> "$sheet"
 
+# new_password EMAIL ROLE: the example roster's @tealteam.local accounts get
+# their role, padded to 8 with 1234 (scout123, lead1234, coach123), so a demo
+# needs no sheet; a real address gets a random one.
 new_password() {
     local p
-    p="$(LC_ALL=C tr -dc 'abcdefghjkmnpqrstuvwxyz23456789' < /dev/urandom | head -c 10 || true)"
+    if [[ "$1" == *@tealteam.local ]]; then
+        p="$2"
+        p="$p$(printf '12345678' | head -c $((${#p} < 5 ? 8 - ${#p} : 3)))"
+    else
+        p="$(LC_ALL=C tr -dc 'abcdefghjkmnpqrstuvwxyz23456789' < /dev/urandom | head -c 10 || true)"
+    fi
     printf '%s' "$p"
 }
 
@@ -266,7 +276,7 @@ note "signed in"
 say "creating accounts from $(basename "$roster")"
 while IFS=$'\t' read -r name email role team; do
     [[ "$email" == "$admin_email" ]] && continue
-    pw="$(new_password)"
+    pw="$(new_password "$email" "$role")"
     rc=0
     msg="$(signup "$name" "$email" "$team" "$pw")" || rc=$?
     case $rc in
