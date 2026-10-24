@@ -90,6 +90,9 @@ miniz_oxide = { version = "0.8", default-features = false, features = ["with-all
 # The pick list's CRDT (L14). Pure Rust and wasm-clean, so a browser replica
 # merges the same way the server does.
 yrs = "0.28"
+# The operator's terminal (tt-ops), and nothing else: the server binary that
+# has to work on event day carries no terminal UI.
+ratatui = "0.30"
 
 [profile.release]
 lto = true

@@ -21,6 +21,7 @@ is the only file at the top: start here.
 | Know how a page, route or rule is meant to work | [plan/REBUILD_SPEC.md](plan/REBUILD_SPEC.md) |
 | Set up a fresh Pi or the Chromebooks | [event/SETUP_GUIDE.md](event/SETUP_GUIDE.md) |
 | Run the server on the day | [event/EVENT_DAY_RUNBOOK.md](event/EVENT_DAY_RUNBOOK.md) |
+| Watch and control the server from a terminal | [event/OPS_TERMINAL.md](event/OPS_TERMINAL.md) |
 | Fix the network, the SSD or a backup | [event/PI_NETWORK.md](event/PI_NETWORK.md), [event/PI_STORAGE.md](event/PI_STORAGE.md) |
 | Turn on HTTPS (offline mode on the Chromebooks) | [event/HTTPS_SETUP.md](event/HTTPS_SETUP.md) |
 | Print the runbook, checklists or scouting sheet | [event/print/](event/print/) |
@@ -58,6 +59,7 @@ One document per larger item, linked from its row in ACTION_ITEMS.
 | --- | --- |
 | [SETUP_GUIDE.md](event/SETUP_GUIDE.md) | A fresh Pi and the team's laptops to event-ready, for someone who is not a developer. |
 | [EVENT_DAY_RUNBOOK.md](event/EVENT_DAY_RUNBOOK.md) | One page for the day itself. Printed from `event/print/`. |
+| [OPS_TERMINAL.md](event/OPS_TERMINAL.md) | `tt-ops`: the operator's terminal on the Pi or the laptop. Status, logs, people, data, and the day's controls (restart, back up, sync, import, accounts, power off). |
 | [PI_NETWORK.md](event/PI_NETWORK.md) | The wired event LAN the Pi provides. |
 | [HTTPS_SETUP.md](event/HTTPS_SETUP.md) | Getting the app, then HTTPS with our own CA (Caddy `tls internal`) and trusting it on each device, so the offline features turn on. |
 | [PI_STORAGE.md](event/PI_STORAGE.md) | The database on the Pi's SSD, and its backups. |

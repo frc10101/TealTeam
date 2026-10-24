@@ -1,0 +1,18 @@
+[package]
+name = "tt-ops"
+version = "0.1.0"
+edition = "2024"
+description = "The operator's terminal for the server it sits beside: status, logs, people, data, and the few controls an event needs. Run on the Pi over SSH, or on the laptop that serves (docs/event/OPS_TERMINAL.md)."
+
+[dependencies]
+tt-core = { workspace = true }
+tt-repo = { workspace = true }
+tt-repo-sqlite = { workspace = true }
+
+anyhow = { workspace = true }
+chrono = { workspace = true, features = ["clock"] }
+ratatui = { workspace = true }
+reqwest = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }

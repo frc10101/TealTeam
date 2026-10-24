@@ -39,3 +39,8 @@ crates/tt-web/static/client/
 
 # Event prep sign-in sheets hold temporary passwords: never commit them.
 signin-sheet-*.txt
+
+# SQLite side files of a server run from the repo root, and its CA (H1)
+*.db-shm
+*.db-wal
+/tls/

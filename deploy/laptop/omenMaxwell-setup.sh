@@ -203,6 +203,7 @@ if [[ $tls_port != off ]]; then
     note "the certificate covers tealteam.local, $lan_addr and $(grep '^TLS_NAMES=' "$dir/.env" | cut -d= -f2); for others, TLS_NAMES=... in $dir/.env, then restart"
 fi
 note "log: $dir/server.log   stop: $0 stop --dir $dir"
+note "watch and control it: $ROOT/target/release/tt-ops --dir $dir   (docs/event/OPS_TERMINAL.md)"
 note "keep it plugged in; the lid can close, but the screen still locks"
 echo
 say "next: accounts, schedule and assignments"

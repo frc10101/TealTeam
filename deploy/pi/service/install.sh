@@ -77,6 +77,13 @@ fi
 restart=0
 place "$binary" "$APP_DIR/tt-web" 0755 && restart=1
 
+# The operator's terminal, when it was built beside the server
+# (deploy/build-release.sh does). Not a service: run `sudo /opt/tealteam/tt-ops`.
+ops="$(dirname "$binary")/tt-ops"
+if [[ -f "$ops" ]]; then
+    place "$ops" "$APP_DIR/tt-ops" 0755 || true
+fi
+
 # Settings: written once, never overwritten, since they hold the API keys.
 if [[ ! -f "$APP_DIR/.env" ]]; then
     say "writing $APP_DIR/.env from the example: add the API keys there"
@@ -111,3 +118,4 @@ if [[ $restart -eq 1 ]] || ! systemctl is-active --quiet tealteam 2>/dev/null; t
 fi
 
 say "done. Logs: journalctl -u tealteam -f    Status: systemctl status tealteam"
+[[ -f "$APP_DIR/tt-ops" ]] && say "the operator's terminal: sudo $APP_DIR/tt-ops   (or --once for one plain report)"
