@@ -99,7 +99,7 @@ A Linux, Mac or Windows laptop, if you have one, can run `deploy/laptop/setup-la
 
 **Done when:** each laptop shows the sign-in page at `http://tealteam.local/` or `http://10.101.0.1/`.
 
-**No Pi (a demo):** Maxwell's Omen laptop (Omarchy) can be the server instead: `deploy/laptop/omenMaxwell-setup.sh` copies the release binary to `~/tealteam-demo` with a prod `.env`, opens port 8080 in ufw (asks for sudo), and starts it so the lid and idle do not suspend the laptop. `stop` and `status` do what they say; rerunning keeps the database. The lead scout uses `http://localhost:8080/` on that laptop, the Chromebooks the `http://IP:8080/` it prints. It hands out no addresses and answers no `tealteam.local`, so the network needs its own router.
+**No Pi (a demo):** Maxwell's Omen laptop (Omarchy) can be the server instead: `deploy/laptop/omenMaxwell-setup.sh` copies the release binary to `~/tealteam-demo` with a prod `.env`, opens port 8080 in ufw (asks for sudo), and starts it so the lid and idle do not suspend the laptop. `stop` and `status` do what they say; rerunning keeps the database. It also makes the laptop's Ethernet port the Pi's wired side: NetworkManager shared mode on `10.101.0.1/24` (the `tealteam-lan` profile, brought up only by the script and taken down by `stop`), `deploy/laptop/dnsmasq-shared-tealteam.conf` for the names and no gateway, and `tealteam.local` over mDNS. The lead scout uses `http://localhost:8080/` on that laptop; the Chromebooks, on a switch cabled to that port, `https://tealteam.local:8443/`. `--lan off` serves on whatever network the laptop is on instead, at the `http://IP:8080/` it prints.
 
 ## Part 5. Phones
 

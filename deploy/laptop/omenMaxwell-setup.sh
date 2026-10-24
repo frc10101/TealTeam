@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Run the server on Maxwell's Omen laptop (Omarchy) for a demo, in place of
-# the Pi. The lead scout works on this laptop at http://localhost:PORT/; the
-# Chromebooks use its address on the same network.
+# Run the server on Maxwell's Omen laptop (Omarchy) in place of the Pi. The
+# lead scout works on this laptop at http://localhost:PORT/; the Chromebooks,
+# cabled to a switch on the laptop's Ethernet port, at
+# https://tealteam.local:TLS_PORT/.
 #
-#   deploy/laptop/omenMaxwell-setup.sh [start] [--dir DIR] [--port PORT] [--tls-port PORT|off] [--build | --binary FILE]
+#   deploy/laptop/omenMaxwell-setup.sh [start] [--dir DIR] [--port PORT] [--tls-port PORT|off] [--lan IFACE|off] [--build | --binary FILE]
 #   deploy/laptop/omenMaxwell-setup.sh stop [--close-firewall]
 #   deploy/laptop/omenMaxwell-setup.sh status
 #
@@ -17,9 +18,14 @@
 # existing DIR keeps its database: rerunning is a restart, not a wipe.
 # Then load accounts, schedule and assignments with prep-event.sh (printed).
 #
-# Unlike the Pi, this laptop hands out no addresses and answers no
-# tealteam.local: the Chromebooks need a network with its own router, and use
-# the http://IP:PORT/ this prints.
+#
+# The wired port (--lan, default the Ethernet device) is the Pi's network:
+# NetworkManager shared mode on 10.101.0.1/24 (the tealteam-lan profile, which
+# only this script brings up, so the laptop hands out no addresses on another
+# network), dnsmasq-shared-tealteam.conf for the names and no gateway, and
+# tealteam.local published over mDNS, which is all ChromeOS asks for .local.
+# stop takes the port down again. --lan off serves on whatever network the
+# laptop is on, at the http://IP:PORT/ this prints.
 
 set -euo pipefail
 
@@ -30,16 +36,20 @@ say() { printf '==> %s\n' "$*"; }
 note() { printf '    %s\n' "$*"; }
 
 action=start dir="$HOME/tealteam-demo" port=8080 tls_port=8443 build=0 close=0 bin="$ROOT/target/release/tt-web"
+lan="$(nmcli -t -f DEVICE,TYPE device 2>/dev/null | awk -F: '$2 == "ethernet" { print $1; exit }')"
+lan_addr=10.101.0.1
+mdns_unit=tealteam-mdns
 if [[ $# -gt 0 && $1 != --* ]]; then action="$1"; shift; fi
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --dir) dir="${2:?--dir needs a folder}"; shift 2 ;;
         --port) port="${2:?--port needs a number}"; shift 2 ;;
         --tls-port) tls_port="${2:?--tls-port needs a number or off}"; shift 2 ;;
+        --lan) lan="${2:?--lan needs an interface or off}"; shift 2 ;;
         --build) build=1; shift ;;
         --binary) bin="${2:?--binary needs a file}"; shift 2 ;;
         --close-firewall) close=1; shift ;;
-        *) echo "usage: $0 [start|stop|status] [--dir DIR] [--port PORT] [--tls-port PORT|off] [--build | --binary FILE] [--close-firewall]" >&2; exit 2 ;;
+        *) echo "usage: $0 [start|stop|status] [--dir DIR] [--port PORT] [--tls-port PORT|off] [--lan IFACE|off] [--build | --binary FILE] [--close-firewall]" >&2; exit 2 ;;
     esac
 done
 pidfile="$dir/server.pid"
@@ -56,6 +66,12 @@ case "$action" in
         else
             say "not running"
         fi
+        if nmcli -t -f NAME connection show --active | grep -qx tealteam-lan; then
+            say "tealteam-lan up on $(nmcli -g GENERAL.DEVICES connection show tealteam-lan): $(nmcli -g ipv4.method,ipv4.addresses connection show tealteam-lan | tr '\n' ' ')"
+        else
+            say "tealteam-lan down"
+        fi
+        systemctl --user is-active --quiet "$mdns_unit" && say "publishing tealteam.local" || say "not publishing tealteam.local"
         exit 0 ;;
     stop)
         if running; then
@@ -66,6 +82,10 @@ case "$action" in
             say "not running"
         fi
         rm -f "$pidfile"
+        systemctl --user stop "$mdns_unit" 2>/dev/null || true
+        if nmcli -t -f NAME connection show --active | grep -qx tealteam-lan; then
+            sudo nmcli connection down tealteam-lan > /dev/null && say "tealteam-lan down"
+        fi
         if [[ $close -eq 1 ]]; then
             sudo ufw delete allow "$port/tcp"
             [[ $tls_port == off ]] || sudo ufw delete allow "$tls_port/tcp"
@@ -90,6 +110,11 @@ cp "$bin" "$dir/tt-web"
 note "copied to $dir/tt-web"
 
 say "settings"
+# The certificate always covers tealteam.local, tealteam and 10.101.0.1 (the
+# Pi's names); add this laptop's own.
+names="$(hostname).local"
+ip="$(lan_ip)"
+[[ -z $ip || $ip == "$lan_addr" ]] || names="$names,$ip"
 if [[ -f $dir/.env ]]; then
     note "keeping $dir/.env"
 else
@@ -97,7 +122,7 @@ else
 TEALTEAM_ENV=prod
 PORT=$port
 TLS_PORT=$tls_port
-TLS_NAMES=$(hostname).local,$(lan_ip)
+TLS_NAMES=$names
 DATABASE_URL=sqlite://$dir/data/tealteam.db
 BACKUP_DIR=$dir/backups
 EOF
@@ -105,12 +130,42 @@ EOF
 fi
 grep -q "^PORT=$port\$" "$dir/.env" || note "WARNING: $dir/.env sets another PORT than $port"
 
+if [[ $lan != off ]]; then
+    say "network: $lan as the Pi's wired side ($lan_addr)"
+    [[ -n $lan ]] || { echo "no Ethernet device; name one with --lan, or --lan off" >&2; exit 1; }
+    # Shared mode runs NetworkManager's own dnsmasq; it needs the binary only.
+    command -v dnsmasq > /dev/null || sudo pacman -S --needed --noconfirm dnsmasq
+    conf=/etc/NetworkManager/dnsmasq-shared.d/tealteam.conf
+    if ! cmp -s "$HERE/dnsmasq-shared-tealteam.conf" "$conf"; then
+        sudo install -D -m 0644 "$HERE/dnsmasq-shared-tealteam.conf" "$conf"
+        note "installed $conf"
+    fi
+    settings=(connection.interface-name "$lan" connection.autoconnect no
+        ipv4.method shared ipv4.addresses "$lan_addr/24" ipv4.never-default yes ipv6.method disabled)
+    if nmcli -t -f NAME connection show | grep -qx tealteam-lan; then
+        sudo nmcli connection modify tealteam-lan "${settings[@]}"
+    else
+        sudo nmcli connection add type ethernet con-name tealteam-lan "${settings[@]}" > /dev/null
+    fi
+    sudo nmcli connection up tealteam-lan > /dev/null \
+        && note "tealteam-lan up: clients get 10.101.0.x, no gateway" \
+        || note "WARNING: tealteam-lan did not come up; is $lan cabled to the switch? Rerun once it is"
+    systemctl --user stop "$mdns_unit" 2>/dev/null || true
+    systemd-run --user --quiet --collect --unit="$mdns_unit" avahi-publish -a -R tealteam.local "$lan_addr"
+    note "publishing tealteam.local -> $lan_addr over mDNS"
+fi
+
 say "firewall"
 if systemctl is-active --quiet ufw; then
     sudo ufw allow "$port/tcp" comment "TealTeam" | sed 's/^/    /'
     [[ $tls_port == off ]] || sudo ufw allow "$tls_port/tcp" comment "TealTeam HTTPS" | sed 's/^/    /'
 else
     note "ufw is off: nothing to open"
+fi
+if [[ $lan != off ]] && systemctl is-active --quiet ufw; then
+    # DHCP and DNS for the clients, on the wired port only.
+    sudo ufw allow in on "$lan" to any port 67 proto udp comment "TealTeam DHCP" | sed 's/^/    /'
+    sudo ufw allow in on "$lan" to any port 53 comment "TealTeam DNS" | sed 's/^/    /'
 fi
 
 say "server"
@@ -129,16 +184,23 @@ if ! curl -fsS "http://127.0.0.1:$port/health"; then
 fi
 echo
 
-ip="$(lan_ip)"
 say "ready"
 note "this laptop (lead scout): http://localhost:$port/"
-note "Chromebooks:              http://${ip:-THIS-LAPTOP-IP}:$port/"
-note "                          http://$(hostname).local:$port/  (if the name resolves there)"
-if [[ $tls_port != off ]]; then
+if [[ $lan != off && $tls_port != off ]]; then
+    note "Chromebooks, on the switch: https://tealteam.local:$tls_port/"
+    note "  trust the CA first:       http://tealteam.local:$port/ca.crt  (docs/event/HTTPS_SETUP.md)"
+    note "  without mDNS:             https://$lan_addr:$tls_port/"
+elif [[ $lan != off ]]; then
+    note "Chromebooks, on the switch: http://tealteam.local:$port/"
+elif [[ $tls_port == off ]]; then
+    note "Chromebooks:              http://${ip:-THIS-LAPTOP-IP}:$port/"
+else
     note "HTTPS, once a device trusts http://${ip:-THIS-LAPTOP-IP}:$port/ca.crt:"
     note "                          https://${ip:-THIS-LAPTOP-IP}:$tls_port/  (docs/event/HTTPS_SETUP.md)"
+fi
+if [[ $tls_port != off ]]; then
     note "the CA lives in $dir/data/tls: keep it, or every device trusts a new one"
-    note "the certificate covers this laptop's name and $ip; for others, TLS_NAMES=... in $dir/.env, then restart"
+    note "the certificate covers tealteam.local, $lan_addr and $(grep '^TLS_NAMES=' "$dir/.env" | cut -d= -f2); for others, TLS_NAMES=... in $dir/.env, then restart"
 fi
 note "log: $dir/server.log   stop: $0 stop --dir $dir"
 note "keep it plugged in; the lid can close, but the screen still locks"
